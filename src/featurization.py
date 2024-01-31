@@ -213,11 +213,15 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
     edge_index = torch.empty(2, 0, dtype=torch.long)
     edge_attr = torch.empty(0, len(f_bonds[0]))
     edge_weights = torch.empty(0, dtype=torch.float)
+
+    # monomer mask, tell which atoms are in which monomer
+    monomer_mask = torch.empty(n_atoms, dtype=torch.long)
     for i in range(n_atoms):
         # pick atom
         atom = torch.LongTensor([i]) # is actually the index of the atom in the molecule
         # find number of INCOMING bonds into that atom. a2b is mapping from atom to incoming bonds
         num_bonds = len(a2b[i])
+        monomer_mask[i] = int(rwmol.GetAtomWithIdx(i).GetDoubleProp('monomerIdx'))
 
         # create graph connectivivty for that atom
         atom_repeat = atom.repeat(1, num_bonds) # [idx_atom, idx_atom, idx_atom, ...]
@@ -253,7 +257,8 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
         node_weight=node_weights, 
         edge_weight=edge_weights, 
         intermonomers_bonds=intermonomers_bonds, 
-        motifs=(cliques, clique_edges)
+        motifs=(cliques, clique_edges),
+        monomer_mask=monomer_mask
     )
 
     return graph

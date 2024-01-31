@@ -31,24 +31,8 @@ def get_motifs(m):
                     if not (neighbor.GetIdx(), atom) in cliques_edges_list:
                         cliques_edges_list.append((atom, neighbor.GetIdx()))
     
-    total_edges = len(cliques_edges_list)
-    
-    return cliques, cliques_edges, total_edges
+    return cliques, cliques_edges, cliques_edges_list
 
-# cliques_edges_to_remove = []
-    # for idx, clique in enumerate(cliques):
-    #     if len(clique) == 1:
-    #         for clique_edge in cliques_edges:
-    #             if idx in clique_edge:
-    #                 other_clique = clique_edge[0] if clique_edge[0] != idx else clique_edge[1]
-    #                 # avoid joining with a clique that already cotnains more than 2 atoms
-    #                 if len(cliques[other_clique]) <= 2 and len(cliques[other_clique]) >= 1:
-    #                     cliques[other_clique].append(clique[0])
-    #                     cliques[idx] = []                    
-    #                     cliques_edges_to_remove.append(clique_edge)
-    #                     break
-    # filter(lambda x: len(x) > 0, cliques)
-    # filter(lambda x: x not in cliques_edges_to_remove, cliques_edges)
 
 # code copied from https://github.com/zaixizhang/MGSSL/blob/b79e7d4e0777566c79ee82c0aaf37666cba164f7/motif_based_pretrain/util/chemutils.py
 def get_motifs_helper(mol):

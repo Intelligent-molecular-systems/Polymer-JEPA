@@ -17,7 +17,7 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
     # Turn into RDKIT mol object
     # mol is a tuple of (RDKit Mol object, list of bonds weights rules)
     mol = (
-        make_polymer_mol(
+        ft.make_polymer_mol(
             smiles=poly_strings.split("|")[0], # smiles -> [*:1]c1cc(F)c([*:2])cc1F.[*:3]c1c(O)cc(O)c([*:4])c1O
             keep_h=False, 
             add_h=False,  
@@ -67,14 +67,21 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
     rwmol = ft.remove_wildcard_atoms(rwmol)
 
     # find motifs in the molecule
-    cliques, clique_edges, total_cliques_edges = get_motifs(rwmol)
-    # check whether the number of edges in the molecule rmwol is the same as the number of edges in the motifs
-    if total_cliques_edges < len(rwmol.GetBonds()):
-        print('!!! WARNING: number of edges in the molecule is greater than the number of edges in the motifs, missing some edges !!!')
-    # print(cliques)
-    # print(clique_edges)
-    # print(total_edges, len(rwmol.GetBonds()))
+    cliques, clique_edges, cliques_edges_list = get_motifs(rwmol)
+   
+    # check if there are missing bonds (bonds not in any clique)
+    missing_bonds = ft.check_missing_bonds(rwmol, cliques_edges_list)
+    if len(missing_bonds) > 0:
+        print('!!! WARNING: missing bonds !!!')
+        print(missing_bonds)
+    
+    # bonds_included_more_than_once = ft.check_bonds_included_more_than_once(cliques_edges_list)
+    # if len(bonds_included_more_than_once) > 0:
+    #     print('Some bonds are included more than once in the cliques (this is not a problem):')
+    #     print(bonds_included_more_than_once)
+
     # plot_motifs(rwmol, cliques)
+        
     # Initialize atom to bond mapping for each atom
     for _ in range(n_atoms): # a2b at position i as the list of bonds incoming to atom i, so its indexed using the atom index
         a2b.append([])
@@ -236,65 +243,17 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
     # ! The indexes in the the pyg graph are the same as the indexes in the rdkit mol object !
     # element at position i in x is the feature vector of atom i in the rdkit mol object, 
     # index i in the edge_index is the index of the atom in the rdkit mol object
-    graph = Data(x=X, edge_index=edge_index, edge_attr=edge_attr,
-                 y_EA=poly_labels_EA, y_IP=poly_labels_IP, node_weight=node_weights, edge_weight=edge_weights, intermonomers_bonds=intermonomers_bonds, motifs=(cliques, clique_edges)) # , M_ensemble=M_ensemble
+        
+    graph = Data(
+        x=X, 
+        edge_index=edge_index, 
+        edge_attr=edge_attr,
+        y_EA=poly_labels_EA, 
+        y_IP=poly_labels_IP, 
+        node_weight=node_weights, 
+        edge_weight=edge_weights, 
+        intermonomers_bonds=intermonomers_bonds, 
+        motifs=(cliques, clique_edges)
+    )
 
     return graph
-
-
-
-def make_mol(s: str, keep_h: bool, add_h: bool):
-    """
-    Builds an RDKit molecule from a SMILES string.
-    
-    :param s: SMILES string.
-    :param keep_h: Boolean whether to keep hydrogens in the input smiles. This does not add hydrogens, it only keeps them if they are specified.
-    :return: RDKit molecule.
-    """
-    if keep_h:
-        mol = Chem.MolFromSmiles(s, sanitize = False)
-        Chem.SanitizeMol(mol, sanitizeOps = Chem.SanitizeFlags.SANITIZE_ALL^Chem.SanitizeFlags.SANITIZE_ADJUSTHS)
-    else:
-        mol = Chem.MolFromSmiles(s)
-    if add_h:
-        mol = Chem.AddHs(mol)
-    return mol
-
-
-def make_polymer_mol(smiles: str, keep_h: bool, add_h: bool, fragment_weights: list):
-    """
-    Builds an RDKit molecule from a SMILES string.
-
-    :param smiles: SMILES string.
-    :param keep_h: Boolean whether to keep hydrogens in the input smiles. This does not add hydrogens, it only keeps them if they are specified.
-    :param fragment_weights: List of monomer fractions for each fragment in s. Only used when input is a polymer.
-    :return: RDKit molecule.
-    """
-
-    # check input is correct, we need the same number of fragments (monomers) and their weights (stoichiometry ratios)
-    num_frags = len(smiles.split('.')) # [*:1]c1cc(F)c([*:2])cc1F . [*:3]c1c(O)cc(O)c([*:4])c1O 
-    if len(fragment_weights) != num_frags: # 2 = len([0.5, 0.5]) = 2
-        raise ValueError(f'number of input monomers/fragments ({num_frags}) does not match number of '
-                         f'input number of weights ({len(fragment_weights)})')
-
-    # if it all looks good, we create one molecule object per fragment (monomer), add the weight (stoichiometry ratio) as property
-    # of each atom, and merge fragments into a single molecule object
-    mols = []
-    monomer_idx = 0
-    for s, w in zip(smiles.split('.'), fragment_weights): # i.e. (*:1]c1cc(F)c([*:2])cc1F, 0.5)
-        m = make_mol(s, keep_h, add_h) # creates rdkit mol object from smiles string
-        for a in m.GetAtoms():
-            a.SetDoubleProp('w_frag', float(w)) 
-            a.SetDoubleProp('monomerIdx', float(monomer_idx)) # add monomer index as property of each atom 
-        monomer_idx += 1
-        mols.append(m) # mols will contain 2 mol objects, one for each monomer (in case of a copolymer of 2 monomers, which is the unique case in the full dataset)
-
-    # combine all mols into single mol object
-    mol = mols.pop(0)
-    while len(mols) > 0:
-        m2 = mols.pop(0)
-        mol = Chem.CombineMols(mol, m2) # use rdkit to combine the individual monomer rdkit mol objects into a single rdkit mol object, without adding bonds between them for now
-
-    return mol
-
-# %%

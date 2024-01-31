@@ -28,6 +28,7 @@ labels = {
 
 # %% Load data
 graphs = get_graphs(file_csv = 'Data/dataset-poly_chemprop.csv', file_graphs_list = 'Data/Graphs_list.pt')
+# cliques, cliques_edges, intermonomers_bonds =  graphs[0].motifs[0], graphs[0].motifs[1], graphs[0].intermonomers_bonds
 
 # shuffle graphs
 random.seed(12345)

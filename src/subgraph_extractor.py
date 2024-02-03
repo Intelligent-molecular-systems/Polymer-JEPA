@@ -170,8 +170,8 @@ def randomWalks2subgraphs(graph):
             context_rw_walk.add(next_node)
         else:
             counter += 1
-            if counter > 20:
-                print("Could not reach desired context subgraph size, stopping...")
+            if counter > 30:
+                # print("Could not reach desired context subgraph size, stopping...")
                 break
 
     # target random walks:
@@ -194,8 +194,8 @@ def randomWalks2subgraphs(graph):
     for walk in target_rw_walks:
         if walk not in unique_target_rws:
             unique_target_rws.append(walk)
-        else:
-            print("Duplicated random walk found")
+        # else:
+            #print("Duplicated random walk found")
 
     # i = 0
     # while i < len(unique_target_rws):
@@ -227,7 +227,6 @@ def randomWalks2subgraphs(graph):
 
     node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, total_nodes)
     return node_mask, edge_mask
-
     
 def create_masks(graph, context_subgraph, target_subgraphs, n_of_nodes):
     n_of_subgraphs = 1 + len(target_subgraphs)

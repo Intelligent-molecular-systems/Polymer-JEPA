@@ -84,9 +84,9 @@ class WDNodeMPNN(nn.Module):
 
 
         graph_embedding = self.agg_func(h * node_weight.view(-1, 1), data.batch)
-        #return graph_embedding
-        out = self.final_mlp(graph_embedding)
-        return out.squeeze(1)
+        return graph_embedding
+        # out = self.final_mlp(graph_embedding)
+        # return out.squeeze(1)
 
     
 # https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_gnn.html#the-messagepassing-base-class

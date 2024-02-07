@@ -12,6 +12,7 @@ MST_MAX_WEIGHT = 100
 
 
 def get_motifs(m):
+    # [TODO]: Investigate whether there is a guarantee (proof) for this to never lead to edge loss
     # motif-based ... paper:
     # Cliques are sets of atoms that form connected substructures, and edges represent connections between cliques.
     cliques, cliques_edges = get_motifs_helper(m)

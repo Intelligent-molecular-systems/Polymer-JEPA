@@ -103,6 +103,7 @@ def metis2subgraphs(graph):
 
 
 def randomWalks2subgraphs(graph): 
+    # [TODO]: Consider edge probabilities (?)
     # Function to perform a single random walk step from a given node
     def random_walk_step(fullGraph, current_node, exclude_nodes):
             neighbors = list(set(fullGraph.neighbors(current_node)) - exclude_nodes)

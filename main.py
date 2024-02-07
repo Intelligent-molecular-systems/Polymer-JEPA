@@ -14,16 +14,19 @@ from torch_geometric.loader import DataLoader
 import tqdm
 
 
+# [RISK]: how to handle the dataset? i am not sure from a dataset instance i can slice it like this
+# https://github.com/pyg-team/pytorch_geometric/issues/4223 
 dataset, transform = create_data(cfg)
-
+# print(type(dataset))
 # 50-50 split for pretraining - fine-tuning data
-pre_data = dataset.data_list[:int(0.5*len(dataset.data_list))]
+pre_data = dataset[:int(0.5*len(dataset.data_list))]
+
 # 70-20-10 split for pretraining - validation - test data
 pre_trn_data = pre_data[:int(0.7*len(pre_data))]
 pre_val_data = pre_data[int(0.7*len(pre_data)):int(0.9*len(pre_data))]
 pre_tst_data = pre_data[int(0.9*len(pre_data)):]
 
-ft_data = dataset.data_list[int(0.5*len(dataset.data_list)):]
+ft_data = dataset[int(0.5*len(dataset.data_list)):]
 ft_trn_data = ft_data[:int(0.7*len(ft_data))]
 ft_val_data = ft_data[int(0.7*len(ft_data)):int(0.9*len(ft_data))]
 ft_tst_data = ft_data[int(0.9*len(ft_data)):]

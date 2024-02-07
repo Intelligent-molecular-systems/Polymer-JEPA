@@ -173,8 +173,11 @@ class GraphJEPAPartitionTransform(object):
         data.mask = mask.unsqueeze(0) # [True, True] -> [[True, True]]
 
         context_subgraph_idx = 0 # use the first subgraph idx as context
-        target_subgraph_idxs = subgraphs_nodes[0].unique()[1:self.num_targets+1] # use the rest as targets
-
+        # take the patches in subgraphs_nodes[0].unique()[1:] and shuffle them
+        
+        # unique return elements sorted, so we make sure to not include idx 0
+        target_subgraph_idxs = random.sample(subgraphs_nodes[0].unique()[1:], len(self.num_targets)) # use some of the rest as targets
+        
         data.context_edges_mask = subgraphs_edges[0] == context_subgraph_idx # if context subgraph idx is 0, and subgraphs_edges[0] = [0, 0, 1, 1, 2] then [True, True, False, False, False]
         data.target_edges_mask = torch.isin(subgraphs_edges[0], target_subgraph_idxs) # if target subgraph idxs are [1, 2] then [False, False, True, True, True]
         data.context_nodes_mapper = subgraphs_nodes[1, subgraphs_nodes[0] == context_subgraph_idx] # if context subgraph idx is 0, and subgraphs_nodes[0] (subgraphs indexes) =[0 ,0, 1, 1, 2] subgraphs_nodes[1] (node indexes) = [0, 2, 1, 2, 3] then [0, 2]

@@ -30,7 +30,7 @@ class MLPMixer(nn.Module):
 
 class Hadamard(nn.Module):
     # Hadamard attention (default): (A ⊙ softmax(QK^T/sqrt(d)))V
-    def __init__(self, nhid, dropout, nlayer, n_patches, nhead=8, batch_first=True):
+    def __init__(self, nhid, dropout, nlayer, nhead=8, batch_first=True):
         super().__init__()
         self.transformer_encoder = nn.ModuleList([HadamardEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
@@ -43,7 +43,7 @@ class Hadamard(nn.Module):
 
 class Standard(nn.Module):
     # standard (full) attention: softmax(QK^T/sqrt(d))V
-    def __init__(self, nhid, dropout, nlayer, n_patches, nhead=8, batch_first=True):
+    def __init__(self, nhid, dropout, nlayer, nhead=8, batch_first=True):
         super().__init__()
         self.transformer_encoder = nn.ModuleList([GTEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
@@ -56,7 +56,7 @@ class Standard(nn.Module):
 
 class Graph(nn.Module):
     # Graph attention (GT-like): softmax(A ⊙ QK^T/sqrt(d))V
-    def __init__(self, nhid, dropout, nlayer, n_patches, nhead=8, batch_first=True):
+    def __init__(self, nhid, dropout, nlayer, nhead=8, batch_first=True):
         super().__init__()
         self.transformer_encoder = nn.ModuleList([GTEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
@@ -69,7 +69,7 @@ class Graph(nn.Module):
 
 class Kernel(nn.Module):
     # Kernel attention (GraphiT-like): softmax(random_walk(A) ⊙ QK^T/sqrt(d))V
-    def __init__(self, nhid, dropout, nlayer, n_patches, nhead=8, batch_first=True):
+    def __init__(self, nhid, dropout, nlayer, nhead=8, batch_first=True):
         super().__init__()
         self.transformer_encoder = nn.ModuleList([GTEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
@@ -82,7 +82,7 @@ class Kernel(nn.Module):
 
 class Addictive(nn.Module):
     # Addictive attention (Graphormer-like): softmax(QK^T/sqrt(d))V + LL(A)
-    def __init__(self, nhid, dropout, nlayer, n_patches, nhead=8, batch_first=True):
+    def __init__(self, nhid, dropout, nlayer, nhead=8, batch_first=True):
         super().__init__()
         self.transformer_encoder = nn.ModuleList([GraphormerEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])

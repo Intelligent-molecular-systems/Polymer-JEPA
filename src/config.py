@@ -11,7 +11,7 @@ def set_cfg(cfg):
     # Additional num of worker for data loading
     cfg.num_workers = 8
     # Cuda device number, used for machine with multiple gpus
-    cfg.device = 0
+    cfg.device = 'cpu'
     # Whether fix the running seed to remove randomness
     cfg.seed = None
     # Custom log file name
@@ -54,7 +54,7 @@ def set_cfg(cfg):
     # GNN type used, see core.model_utils.pyg_gnn_wrapper for all options
     cfg.model.gnn_type = 'GINEConv'  # change to list later
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
-    cfg.model.gMHA_type = 'MLPMixer'
+    cfg.model.gMHA_type = 'Hadamard'
     # Hidden size of the model
     cfg.model.hidden_size = 128
     # Number of gnn layers

@@ -3,6 +3,7 @@ import numpy as np
 from src.model_utils.elements import MLP
 import src.model_utils.gMHA_wrapper as gMHA_wrapper
 from src.model_utils.gnn import GNN
+from src.WDNodeMPNN import WDNodeMPNN
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -43,11 +44,12 @@ class PolymerJEPA(nn.Module):
             self.patch_rw_encoder = MLP(self.patch_rw_dim, nhid, 1)
 
         # use wdmpnn here
-        self.gnns = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type=gnn_type,
-                                  bn=bn, res=res) for _ in range(nlayer_gnn)])
+        # self.gnns = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type=gnn_type,
+        #                           bn=bn, res=res) for _ in range(nlayer_gnn)])
+        self.gnn = WDNodeMPNN(nfeat_node, nfeat_edge)
         
-        self.U = nn.ModuleList(
-            [MLP(nhid, nhid, nlayer=1, with_final_activation=True) for _ in range(nlayer_gnn-1)])
+        # self.U = nn.ModuleList(
+        #     [MLP(nhid, nhid, nlayer=1, with_final_activation=True) for _ in range(nlayer_gnn-1)])
 
         self.context_encoder = getattr(gMHA_wrapper, 'Standard')(
             nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
@@ -63,23 +65,25 @@ class PolymerJEPA(nn.Module):
         #     nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
 
     def forward(self, data):
-        x = self.input_encoder(data.x).squeeze()
+        # x = self.input_encoder(data.x).squeeze()
         # The model first encodes node features data.x and edge attributes data.edge_attr using respective encoders (self.input_encoder and self.edge_encoder)
         edge_attr = data.edge_attr
-        if edge_attr is None:
-            edge_attr = data.edge_index.new_zeros(data.edge_index.size(-1)).float().unsqueeze(-1)
-        edge_attr = self.edge_encoder(edge_attr)
+        # if edge_attr is None:
+        #     edge_attr = data.edge_index.new_zeros(data.edge_index.size(-1)).float().unsqueeze(-1)
+        # edge_attr = self.edge_encoder(edge_attr)
 
         # Patch Encoder
         # Nodes (data.subgraphs_nodes_mapper) and edges (data.combined_subgraphs) from specific subgraphs are selected based on precomputed mappings. 
         # This selection is critical for focusing the model's attention on relevant parts of the graph.
         # if x has shape N X F, and data.subgraphs_nodes_mapper is shape M (all subgraphs), then x[data.subgraphs_nodes_mapper] has shape M X F
         # If a node index appears more than once in data.subgraphs_nodes_mapper, its feature vector is duplicated in the resulting tensor. If a node index does not appear in data.subgraphs_nodes_mapper, its feature vector is excluded from the result. (Never happens in our case, but it's good to know)
-        x = x[data.subgraphs_nodes_mapper] 
+        x = x[data.subgraphs_nodes_mapper]
+        node_weights = data.node_weights[data.subgraphs_nodes_mapper]
         # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices
         edge_index = data.combined_subgraphs
         # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
         e = edge_attr[data.subgraphs_edges_mapper]
+        e_weights = data.edge_weights[data.subgraphs_edges_mapper]
         batch_x = data.subgraphs_batch # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1, ...]
         # Positional encodings (data.rw_pos_enc) are used to enhance the node features by providing spatial information. These are aggregated per subgraph (patch_pes) using a scatter operation with a 'max' reduction to capture the most significant positional signal
         # pes contains the positional encodings for each node in the graph, again using mapper has the same effect as for x (few lines above)
@@ -89,26 +93,29 @@ class PolymerJEPA(nn.Module):
         patch_pes = scatter(pes, batch_x, dim=0, reduce='max') 
         # Node features x are then processed through a series of GNN layers (self.gnns), where each layer potentially aggregates information using a pooling mechanism (self.pooling) and updates node representations accordingly.
         # this is basically the initial encoder of the architecture, it comes up with an embedding for each patch
-        for i, gnn in enumerate(self.gnns):
-            if i > 0: # from second layer on, we add the pooled features to the original features as a residual connection
-                # This aggregates (pools) the features x of nodes within each subgraph. The batch_x tensor indicates the subgraph to which each node belongs, and reduce=self.pooling specifies the type of pooling (aggregation) operation.
-                # https://pytorch-scatter.readthedocs.io/en/latest/functions/scatter.html
-                # subgraph will be the pooled features of each subgraph
-                subgraph = scatter(x, batch_x, dim=0,
-                                   reduce=self.pooling)[batch_x] # [batch_x] at the end reorders or duplicates the aggregated subgraph features so that each node in the subgraph gets the pooled feature vector of its subgraph.
+        # for i, gnn in enumerate(self.gnns):
+        #     if i > 0: # from second layer on, we add the pooled features to the original features as a residual connection
+        #         # This aggregates (pools) the features x of nodes within each subgraph. The batch_x tensor indicates the subgraph to which each node belongs, and reduce=self.pooling specifies the type of pooling (aggregation) operation.
+        #         # https://pytorch-scatter.readthedocs.io/en/latest/functions/scatter.html
+        #         # subgraph will be the pooled features of each subgraph
+        #         subgraph = scatter(x, batch_x, dim=0,
+        #                            reduce=self.pooling)[batch_x] # [batch_x] at the end reorders or duplicates the aggregated subgraph features so that each node in the subgraph gets the pooled feature vector of its subgraph.
                 
-                ### !!! i think this is mistakenly duplicated, it should be removed, it does not have any use in any case !!! ###
-                subgraph = scatter(x, batch_x, dim=0,
-                                   reduce=self.pooling)[batch_x]
-                ### ###
-                # self.U is defined above, is basically an MLP with 1 layer, it's used to update the features of the nodes in each subgraph
-                x = x + self.U[i-1](subgraph) # this is the residual connection, it adds the pooled features to the original features
-                x = scatter(x, data.subgraphs_nodes_mapper,
-                            dim=0, reduce='mean')[data.subgraphs_nodes_mapper]
+        #         ### !!! i think this is mistakenly duplicated, it should be removed, it does not have any use in any case !!! ###
+        #         subgraph = scatter(x, batch_x, dim=0,
+        #                            reduce=self.pooling)[batch_x]
+        #         ### ###
+        #         # self.U is defined above, is basically an MLP with 1 layer, it's used to update the features of the nodes in each subgraph
+        #         x = x + self.U[i-1](subgraph) # this is the residual connection, it adds the pooled features to the original features
+        #         x = scatter(x, data.subgraphs_nodes_mapper,
+        #                     dim=0, reduce='mean')[data.subgraphs_nodes_mapper]
             
-            x = gnn(x, edge_index, e)
+
+        # initial encoder
+        # gnn is working on the combined graph (graph of disconnected subgraphs)
+        x = self.gnn(x, edge_index, e, node_weights, e_weights)
         
-        # this is the final operation to obtain an embedding for each subgraph/patch
+        # this is the final operation (pooling) to obtain an embedding for each subgraph/patch from the subgraph nodes embeddings
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
 
 
@@ -145,7 +152,7 @@ class PolymerJEPA(nn.Module):
 
         # Given that there's only one element the attention operation "won't do anything"
         # This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
-        context_mask = data.mask.flatten()[context_subgraph_idx].reshape(-1, self.num_context_patches) # this should be -1 x num context
+        context_mask = data.mask.flatten()[context_subgraph_idx].reshape(-1, 1) # this should be -1 x num context which is always 1
         # pass context subgraph through context encoder
         context_x = self.context_encoder(context_x, data.coarsen_adj if hasattr(
             data, 'coarsen_adj') else None, ~context_mask)

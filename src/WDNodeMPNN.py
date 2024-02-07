@@ -53,9 +53,8 @@ class WDNodeMPNN(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
 
-
-    def forward(self, data):
-        x, edge_index, edge_attr, edge_weight, node_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight, data.node_weight    
+    def forward(self, x, edge_index, edge_attr, edge_weight, node_weight):
+        # x, edge_index, edge_attr, edge_weight, node_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight, data.node_weight    
         # print('x:', x.shape)
         # print('edge_index:', edge_index.shape)
         # print('edge_attr:', edge_attr.shape)

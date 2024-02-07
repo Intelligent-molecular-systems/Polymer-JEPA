@@ -3,7 +3,7 @@ from src.model_utils.hyperbolic_dist import hyperbolic_dist
 import torch
 import torch.nn.functional as F
 
-def train(train_loader, model, optimizer, evaluator, device, momentum_weight,sharp=None, criterion_type=0):
+def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0):
     criterion = torch.nn.SmoothL1Loss(beta=0.5) # https://pytorch.org/docs/stable/generated/torch.nn.SmoothL1Loss.html
     step_losses, num_targets = [], []
     for data in train_loader:
@@ -39,13 +39,13 @@ def train(train_loader, model, optimizer, evaluator, device, momentum_weight,sha
 
 
 @ torch.no_grad()
-def test(loader, model, evaluator, device, criterion_type=0):
+def test(loader, model, device, criterion_type=0):
     criterion = torch.nn.SmoothL1Loss(beta=0.5)
     step_losses, num_targets = [], []
     for data in loader:
         data = data.to(device)
         target_x, target_y = model(data)
-        # loss = criterion(target_y, target_x)
+
         if criterion_type == 0:
             loss = criterion(target_x, target_y)
         elif criterion_type == 1:

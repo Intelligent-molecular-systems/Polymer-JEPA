@@ -217,3 +217,89 @@ def parse_polymer_rules(rules, no_deg_check=False): # rules i.e. [1-2:0.375:0.37
             raise ValueError(
                 f'sum of weights of incoming stochastic edges should be 1 -- found {v} for [*:{k}]')
     return polymer_info, 1. + np.log10(Xn) # polymer_info = [(1, 2, 0.375, 0.375), (1, 1, 0.375, 0.375), ...], degree_of_polym = 1. + np.log10(Xn)
+
+
+def make_mol(s: str, keep_h: bool, add_h: bool):
+    """
+    Builds an RDKit molecule from a SMILES string.
+    
+    :param s: SMILES string.
+    :param keep_h: Boolean whether to keep hydrogens in the input smiles. This does not add hydrogens, it only keeps them if they are specified.
+    :return: RDKit molecule.
+    """
+    if keep_h:
+        mol = Chem.MolFromSmiles(s, sanitize = False)
+        Chem.SanitizeMol(mol, sanitizeOps = Chem.SanitizeFlags.SANITIZE_ALL^Chem.SanitizeFlags.SANITIZE_ADJUSTHS)
+    else:
+        mol = Chem.MolFromSmiles(s)
+    if add_h:
+        mol = Chem.AddHs(mol)
+    return mol
+
+
+def make_polymer_mol(smiles: str, keep_h: bool, add_h: bool, fragment_weights: list):
+    """
+    Builds an RDKit molecule from a SMILES string.
+
+    :param smiles: SMILES string.
+    :param keep_h: Boolean whether to keep hydrogens in the input smiles. This does not add hydrogens, it only keeps them if they are specified.
+    :param fragment_weights: List of monomer fractions for each fragment in s. Only used when input is a polymer.
+    :return: RDKit molecule.
+    """
+
+    # check input is correct, we need the same number of fragments (monomers) and their weights (stoichiometry ratios)
+    num_frags = len(smiles.split('.')) # [*:1]c1cc(F)c([*:2])cc1F . [*:3]c1c(O)cc(O)c([*:4])c1O 
+    if len(fragment_weights) != num_frags: # 2 = len([0.5, 0.5]) = 2
+        raise ValueError(f'number of input monomers/fragments ({num_frags}) does not match number of '
+                         f'input number of weights ({len(fragment_weights)})')
+
+    # if it all looks good, we create one molecule object per fragment (monomer), add the weight (stoichiometry ratio) as property
+    # of each atom, and merge fragments into a single molecule object
+    mols = []
+    monomer_idx = 0
+    for s, w in zip(smiles.split('.'), fragment_weights): # i.e. (*:1]c1cc(F)c([*:2])cc1F, 0.5)
+        m = make_mol(s, keep_h, add_h) # creates rdkit mol object from smiles string
+        for a in m.GetAtoms():
+            a.SetDoubleProp('w_frag', float(w)) 
+            a.SetDoubleProp('monomerIdx', float(monomer_idx)) # add monomer index as property of each atom 
+        monomer_idx += 1
+        mols.append(m) # mols will contain 2 mol objects, one for each monomer (in case of a copolymer of 2 monomers, which is the unique case in the full dataset)
+
+    # combine all mols into single mol object
+    mol = mols.pop(0)
+    while len(mols) > 0:
+        m2 = mols.pop(0)
+        mol = Chem.CombineMols(mol, m2) # use rdkit to combine the individual monomer rdkit mol objects into a single rdkit mol object, without adding bonds between them for now
+
+    return mol
+
+
+def check_missing_bonds(m, cliques_edges_list):
+    missing_bonds = []
+    bonds = set([(x.GetBeginAtomIdx(), x.GetEndAtomIdx()) for x in m.GetBonds()])
+    for i, (idx1, idx2) in enumerate(cliques_edges_list):
+        if (idx1, idx2) not in bonds and (idx2, idx1) not in bonds:
+            missing_bonds.append((idx1, idx2))
+    return missing_bonds
+
+
+def check_bonds_included_more_than_once(cliques_edges_list):
+    bonds_included_more_than_once = []
+    # create a dict mapping from bond to the number of times it is included in a clique
+    bonds_included = {}
+    for i, (idx1, idx2) in enumerate(cliques_edges_list):
+        if (idx1, idx2) in bonds_included:
+            bonds_included[(idx1, idx2)] += 1
+        elif (idx2, idx1) in bonds_included:
+            bonds_included[(idx2, idx1)] += 1
+        else:
+            bonds_included[(idx1, idx2)] = 1
+    
+    # check which bonds are included more than once
+    for bond, num in bonds_included.items():
+        total = num + bonds_included.get((bond[1], bond[0]), 0)
+        if total > 1:
+            bonds_included_more_than_once.append(bond)
+
+    return bonds_included_more_than_once
+# %%

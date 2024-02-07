@@ -1,13 +1,11 @@
-# %%
-'''
-Here I turn my own implementation of the featurization into a function. Input is an adjusted smiles string output is a PyG Data object (graph) with atom and bond weights
-'''
-import src.featurization_helper as ft
-from rdkit import Chem
-from rdkit.Chem import Descriptors
 from copy import deepcopy
-from torch_geometric.data import Data
+from matplotlib import pyplot as plt
+from rdkit import Chem
+from rdkit.Chem import Draw
+from src.motif_subgraphing import get_motifs, plot_motifs
+import src.featurization_helper as ft
 import torch
+from torch_geometric.data import Data
 
 # %% Make featurization function
 def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_check=False):
@@ -19,7 +17,7 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
     # Turn into RDKIT mol object
     # mol is a tuple of (RDKit Mol object, list of bonds weights rules)
     mol = (
-        make_polymer_mol(
+        ft.make_polymer_mol(
             smiles=poly_strings.split("|")[0], # smiles -> [*:1]c1cc(F)c([*:2])cc1F.[*:3]c1c(O)cc(O)c([*:4])c1O
             keep_h=False, 
             add_h=False,  
@@ -68,18 +66,34 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
     # remove R groups (* nodes) -> now atoms in rdkit Mol object have the same order as self.f_atoms
     rwmol = ft.remove_wildcard_atoms(rwmol)
 
+    # find motifs in the molecule
+    cliques, clique_edges, cliques_edges_list = get_motifs(rwmol)
+   
+    # check if there are missing bonds (bonds not in any clique)
+    missing_bonds = ft.check_missing_bonds(rwmol, cliques_edges_list)
+    if len(missing_bonds) > 0:
+        print('!!! WARNING: missing bonds !!!')
+        print(missing_bonds)
+    
+    # bonds_included_more_than_once = ft.check_bonds_included_more_than_once(cliques_edges_list)
+    # if len(bonds_included_more_than_once) > 0:
+    #     print('Some bonds are included more than once in the cliques (this is not a problem):')
+    #     print(bonds_included_more_than_once)
+
+    # plot_motifs(rwmol, cliques)
+        
     # Initialize atom to bond mapping for each atom
-    for _ in range(n_atoms):
+    for _ in range(n_atoms): # a2b at position i as the list of bonds incoming to atom i, so its indexed using the atom index
         a2b.append([])
 
     # ---------------------------------------
-    # Get bond features for separate monomers
+    # Get bond features for SEPARATE monomers
     # ---------------------------------------
 
     # Here we do not add atom features like in polymer paper
     for a1 in range(n_atoms):
         for a2 in range(a1 + 1, n_atoms):
-            bond = rwmol.GetBondBetweenAtoms(a1, a2)
+            bond = rwmol.GetBondBetweenAtoms(a1, a2) # so a1 and a2 are the atom indexes
 
             if bond is None:
                 continue
@@ -121,8 +135,8 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
 
     # for all possible bonds between monomers:
     # add bond -> compute bond features -> add to bond list -> remove bond
-    for r1, r2, w_bond12, w_bond21 in polymer_info:
-
+    intermonomers_bonds = []
+    for r1, r2, w_bond12, w_bond21 in polymer_info:        
         # get index of attachment atoms
         a1 = None  # idx of atom 1 in rwmol
         a2 = None  # idx of atom 1 in rwmol --> to be used by MolGraph
@@ -149,6 +163,11 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
         if order1 != order2:
             raise ValueError(f'two atoms are trying to be bonded with different bond types: '
                              f'{order1} vs {order2}')
+        
+        # check whether the two atoms have different monomoner_idx, if so add to intermonomers_bonds
+        if cm.GetAtomWithIdx(a1).GetDoubleProp('monomerIdx') != cm.GetAtomWithIdx(a2).GetDoubleProp('monomerIdx'):
+            intermonomers_bonds.append((a1, a2))
+
         cm.AddBond(a1, _a2, order=order1)
         Chem.SanitizeMol(cm, Chem.SanitizeFlags.SANITIZE_ALL)
 
@@ -162,9 +181,9 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
         # Update index mappings
         b1 = n_bonds
         b2 = b1 + 1
-        a2b[a2].append(b1)  # b1 = a1 --> a2
+        a2b[a2].append(b1)  # b1 = a1 --> a2 # adding intermonomer bond to a2b
         b2a.append(a1)
-        a2b[a1].append(b2)  # b2 = a2 --> a1
+        a2b[a1].append(b2)  # b2 = a2 --> a1 # adding intermonomer bond to a2b
         b2a.append(a2)
         b2revb.append(b2)
         b2revb.append(b1)
@@ -175,6 +194,7 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
         cm.RemoveBond(a1, _a2)
         Chem.SanitizeMol(cm, Chem.SanitizeFlags.SANITIZE_ALL)
 
+    # plot_motifs(rwmol, cliques)
 
     # -------------------------------------------
     # Make own pytroch geometric data object. Here we try follow outputs of above featurization: f_atoms, f_bonds, a2b, b2a
@@ -193,11 +213,15 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
     edge_index = torch.empty(2, 0, dtype=torch.long)
     edge_attr = torch.empty(0, len(f_bonds[0]))
     edge_weights = torch.empty(0, dtype=torch.float)
+
+    # monomer mask, tell which atoms are in which monomer
+    monomer_mask = torch.empty(n_atoms, dtype=torch.long)
     for i in range(n_atoms):
         # pick atom
-        atom = torch.LongTensor([i])
+        atom = torch.LongTensor([i]) # is actually the index of the atom in the molecule
         # find number of INCOMING bonds into that atom. a2b is mapping from atom to incoming bonds
         num_bonds = len(a2b[i])
+        monomer_mask[i] = int(rwmol.GetAtomWithIdx(i).GetDoubleProp('monomerIdx'))
 
         # create graph connectivivty for that atom
         atom_repeat = atom.repeat(1, num_bonds) # [idx_atom, idx_atom, idx_atom, ...]
@@ -220,62 +244,21 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
         edge_attr = torch.cat((edge_attr, edge_attr_atom), dim=0)
 
     # create PyG Data object
-    graph = Data(x=X, edge_index=edge_index, edge_attr=edge_attr,
-                 y_EA=poly_labels_EA, y_IP=poly_labels_IP, node_weight=node_weights, edge_weight=edge_weights) # , M_ensemble=M_ensemble
+    # ! The indexes in the the pyg graph are the same as the indexes in the rdkit mol object !
+    # element at position i in x is the feature vector of atom i in the rdkit mol object, 
+    # index i in the edge_index is the index of the atom in the rdkit mol object
+        
+    graph = Data(
+        x=X, 
+        edge_index=edge_index, 
+        edge_attr=edge_attr,
+        y_EA=poly_labels_EA, 
+        y_IP=poly_labels_IP, 
+        node_weight=node_weights, 
+        edge_weight=edge_weights, 
+        intermonomers_bonds=intermonomers_bonds, 
+        motifs=(cliques, clique_edges),
+        monomer_mask=monomer_mask
+    )
 
     return graph
-
-
-
-def make_mol(s: str, keep_h: bool, add_h: bool):
-    """
-    Builds an RDKit molecule from a SMILES string.
-    
-    :param s: SMILES string.
-    :param keep_h: Boolean whether to keep hydrogens in the input smiles. This does not add hydrogens, it only keeps them if they are specified.
-    :return: RDKit molecule.
-    """
-    if keep_h:
-        mol = Chem.MolFromSmiles(s, sanitize = False)
-        Chem.SanitizeMol(mol, sanitizeOps = Chem.SanitizeFlags.SANITIZE_ALL^Chem.SanitizeFlags.SANITIZE_ADJUSTHS)
-    else:
-        mol = Chem.MolFromSmiles(s)
-    if add_h:
-        mol = Chem.AddHs(mol)
-    return mol
-
-
-def make_polymer_mol(smiles: str, keep_h: bool, add_h: bool, fragment_weights: list):
-    """
-    Builds an RDKit molecule from a SMILES string.
-
-    :param smiles: SMILES string.
-    :param keep_h: Boolean whether to keep hydrogens in the input smiles. This does not add hydrogens, it only keeps them if they are specified.
-    :param fragment_weights: List of monomer fractions for each fragment in s. Only used when input is a polymer.
-    :return: RDKit molecule.
-    """
-
-    # check input is correct, we need the same number of fragments (monomers) and their weights (stoichiometry ratios)
-    num_frags = len(smiles.split('.')) # [*:1]c1cc(F)c([*:2])cc1F . [*:3]c1c(O)cc(O)c([*:4])c1O 
-    if len(fragment_weights) != num_frags: # 2 = len([0.5, 0.5]) = 2
-        raise ValueError(f'number of input monomers/fragments ({num_frags}) does not match number of '
-                         f'input number of weights ({len(fragment_weights)})')
-
-    # if it all looks good, we create one molecule object per fragment (monomer), add the weight (stoichiometry ratio) as property
-    # of each atom, and merge fragments into a single molecule object
-    mols = []
-    for s, w in zip(smiles.split('.'), fragment_weights): # i.e. (*:1]c1cc(F)c([*:2])cc1F, 0.5)
-        m = make_mol(s, keep_h, add_h) # creates rdkit mol object from smiles string
-        for a in m.GetAtoms():
-            a.SetDoubleProp('w_frag', float(w)) 
-        mols.append(m) # mols will contain 2 mol objects, one for each monomer (in case of a copolymer of 2 monomers, which is the unique case in the full dataset)
-
-    # combine all mols into single mol object
-    mol = mols.pop(0)
-    while len(mols) > 0:
-        m2 = mols.pop(0)
-        mol = Chem.CombineMols(mol, m2) # use rdkit to combine the individual monomer rdkit mol objects into a single rdkit mol object, without adding bonds between them for now
-
-    return mol
-
-# %%

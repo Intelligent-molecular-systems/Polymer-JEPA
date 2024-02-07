@@ -21,7 +21,7 @@ hyper_params = {
     'learning_rate': 1e-3,
 }
 
-labels = { 
+labels = {
     'EA': 0,
     'IP': 1,
 }
@@ -34,8 +34,11 @@ random.seed(12345)
 data_list_shuffle = random.sample(graphs, len(graphs))
 
 # take 80-20 split for training - test data
-train_datalist = data_list_shuffle[:int(0.8*len(data_list_shuffle))]
-test_datalist = data_list_shuffle[int(0.8*len(data_list_shuffle)):]
+# results without shuffling, i think its more realistic, since the test data is actually really 'unseen'
+# 
+train_datalist = graphs[:int(0.8*len(graphs))] 
+test_datalist = graphs[int(0.2*len(graphs)):]
+
 num_node_features = train_datalist[0].num_node_features
 num_edge_features = train_datalist[0].num_edge_features
 
@@ -67,34 +70,26 @@ property = 'IP'
 model_save_name = f'{model_name}_{property}'
 
 
-should_optimize = False
+# %% Train model
+for epoch in tqdm.tqdm(range(epochs)):
+    model, train_loss = train(model, train_loader, label=labels[property], optimizer=optimizer, criterion=criterion)
+    test_loss = test(model, test_loader, label=labels[property], criterion=criterion)
 
-if should_optimize:
-    hyperparams_optimization(
-        train_datalist=train_datalist,
-        test_datalist=test_datalist
-    )
-else:
-    # %% Train model
-    for epoch in tqdm.tqdm(range(epochs)):
-        model, train_loss = train(model, train_loader, label=labels[property], optimizer=optimizer, criterion=criterion)
-        test_loss = test(model, test_loader, label=labels[property], criterion=criterion)
+    print(f'Epoch: {epoch}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}')
 
-        print(f'Epoch: {epoch}, Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}')
+    # save model every 20 epochs or last epoch
+    if epoch % 10 == 0 or epoch == epochs - 1:
+        os.makedirs('Models', exist_ok=True)
+        os.makedirs('Results', exist_ok=True)
 
-        # save model every 20 epochs or last epoch
-        if epoch % 10 == 0 or epoch == epochs - 1:
-            os.makedirs('Models', exist_ok=True)
-            os.makedirs('Results', exist_ok=True)
+        pred, ea, ip = infer_by_dataloader(test_loader, model, device)
 
-            pred, ea, ip = infer_by_dataloader(test_loader, model, device)
+        if labels[property] == 0:
+            visualize_results(pred, ea, label='ea', save_folder=f'Results/{model_save_name}', epoch=epoch)
+        else:
+            visualize_results(pred, ip, label='ip', save_folder=f'Results/{model_save_name}', epoch=epoch)
 
-            if labels[property] == 0:
-                visualize_results(pred, ea, label='ea', save_folder=f'Results/{model_save_name}', epoch=epoch)
-            else:
-                visualize_results(pred, ip, label='ip', save_folder=f'Results/{model_save_name}', epoch=epoch)
-
-            torch.save(model.state_dict(), f'Models/{model_save_name}.pt')
-            
-    # save latest model
-    torch.save(model.state_dict(), f'Models/{model_save_name}.pt')
+        torch.save(model.state_dict(), f'Models/{model_save_name}.pt')
+        
+# save latest model
+torch.save(model.state_dict(), f'Models/{model_save_name}.pt')

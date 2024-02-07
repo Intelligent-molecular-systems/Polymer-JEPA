@@ -4,8 +4,8 @@ from torch_geometric.data import Data
 import torch
 from torch_geometric.data import Batch
 import tqdm
-from src.featurization import poly_smiles_to_graph
-from src.subgraph_extractor import motifs2subgraphs, metis2subgraphs, randomWalks2subgraphs
+from src.featurization_utils.featurization import poly_smiles_to_graph
+from src.subgraphing_utils.subgraphs_extractor import motifs2subgraphs, metis2subgraphs, randomWalks2subgraphs
 from torch_geometric.utils import subgraph
 
 def get_graphs(file_csv = 'Data/dataset-poly_chemprop.csv', file_graphs_list = 'Data/Graphs_list.pt'):

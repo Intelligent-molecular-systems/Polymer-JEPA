@@ -4,7 +4,7 @@ import torch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 from src.WDNodeMPNN import WDNodeMPNN
-from src.featurization import poly_smiles_to_graph
+from src.featurization_utils.featurization import poly_smiles_to_graph
 import math
 import os
 from matplotlib import pyplot as plt

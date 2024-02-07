@@ -8,7 +8,6 @@ import os
 import tqdm
 from src.training import get_graphs, train, test
 from src.infer_and_visualize import infer_by_dataloader, visualize_results
-from src.hyperparam_optim import hyperparams_optimization
 
 # %% Hyperparameters
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

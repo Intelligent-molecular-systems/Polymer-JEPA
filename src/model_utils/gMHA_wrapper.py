@@ -1,8 +1,8 @@
 import torch.nn as nn
-from core.model_utils.gMHA_hadamard import HadamardEncoderLayer
-from core.model_utils.gMHA_gt import GTEncoderLayer
-from core.model_utils.gMHA_graphormer import GraphormerEncoderLayer
-from core.model_utils.mlp_mixer import MixerBlock
+from src.model_utils.gMHA_hadamard import HadamardEncoderLayer
+from src.model_utils.gMHA_gt import GTEncoderLayer
+from src.model_utils.gMHA_graphormer import GraphormerEncoderLayer
+from src.model_utils.mlp_mixer import MixerBlock
 
 class MLPMixer(nn.Module):
     def __init__(self,

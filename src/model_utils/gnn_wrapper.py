@@ -1,6 +1,6 @@
 import torch.nn as nn
 import torch_geometric.nn as gnn
-from core.model_utils.elements import MLP
+from src.model_utils.elements import MLP
 
 
 class GCNConv(nn.Module):

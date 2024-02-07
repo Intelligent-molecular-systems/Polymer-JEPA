@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
-import core.model_utils.gnn_wrapper as gnn_wrapper
-from core.model_utils.elements import Identity
+import src.model_utils.gnn_wrapper as gnn_wrapper
+from src.model_utils.elements import Identity
 BN = True
 
 

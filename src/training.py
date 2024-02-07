@@ -1,149 +1,64 @@
-import os
-import pandas as pd
-from torch_geometric.data import Data
+import numpy as np
+from src.model_utils.hyperbolic_dist import hyperbolic_dist
 import torch
-from torch_geometric.data import Batch
-import tqdm
-from src.featurization_utils.featurization import poly_smiles_to_graph
-from src.subgraphing_utils.subgraphs_extractor import motifs2subgraphs, metis2subgraphs, randomWalks2subgraphs
-from torch_geometric.utils import subgraph
+import torch.nn.functional as F
 
-def get_graphs(file_csv = 'Data/dataset-poly_chemprop.csv', file_graphs_list = 'Data/Graphs_list.pt'):
-    graphs = []
-    # check if graphs_list.pt exists
-    if not os.path.isfile(file_graphs_list):
-        print('Creating Graphs_list.pt')
-        df = pd.read_csv(file_csv)
-        # use tqdm to show progress bar
-        for i in tqdm.tqdm(range(len(df.loc[:, 'poly_chemprop_input']))):
-            poly_strings = df.loc[i, 'poly_chemprop_input']
-            poly_labels_EA = df.loc[i, 'EA vs SHE (eV)']
-            poly_labels_IP = df.loc[i, 'IP vs SHE (eV)']
-            # given the input polymer string, this function returns a pyg data object
-            graph = poly_smiles_to_graph(
-                poly_strings=poly_strings, 
-                poly_labels_EA=poly_labels_EA, 
-                poly_labels_IP=poly_labels_IP
-            ) 
-
-            
-            graphs.append(graph)
-            
-        torch.save(graphs, file_graphs_list)
-        print('Graphs_list.pt saved')
-    else:
-        print('Loading Graphs_list.pt')
-        graphs = torch.load(file_graphs_list)
-
-    return graphs
-
-
-
-# simpler approach: precompute masks and them as arguemnts of the Data graph object 
-
-def train(model, model2, loader, label, optimizer, criterion):
-    model.train()
-    total_loss = 0.0
-    for batch in loader:
-    #     for i, graph in enumerate(batch.to_data_list()):
-    #         node_mask, edge_mask = randomWalks2subgraphs(graph)
-            # Process the first subgraph through encoder_1 #
-            # contextData = Data(x=graph.x, edge_index=graph.edge_index[:, edge_mask[0]], edge_attr=graph.edge_attr[edge_mask[0]], edge_weight=graph.edge_weight[edge_mask[0]], node_weight=graph.node_weight)
-            # print(contextData)
-            # print(contextData.x)
-            # print(contextData.edge_index)
-            
-            # out1 = model(contextData)
-            # print(out1)
-        
-        batch_list = batch.to_data_list()
-        # stack all node masks for all graphs in the batch, each graph has a different number of nodes so pad them
-        node_masks = torch.empty((0, max([graph.x.size()[0] for graph in batch_list])), dtype=torch.bool)
-        edge_masks = torch.empty((0, max([graph.edge_index.size()[1] for graph in batch_list])), dtype=torch.bool)
-        
-        subgraphs_per_graph_list = []
-        for idx, graph in enumerate(batch_list):
-            node_mask, edge_mask = randomWalks2subgraphs(graph)        
-            subgraphs_per_graph_list.append(node_mask.size()[0])
-            # add padding to the masks
-            node_mask = torch.cat([node_mask, torch.zeros((node_mask.size()[0], node_masks.size()[1] - node_mask.size()[1]), dtype=torch.bool)], dim=1)
-            edge_mask = torch.cat([edge_mask, torch.zeros((edge_mask.size()[0], edge_masks.size()[1] - edge_mask.size()[1]), dtype=torch.bool)], dim=1)
-            
-            node_masks = torch.cat([node_masks, node_mask], dim=0)
-            edge_masks = torch.cat([edge_masks, edge_mask], dim=0)
-
-        # node_masks = each graph has n entries, where n is the number of subgraphs it has in total, the columns are the nodes of the graph, we consider the graph with more nodes, and then pad
-        # batch.x has n rows, where n is the total nodes in the batch graphs, the columns are the features of the nodes
-        # for each graph in the batch, apply the mask to the graph to get the context subgraphs
-        # batch them together and pass them to the model
-        
-        context_subgraphs = []
-        from copy import deepcopy
-        i = 0
-        for idx, graph in enumerate(batch_list):
-            context_subgraph = deepcopy(graph)
-            # we pass the full graph to avoid having issues with the edge index, but then the gnn works only on the masked node indices
-            # !!! i might have to pass in the node mask as a paramter to the model, so that the pooling is done only on the nodes that are actually in the subgraph !!!
-            context_subgraph.x = graph.x # [node_masks[i][:graph.x.size()[0]]]
-            context_subgraph.edge_index = graph.edge_index[:, edge_masks[i][:graph.edge_index.size()[1]]]
-            context_subgraph.edge_attr = graph.edge_attr[edge_masks[i][:graph.edge_attr.size()[0]]]
-            context_subgraph.edge_weight = graph.edge_weight[edge_masks[i][:graph.edge_weight.size()[0]]]
-            context_subgraph.node_weight = graph.node_weight #[node_masks[i][:graph.node_weight.size()[0]]] 
-            context_subgraphs.append(context_subgraph)
-            i += subgraphs_per_graph_list[idx]
-        
-        # !!! the issue is that edge index nodes are still the old ones of the full graph !!!
-        
-        context_batch = Batch.from_data_list(context_subgraphs)
-        
-
-        # do the same for the target subgraphs, which are all the other subgraphs that are not in the context subgraphs
-        # we can have multiple target subgraphs per graph
-        target_subgraphs = []
-        target_idx = 0
-        for k, graph in enumerate(batch_list):
-            for j in range(target_idx +1, target_idx + subgraphs_per_graph_list[k]):
-                target_subgraph = deepcopy(graph)
-                target_subgraph.x = graph.x # [node_masks[j][:graph.x.size()[0]]]
-                target_subgraph.edge_index = graph.edge_index[:, edge_masks[j][:graph.edge_index.size()[1]]]
-                target_subgraph.edge_attr = graph.edge_attr[edge_masks[j][:graph.edge_attr.size()[0]]]
-                target_subgraph.edge_weight = graph.edge_weight[edge_masks[j][:graph.edge_weight.size()[0]]]
-                target_subgraph.node_weight = graph.node_weight # [node_masks[j][:graph.node_weight.size()[0]]]
-                target_subgraphs.append(target_subgraph)
-
-            target_idx += subgraphs_per_graph_list[k]
-        
-        target_batch = Batch.from_data_list(target_subgraphs)
-
-        # print(context_batch)
-        # print(target_batch)
-        
-        # create a batch of graphs            
-        out = model(target_batch)
-        # Calculate the loss based on the specified label.
-        if label == 0: # EA
-            loss = criterion(out, target_batch.y_EA.float())
-        elif label == 1: # IP
-            loss = criterion(out, target_batch.y_IP.float())
-
-        loss.backward()  
-        optimizer.step()
+def train(train_loader, model, optimizer, evaluator, device, momentum_weight,sharp=None, criterion_type=0):
+    criterion = torch.nn.SmoothL1Loss(beta=0.5) # https://pytorch.org/docs/stable/generated/torch.nn.SmoothL1Loss.html
+    step_losses, num_targets = [], []
+    for data in train_loader:
+        data = data.to(device)
         optimizer.zero_grad()
+        target_x, target_y = model(data)
+        # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
+        if criterion_type == 0:
+            loss = criterion(target_x, target_y)
+        elif criterion_type == 1:
+            loss = F.mse_loss(target_x, target_y)
+        elif criterion_type == 2:
+            loss = hyperbolic_dist(target_x, target_y)
+        else:
+            print('Loss function not supported! Exiting!')
+            exit()
 
-    total_loss += loss.item()
+        # Will need these for the weighted average at the end of the epoch
+        step_losses.append(loss.item())
+        num_targets.append(len(target_y))
+        
+        # Update weights of the network 
+        loss.backward()
+        optimizer.step()
 
-    return model, total_loss / len(loader)
+        # Other than the target encoder, here we use exponential smoothing
+        with torch.no_grad():
+            for param_q, param_k in zip(model.context_encoder.parameters(), model.target_encoder.parameters()):
+                param_k.data.mul_(momentum_weight).add_((1.-momentum_weight) * param_q.detach().data)
+        
+    epoch_loss = np.average(step_losses, weights=num_targets)
+    return None, epoch_loss # Leave none for now since maybe we'd like to return the embeddings for visualization
 
-    
-def test(model, loader, label, criterion):
-    model.eval()
-    total_loss = 0.0
-    for batch in loader:
-        out = model(batch)
-        if label == 0: # EA
-            loss = criterion(out, batch.y_EA.float())
-        elif label == 1: # IP
-            loss = criterion(out, batch.y_IP.float())
 
-        total_loss += loss.item()
-    return total_loss / len(loader)
+@ torch.no_grad()
+def test(loader, model, evaluator, device, criterion_type=0):
+    criterion = torch.nn.SmoothL1Loss(beta=0.5)
+    step_losses, num_targets = [], []
+    for data in loader:
+        data = data.to(device)
+        target_x, target_y = model(data)
+        # loss = criterion(target_y, target_x)
+        if criterion_type == 0:
+            loss = criterion(target_x, target_y)
+        elif criterion_type == 1:
+            loss = F.mse_loss(target_x, target_y)
+        elif criterion_type == 2:
+            loss = hyperbolic_dist(target_x, target_y)
+        else:
+            print('Loss function not supported! Exiting!')
+            exit()
+
+        # Will need these for the weighted average at the end of the epoch
+        step_losses.append(loss.item())
+        num_targets.append(len(target_y))
+
+    epoch_loss = np.average(step_losses, weights=num_targets)
+    return None, epoch_loss

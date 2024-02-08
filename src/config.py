@@ -46,13 +46,11 @@ def set_cfg(cfg):
     # Multiscale training
     cfg.train.multiscale = False    
 
-    cfg.subgraphing_type = 0
+    cfg.subgraphing_type = 2
     # ------------------------------------------------------------------------ #
     # Model options
     # ------------------------------------------------------------------------ #
     cfg.model = CN()
-    # GNN type used, see core.model_utils.pyg_gnn_wrapper for all options
-    cfg.model.gnn_type = 'GINEConv'  # change to list later
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
     cfg.model.gMHA_type = 'Hadamard'
     # Hidden size of the model
@@ -71,7 +69,7 @@ def set_cfg(cfg):
     # ------------------------------------------------------------------------ #
     cfg.pos_enc = CN()
     # Random walk structural encoding
-    cfg.pos_enc.rw_dim = 0
+    cfg.pos_enc.rw_dim = 8 # [TODO]: idk what is the best val for this
     # Laplacian eigenvectors positional encoding
     cfg.pos_enc.lap_dim = 0
     # Patch random walk structural encoding
@@ -103,7 +101,7 @@ def set_cfg(cfg):
     # Number of patches to use as context
     cfg.jepa.num_context = 1
     # Number of patches to use as targets
-    cfg.jepa.num_targets = 4
+    cfg.jepa.num_targets = 2
     # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 0
 

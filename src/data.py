@@ -26,6 +26,9 @@ class MyDataset(InMemoryDataset):
     def process(self):
         # self.save(self.data_list, self.processed_paths[0])
         # For PyG<2.4:
+        if self.pre_transform is not None:
+            self.data_list = [self.pre_transform(data) for data in self.data_list]
+
         torch.save(self.collate(self.data_list), self.processed_paths[0])
 
 
@@ -66,11 +69,10 @@ def create_data(cfg):
     
     transform = GraphJEPAPartitionTransform(
         subgraphing_type=cfg.subgraphing_type,
-        patch_rw_dim=cfg.pos_enc.patch_rw_dim,
         num_targets=cfg.jepa.num_targets
     )
 
     graphs = get_graphs()
-    dataset = MyDataset('Data', graphs, pre_transform)
+    dataset = MyDataset(root='Data', data_list=graphs, pre_transform=pre_transform)
 
     return dataset, transform

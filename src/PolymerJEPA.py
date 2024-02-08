@@ -77,13 +77,13 @@ class PolymerJEPA(nn.Module):
         # This selection is critical for focusing the model's attention on relevant parts of the graph.
         # if x has shape N X F, and data.subgraphs_nodes_mapper is shape M (all subgraphs), then x[data.subgraphs_nodes_mapper] has shape M X F
         # If a node index appears more than once in data.subgraphs_nodes_mapper, its feature vector is duplicated in the resulting tensor. If a node index does not appear in data.subgraphs_nodes_mapper, its feature vector is excluded from the result. (Never happens in our case, but it's good to know)
-        x = x[data.subgraphs_nodes_mapper]
-        node_weights = data.node_weights[data.subgraphs_nodes_mapper]
+        x = data.x[data.subgraphs_nodes_mapper]
+        node_weights = data.node_weight[data.subgraphs_nodes_mapper]
         # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices
         edge_index = data.combined_subgraphs
         # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
         e = edge_attr[data.subgraphs_edges_mapper]
-        e_weights = data.edge_weights[data.subgraphs_edges_mapper]
+        e_weights = data.edge_weight[data.subgraphs_edges_mapper]
         batch_x = data.subgraphs_batch # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1, ...]
         # Positional encodings (data.rw_pos_enc) are used to enhance the node features by providing spatial information. These are aggregated per subgraph (patch_pes) using a scatter operation with a 'max' reduction to capture the most significant positional signal
         # pes contains the positional encodings for each node in the graph, again using mapper has the same effect as for x (few lines above)
@@ -113,7 +113,7 @@ class PolymerJEPA(nn.Module):
 
         # initial encoder
         # gnn is working on the combined graph (graph of disconnected subgraphs)
-        x = self.gnn(x, edge_index, e, node_weights, e_weights)
+        x = self.gnn(x, edge_index, e, e_weights, node_weights)
         
         # this is the final operation (pooling) to obtain an embedding for each subgraph/patch from the subgraph nodes embeddings
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
@@ -125,13 +125,13 @@ class PolymerJEPA(nn.Module):
         # np.cumsum(data.call_n_patches) computes the cumulative sum of the number of patches (subgraphs) across batches. This is useful for indexing when multiple graphs are batched together, and you need to keep track of the starting index of subgraphs for each graph in the batch.
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
         # torch.hstack((torch.tensor(0), batch_indexer[:-1])) prepends a 0 to the cumulative sum, shifting the indices to correctly reference the start of each graph's subgraphs within a batched setup
-        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y.device)
+        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device)
 
         # Get idx of context and target subgraphs according to masks
         # Adjusts the context subgraph indices based on their position in the batch, ensuring each index points to the correct subgraph within the batched data structure.
         # the context subgraphs is always the first subgraph for each graph     
         context_subgraph_idx = data.context_subgraph_idx + batch_indexer
-        target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y.device)
+        target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
         # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
 
@@ -168,7 +168,7 @@ class PolymerJEPA(nn.Module):
                 ]
                 # target_encoder can be found in gMHA_wrapper.py, i.e. Hadamard 
                 # it s using the coarse adj matrix instead of the regular one
-                # !!! But since patch_num_diff is always 0 by default, coarsen_adj = regular adj, look at transform.py _diffuse!!!
+                # look at transform.py _diffuse
                 target_x = self.target_encoder(target_x, patch_adj, None)
             else:
                 target_x = self.target_encoder(target_x, None, None)

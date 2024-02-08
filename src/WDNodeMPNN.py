@@ -13,6 +13,7 @@ class WDNodeMPNN(nn.Module):
             edge_attr_dim,
             n_message_passing_layers=3,
             hidden_dim=300,
+            out_dim=128, # [RISK]: transform to 128 to match with the model, but need ot test, maybe its better to upsacle the model to 300
             agg_func="mean"
         ):
 
@@ -42,7 +43,7 @@ class WDNodeMPNN(nn.Module):
         # concatenate the node features with the embedding from the message passing layers
         self.final_message_passing_layer = MessagePassingLayer(
             input_dim= hidden_dim + node_attr_dim,
-            hidden_dim=hidden_dim,
+            hidden_dim=out_dim,
             add_residual=False
         )   
         
@@ -81,11 +82,8 @@ class WDNodeMPNN(nn.Module):
         # concatenate the node features with the embedding from the message passing layers
         h = self.final_message_passing_layer(torch.cat([h, x], dim=1), edge_index, edge_weight, h0)
 
-
-        graph_embedding = self.agg_func(h * node_weight.view(-1, 1), data.batch)
-        return graph_embedding
-        # out = self.final_mlp(graph_embedding)
-        # return out.squeeze(1)
+        return h
+    
 
     
 # https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_gnn.html#the-messagepassing-base-class

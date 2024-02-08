@@ -9,7 +9,7 @@ import torch
 from torch_geometric.utils.convert import to_networkx
 
 
-def motifs2subgraphs(graph):
+def motifs2subgraphs(graph, n_patches):
     cliques, intermonomers_bonds, monomer_mask = graph.motifs[0], graph.intermonomers_bonds, graph.monomer_mask
     # [TODO]: Check requirements (size of context and size of targets, etc.)
 
@@ -39,12 +39,12 @@ def motifs2subgraphs(graph):
     # Plotting
     # plot_subgraphs(G, all_subgraphs)
     
-    node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, len(monomer_mask))
+    node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, len(monomer_mask), n_patches)
 
     return node_mask, edge_mask
 
 
-def metis2subgraphs(graph):
+def metis2subgraphs(graph, n_patches):
     G = to_networkx(graph, to_undirected=True)
     # apply metis algorithm to the graph
     # idea divide each monomer in two partitions, join two partitions from different monomers and use as a context subgraph
@@ -98,11 +98,11 @@ def metis2subgraphs(graph):
     # Plotting
     # plot_subgraphs(G, all_subgraphs)
 
-    node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, len(parts))
+    node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, len(parts), n_patches)
     return node_mask, edge_mask
 
 
-def randomWalks2subgraphs(graph): 
+def randomWalks2subgraphs(graph, n_patches): 
     # [TODO]: Consider edge probabilities (?)
     # Function to perform a single random walk step from a given node
     def random_walk_step(fullGraph, current_node, exclude_nodes):
@@ -226,21 +226,30 @@ def randomWalks2subgraphs(graph):
     # Plotting
     # plot_subgraphs(G, subgraphs)
 
-    node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, total_nodes)
+    node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, total_nodes, n_patches)
     return node_mask, edge_mask
     
-def create_masks(graph, context_subgraph, target_subgraphs, n_of_nodes):
-    n_of_subgraphs = 1 + len(target_subgraphs)
-    node_mask = torch.zeros((n_of_subgraphs, n_of_nodes), dtype=torch.bool)
 
+def create_masks(graph, context_subgraph, target_subgraphs, n_of_nodes, n_patches):
+    # create always a fixed number of patches, the non existing patches will have all the nodes masked
+    node_mask = torch.zeros((n_patches, n_of_nodes), dtype=torch.bool)
+    # actual subgraphs 
+    valid_subgraphs = [context_subgraph] + target_subgraphs
+    start_idx = n_patches - len(valid_subgraphs) # 20 - 9 = 11: 11, 12, 13, 14, 15, 16, 17, 18, 19 (index range is 0-19, so we are good)
     # context mask
-    for node in context_subgraph:
-        node_mask[0, node] = True
+    # for node in context_subgraph:
+    #     node_mask[start_idx, node] = True
+    context_mask = torch.zeros(node_mask.shape[1], dtype=torch.bool)
+    context_mask[context_subgraph] = True
+    node_mask[start_idx] = context_mask
     
     # target masks
-    for i, target_subgraph in enumerate(target_subgraphs):
-        for node in target_subgraph:
-            node_mask[i+1, node] = True
+    idx = start_idx + 1
+    for target_subgraph in target_subgraphs:
+        target_mask = torch.zeros(node_mask.shape[1], dtype=torch.bool)
+        target_mask[target_subgraph] = True
+        node_mask[idx] = target_mask
+        idx += 1
 
     edge_mask = node_mask[:, graph.edge_index[0]] & node_mask[:, graph.edge_index[1]]
     return node_mask, edge_mask

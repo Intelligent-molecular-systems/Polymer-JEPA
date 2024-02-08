@@ -20,10 +20,12 @@ def to_sparse(node_mask, edge_mask):
     return subgraphs_nodes, subgraphs_edges
 
 
-def combine_subgraphs(edge_index, subgraphs_nodes, subgraphs_edges, num_selected=None):
+def combine_subgraphs(edge_index, subgraphs_nodes, subgraphs_edges, num_selected=None, num_nodes=None):
     if num_selected is None:
         num_selected = subgraphs_nodes[0][-1] + 1
-    num_nodes = subgraphs_nodes[1].max() + 1
+
+    if num_nodes is None:
+        num_nodes = subgraphs_nodes[1].max() + 1
 
     combined_subgraphs = edge_index[:, subgraphs_edges[1]] 
     node_label_mapper = edge_index.new_full((num_selected, num_nodes), fill_value=-1) 
@@ -132,23 +134,24 @@ class GraphJEPAPartitionTransform(object):
     def __init__(
             self, 
             subgraphing_type=0,
-            num_targets=4
+            num_targets=4,
+            n_patches=20
         ):
         super().__init__()
         self.subgraphing_type = subgraphing_type
         # [TODO]: How to handle cases where num_targets is less than the set one?
         self.num_targets = num_targets
-        self.patches_upper_bound = 20 # [RISK]: I dont have a n_patches attribute, no fixed n of subgraphs for all graphs, i dont know if this flexibility is allowed
+        self.n_patches = n_patches # [RISK]: I dont have a n_patches attribute, no fixed n of subgraphs for all graphs, i dont know if this flexibility is allowed
 
   
     def __call__(self, data):
         data = SubgraphsData(**{k: v for k, v in data})
         if self.subgraphing_type == 0:
-            node_masks, edge_masks = motifs2subgraphs(data)
+            node_masks, edge_masks = motifs2subgraphs(data, self.n_patches)
         elif self.subgraphing_type == 1:
-            node_masks, edge_masks = metis2subgraphs(data)
+            node_masks, edge_masks = metis2subgraphs(data, self.n_patches)
         elif self.subgraphing_type == 2:
-            node_masks, edge_masks = randomWalks2subgraphs(data)
+            node_masks, edge_masks = randomWalks2subgraphs(data, self.n_patches)
         else:
             raise ValueError('Invalid subgraphing type')
                      
@@ -159,8 +162,9 @@ class GraphJEPAPartitionTransform(object):
         combined_subgraphs = combine_subgraphs(
             data.edge_index, 
             subgraphs_nodes, 
-            subgraphs_edges
-            # num_selected=self.patches_upper_bound
+            subgraphs_edges,
+            num_selected=self.n_patches,
+            num_nodes=data.num_nodes
         )
         
         # [TODO]: Issue: since subgraphing return a variable n of subgraphs, coarsen_adj will have a variable n of dimensions (size)
@@ -168,7 +172,7 @@ class GraphJEPAPartitionTransform(object):
         # data.coarsen_adj = cal_coarsen_adj(node_masks)
 
         subgraphs_batch = subgraphs_nodes[0] # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1]
-        mask = torch.zeros(self.patches_upper_bound).bool() # if say we have two patches then [False, False]
+        mask = torch.zeros(self.n_patches).bool() # if say we have two patches then [False, False]
         mask[subgraphs_batch] = True # if subgraphs_batch = [0, 0, 1, 1] then [True, True]
         data.subgraphs_batch = subgraphs_batch
         data.subgraphs_nodes_mapper = subgraphs_nodes[1] # this is the node idxs [0, 2, 1, 3] (original node idxs)
@@ -176,11 +180,11 @@ class GraphJEPAPartitionTransform(object):
         data.combined_subgraphs = combined_subgraphs # this is the edge index of th combined subgraph made of disconnected subgraphs, where each subgraph has its own unique node ids
         data.mask = mask.unsqueeze(0) # [True, True] -> [[True, True]]
 
-        context_subgraph_idx = torch.tensor(0) # use the first subgraph idx as context
+        # context_subgraph_idx = torch.tensor(0) # use the first subgraph idx as context
         # take the patches in subgraphs_nodes[0].unique()[1:] and shuffle them
-        
-        rand_choice = np.random.choice(subgraphs_nodes[0].unique()[1:], self.num_targets, replace=False)
-        
+        subgraphs = subgraphs_nodes[0].unique()
+        context_subgraph_idx = subgraphs[0]
+        rand_choice = np.random.choice(subgraphs[1:], self.num_targets, replace=False)
         target_subgraph_idxs = torch.tensor(rand_choice)
         data.context_edges_mask = subgraphs_edges[0] == context_subgraph_idx # if context subgraph idx is 0, and subgraphs_edges[0] = [0, 0, 1, 1, 2] then [True, True, False, False, False]
         data.target_edges_mask = torch.isin(subgraphs_edges[0], target_subgraph_idxs) # if target subgraph idxs are [1, 2] then [False, False, True, True, True]
@@ -190,7 +194,7 @@ class GraphJEPAPartitionTransform(object):
         data.target_nodes_subgraph = subgraphs_nodes[0, torch.isin(subgraphs_nodes[0], target_subgraph_idxs)] # if target subgraph idxs are [1, 2] then [1, 1, 2]
         data.context_subgraph_idx = context_subgraph_idx.tolist() # if context subgraph idx is 0, then[0]
         data.target_subgraph_idxs = target_subgraph_idxs.tolist() # if target subgraph idxs are [1, 2] then [1, 2]
-        data.call_n_patches = [len(node_masks)] # [RISK] 
+        data.call_n_patches = [self.n_patches] # [RISK] 
 
         data.__num_nodes__ = data.num_nodes  # set number of nodes of the current graph
         return data

@@ -46,7 +46,7 @@ def run():
     pre_val_data.transform = transform
     pre_tst_data.transform = transform
 
-    pre_trn_loader = DataLoader(dataset=dataset, batch_size=cfg.train.batch_size, shuffle=True)
+    pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.train.batch_size, shuffle=True)
     pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.train.batch_size, shuffle=False)
 
     num_node_features = dataset.data_list[0].num_node_features

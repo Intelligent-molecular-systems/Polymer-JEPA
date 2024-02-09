@@ -24,7 +24,7 @@ def set_cfg(cfg):
     # Total graph mini-batch size
     cfg.train.batch_size = 128
     # Maximal number of epochs
-    cfg.train.epochs = 100
+    cfg.train.epochs = 10
     # Number of runs with random init
     cfg.train.runs = 4
     # Base learning rate
@@ -45,8 +45,21 @@ def set_cfg(cfg):
     cfg.train.optimizer = 'Adam'
     # Multiscale training
     cfg.train.multiscale = False    
+    # Regularization, between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
+    cfg.train.regularization = 0.9
 
-    cfg.subgraphing_type = 2
+    
+    cfg.finetune = CN()
+    # Property to train (finetune) on: 'ea' or 'ip'
+    cfg.finetune.property = 'ea'
+    cfg.finetune.epochs = 300
+    # Base learning rate
+    cfg.finetune.lr = 0.001
+    # L2 regularization, weight decay
+    cfg.finetune.wd = 0.
+    # Total graph mini-batch size
+    cfg.finetune.batch_size = 128
+
     # ------------------------------------------------------------------------ #
     # Model options
     # ------------------------------------------------------------------------ #
@@ -81,29 +94,22 @@ def set_cfg(cfg):
     # Metis patch extraction options
     # ------------------------------------------------------------------------ #
     cfg.metis = CN()
-    # Enable Metis partition (otherwise use random partition)
-    cfg.metis.enable = True
-    # Enable data augmentation
-    cfg.metis.online = True
     # The number of partitions
     cfg.metis.n_patches = 32
-    # Whether to randomly drop a set of edges before each metis partition
-    cfg.metis.drop_rate = 0.3
-    # expanding patches with k hop neighbourhood
-    cfg.metis.num_hops = 1
 
     # ------------------------------------------------------------------------ #
     # JEPA options
     # ------------------------------------------------------------------------ #
     cfg.jepa = CN()
     # Use Graph-JEPA
-    cfg.jepa.enable = True
     # Number of patches to use as context
     cfg.jepa.num_context = 1
     # Number of patches to use as targets
     cfg.jepa.num_targets = 2
     # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 0
+    # 0 = motif, 1 = metis, 2 = random walk
+    cfg.jepa.subgraphing_type = 2
 
     return cfg
 

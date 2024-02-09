@@ -68,7 +68,7 @@ def create_data(cfg):
     pre_transform = PositionalEncodingTransform(rw_dim=cfg.pos_enc.rw_dim, lap_dim=cfg.pos_enc.lap_dim)
     
     transform = GraphJEPAPartitionTransform(
-        subgraphing_type=cfg.subgraphing_type,
+        subgraphing_type=cfg.jepa.subgraphing_type,
         num_targets=cfg.jepa.num_targets
     )
 

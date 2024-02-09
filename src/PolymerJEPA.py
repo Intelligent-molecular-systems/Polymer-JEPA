@@ -43,16 +43,12 @@ class PolymerJEPA(nn.Module):
         if self.patch_rw_dim > 0:
             self.patch_rw_encoder = MLP(self.patch_rw_dim, nhid, 1)
 
-        # use wdmpnn here
-        # self.gnns = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type=gnn_type,
-        #                           bn=bn, res=res) for _ in range(nlayer_gnn)])
-        self.gnn = WDNodeMPNN(nfeat_node, nfeat_edge)
+        # Input Encoder
+        self.wdmpnn = WDNodeMPNN(nfeat_node, nfeat_edge)
         
-        # self.U = nn.ModuleList(
-        #     [MLP(nhid, nhid, nlayer=1, with_final_activation=True) for _ in range(nlayer_gnn-1)])
-
         self.context_encoder = getattr(gMHA_wrapper, 'Standard')(
             nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
+        
         self.target_encoder = getattr(gMHA_wrapper, gMHA_type)(
             nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
 
@@ -67,7 +63,6 @@ class PolymerJEPA(nn.Module):
     def forward(self, data):
         # x = self.input_encoder(data.x).squeeze()
         # The model first encodes node features data.x and edge attributes data.edge_attr using respective encoders (self.input_encoder and self.edge_encoder)
-        edge_attr = data.edge_attr
         # if edge_attr is None:
         #     edge_attr = data.edge_index.new_zeros(data.edge_index.size(-1)).float().unsqueeze(-1)
         # edge_attr = self.edge_encoder(edge_attr)
@@ -80,10 +75,10 @@ class PolymerJEPA(nn.Module):
         x = data.x[data.subgraphs_nodes_mapper]
         node_weights = data.node_weight[data.subgraphs_nodes_mapper]
         # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices
-        edge_index = data.combined_subgraphs
+        edge_index = data.combined_subgraphs        
         # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
-        e = edge_attr[data.subgraphs_edges_mapper]
-        e_weights = data.edge_weight[data.subgraphs_edges_mapper]
+        edge_attr = data.edge_attr[data.subgraphs_edges_mapper]
+        edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
         batch_x = data.subgraphs_batch # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1, ...]
         # Positional encodings (data.rw_pos_enc) are used to enhance the node features by providing spatial information. These are aggregated per subgraph (patch_pes) using a scatter operation with a 'max' reduction to capture the most significant positional signal
         # pes contains the positional encodings for each node in the graph, again using mapper has the same effect as for x (few lines above)
@@ -91,29 +86,10 @@ class PolymerJEPA(nn.Module):
         # knowing which nodes belong to which subgraph (batch_x), and the pos encoding for each node (pes), we can aggregate the pes for each subgraph:
         # the pos encoding for each patch, is the max between each patch node PE
         patch_pes = scatter(pes, batch_x, dim=0, reduce='max') 
-        # Node features x are then processed through a series of GNN layers (self.gnns), where each layer potentially aggregates information using a pooling mechanism (self.pooling) and updates node representations accordingly.
-        # this is basically the initial encoder of the architecture, it comes up with an embedding for each patch
-        # for i, gnn in enumerate(self.gnns):
-        #     if i > 0: # from second layer on, we add the pooled features to the original features as a residual connection
-        #         # This aggregates (pools) the features x of nodes within each subgraph. The batch_x tensor indicates the subgraph to which each node belongs, and reduce=self.pooling specifies the type of pooling (aggregation) operation.
-        #         # https://pytorch-scatter.readthedocs.io/en/latest/functions/scatter.html
-        #         # subgraph will be the pooled features of each subgraph
-        #         subgraph = scatter(x, batch_x, dim=0,
-        #                            reduce=self.pooling)[batch_x] # [batch_x] at the end reorders or duplicates the aggregated subgraph features so that each node in the subgraph gets the pooled feature vector of its subgraph.
-                
-        #         ### !!! i think this is mistakenly duplicated, it should be removed, it does not have any use in any case !!! ###
-        #         subgraph = scatter(x, batch_x, dim=0,
-        #                            reduce=self.pooling)[batch_x]
-        #         ### ###
-        #         # self.U is defined above, is basically an MLP with 1 layer, it's used to update the features of the nodes in each subgraph
-        #         x = x + self.U[i-1](subgraph) # this is the residual connection, it adds the pooled features to the original features
-        #         x = scatter(x, data.subgraphs_nodes_mapper,
-        #                     dim=0, reduce='mean')[data.subgraphs_nodes_mapper]
-            
 
         # initial encoder
         # gnn is working on the combined graph (graph of disconnected subgraphs)
-        x = self.gnn(x, edge_index, e, e_weights, node_weights)
+        x = self.wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights)
         
         # this is the final operation (pooling) to obtain an embedding for each subgraph/patch from the subgraph nodes embeddings
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
@@ -137,7 +113,7 @@ class PolymerJEPA(nn.Module):
 
         # Extract context and target subgraph (mpnn) embeddings
         context_subgraphs = subgraph_x[context_subgraph_idx]
-        target_subgraphs = subgraph_x[target_subgraphs_idx.flatten()]
+        target_subgraphs = subgraph_x[target_subgraphs_idx.flatten()] 
 
         # Construct context and target PEs frome the node pes of each subgraph
         target_pes = patch_pes[target_subgraphs_idx.flatten()]
@@ -150,28 +126,18 @@ class PolymerJEPA(nn.Module):
         target_x = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid)
         context_x = context_subgraphs.unsqueeze(1)
 
+        # create a list of all embeddings
+        embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
+
         # Given that there's only one element the attention operation "won't do anything"
         # This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
         context_mask = data.mask.flatten()[context_subgraph_idx].reshape(-1, 1) # this should be -1 x num context which is always 1
         # pass context subgraph through context encoder
-        context_x = self.context_encoder(context_x, data.coarsen_adj if hasattr(
-            data, 'coarsen_adj') else None, ~context_mask)
+        context_x = self.context_encoder(context_x, None, ~context_mask)
 
         # The target forward step musn't store gradients, since the target encoder is optimized via EMA
         with torch.no_grad():
-            if hasattr(data, 'coarsen_adj'): # if we have a coarsen adj, we use it to encode the target subgraphs
-                subgraph_incides = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs])
-                patch_adj = data.coarsen_adj[
-                    torch.arange(target_x.shape[0]).unsqueeze(1).unsqueeze(2),  # Batch dimension
-                    subgraph_incides.unsqueeze(1),  # Row dimension
-                    subgraph_incides.unsqueeze(2)   # Column dimension
-                ]
-                # target_encoder can be found in gMHA_wrapper.py, i.e. Hadamard 
-                # it s using the coarse adj matrix instead of the regular one
-                # look at transform.py _diffuse
-                target_x = self.target_encoder(target_x, patch_adj, None)
-            else:
-                target_x = self.target_encoder(target_x, None, None)
+            target_x = self.target_encoder(target_x, None, None)
 
             # Predict the coordinates of the patches in the Q1 hyperbola
             # Remove this part if you wish to do euclidean or poincaré embeddings in the latent space
@@ -184,4 +150,78 @@ class PolymerJEPA(nn.Module):
         target_prediction_embeddings = context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid)
         target_y = self.target_predictor(target_prediction_embeddings) # V1: Directly predict (depends on the definition of self.target_predictor)
         # return the predicted target (via context + PE) and the true target obtained via the target encoder.
-        return target_x, target_y
+        return target_x, target_y, embeddings
+    
+
+    def encode(self, data):
+
+        x = data.x[data.subgraphs_nodes_mapper]
+        node_weights = data.node_weight[data.subgraphs_nodes_mapper]
+        edge_index = data.combined_subgraphs
+        edge_attr = data.edge_attr[data.subgraphs_edges_mapper]
+        edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
+        batch_x = data.subgraphs_batch
+        pes = data.rw_pos_enc[data.subgraphs_nodes_mapper]
+        patch_pes = scatter(pes, batch_x, dim=0, reduce='mean')
+
+        x = self.wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights)
+
+        subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
+        subgraph_x += self.patch_rw_encoder(patch_pes)
+        
+        # Handles different patch sizes based on the data object for multiscale training
+        mixer_x = subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1)
+
+        # Eval via target encoder
+        mixer_x = self.target_encoder(mixer_x, None, ~data.mask) # Don't attend to empty patches when doing the final encoding
+        
+        # Global Average Pooling
+        out = (mixer_x * data.mask.unsqueeze(-1)).sum(1) / data.mask.sum(1, keepdim=True)
+        return out
+
+
+
+
+
+
+
+
+    # plotting
+    # import networkx as nx
+    #     import matplotlib.pyplot as plt
+    #     from torch_geometric.utils import subgraph
+
+    #     # Assuming context_subgraph_idx, target_subgraphs_idx, and data are defined as per your setup
+
+    #     # Initialize a figure with 3 subplots
+    #     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    #     # Context Subgraph
+    #     contextPlot = context_subgraph_idx[0]
+    #     context_nodes = data.subgraphs_nodes_mapper[contextPlot == data.subgraphs_batch]
+    #     context_edge_index, _ = subgraph(context_nodes, edge_index)
+    #     G_context = nx.Graph()
+    #     G_context.add_edges_from(context_edge_index.T.cpu().numpy())
+    #     nx.draw(G_context, with_labels=True, ax=axes[0], node_color='skyblue')
+    #     axes[0].set_title("Context Subgraph")
+
+    #     # First Target Subgraph
+    #     targetPlot = target_subgraphs_idx.flatten()[0]
+    #     target_nodes = data.subgraphs_nodes_mapper[targetPlot == data.subgraphs_batch]
+    #     target_edge_index, _ = subgraph(target_nodes, edge_index)
+    #     G_target1 = nx.Graph()
+    #     G_target1.add_edges_from(target_edge_index.T.cpu().numpy())
+    #     nx.draw(G_target1, with_labels=True, ax=axes[1], node_color='lightgreen')
+    #     axes[1].set_title("Target Subgraph 1")
+
+    #     # Second Target Subgraph
+    #     targetPlot2 = target_subgraphs_idx.flatten()[1]
+    #     target_nodes2 = data.subgraphs_nodes_mapper[targetPlot2 == data.subgraphs_batch]
+    #     target_edge_index2, _ = subgraph(target_nodes2, edge_index)
+    #     G_target2 = nx.Graph()
+    #     G_target2.add_edges_from(target_edge_index2.T.cpu().numpy())
+    #     nx.draw(G_target2, with_labels=True, ax=axes[2], node_color='salmon')
+    #     axes[2].set_title("Target Subgraph 2")
+
+    #     plt.tight_layout()
+    #     plt.show()

@@ -8,12 +8,6 @@ import torch_geometric
 from torch_geometric.data import Data
 
 
-def cal_coarsen_adj(subgraphs_nodes_mask):
-    mask = subgraphs_nodes_mask.to(torch.float)
-    coarsen_adj = torch.matmul(mask, mask.t())
-    return coarsen_adj 
-
-
 def to_sparse(node_mask, edge_mask):
     subgraphs_nodes = node_mask.nonzero().T
     subgraphs_edges = edge_mask.nonzero().T
@@ -167,9 +161,6 @@ class GraphJEPAPartitionTransform(object):
             num_nodes=data.num_nodes
         )
         
-        # [TODO]: Issue: since subgraphing return a variable n of subgraphs, coarsen_adj will have a variable n of dimensions (size)
-        # this causes issue when batching, since the batched graphs should have the same dimensiosn for the same feature
-        # data.coarsen_adj = cal_coarsen_adj(node_masks)
 
         subgraphs_batch = subgraphs_nodes[0] # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1]
         mask = torch.zeros(self.n_patches).bool() # if say we have two patches then [False, False]
@@ -185,6 +176,7 @@ class GraphJEPAPartitionTransform(object):
         subgraphs = subgraphs_nodes[0].unique()
         context_subgraph_idx = subgraphs[0]
         rand_choice = np.random.choice(subgraphs[1:], self.num_targets, replace=False)
+        # target_subgraph_idxs = subgraphs[1:] # torch.tensor(rand_choice) RISK Variable number of targets per graph, if it works i shuld at least normalize the error based on the number of targets
         target_subgraph_idxs = torch.tensor(rand_choice)
         data.context_edges_mask = subgraphs_edges[0] == context_subgraph_idx # if context subgraph idx is 0, and subgraphs_edges[0] = [0, 0, 1, 1, 2] then [True, True, False, False, False]
         data.target_edges_mask = torch.isin(subgraphs_edges[0], target_subgraph_idxs) # if target subgraph idxs are [1, 2] then [False, False, True, True, True]

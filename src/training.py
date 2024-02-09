@@ -3,13 +3,24 @@ from src.model_utils.hyperbolic_dist import hyperbolic_dist
 import torch
 import torch.nn.functional as F
 
-def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0):
+def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=0.0):
     criterion = torch.nn.SmoothL1Loss(beta=0.5) # https://pytorch.org/docs/stable/generated/torch.nn.SmoothL1Loss.html
     step_losses, num_targets = [], []
     for data in train_loader:
+        # import networkx as nx
+        # graph = data[0]
+
+        # edge_index = graph.combined_subgraphs
+        # # plot 
+        # G_context = nx.Graph()
+        # G_context.add_edges_from(edge_index.T.cpu().numpy())
+        # nx.draw(G_context, with_labels=True, node_color='skyblue')
+        # import matplotlib.pyplot as plt
+        # plt.show()
+
         data = data.to(device)
         optimizer.zero_grad()
-        target_x, target_y = model(data)
+        target_x, target_y, embeddings = model(data)
         # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
         if criterion_type == 0:
             loss = criterion(target_x, target_y)
@@ -20,6 +31,12 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         else:
             print('Loss function not supported! Exiting!')
             exit()
+
+        vcRegLoss = 0
+        if regularization > 0.0:
+            vcRegLoss = vcReg(embeddings)
+
+        loss = (1 - regularization) * loss + regularization * vcRegLoss
 
         # Will need these for the weighted average at the end of the epoch
         step_losses.append(loss.item())
@@ -39,12 +56,12 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
 
 
 @ torch.no_grad()
-def test(loader, model, device, criterion_type=0):
+def test(loader, model, device, criterion_type=0, regularization=0.0):
     criterion = torch.nn.SmoothL1Loss(beta=0.5)
     step_losses, num_targets = [], []
     for data in loader:
         data = data.to(device)
-        target_x, target_y = model(data)
+        target_x, target_y, embeddings = model(data)
 
         if criterion_type == 0:
             loss = criterion(target_x, target_y)
@@ -56,9 +73,35 @@ def test(loader, model, device, criterion_type=0):
             print('Loss function not supported! Exiting!')
             exit()
 
+        vcRegLoss = 0
+        if regularization > 0.0:
+            vcRegLoss = vcReg(embeddings)
+
+        loss = (1 - regularization) * loss + regularization * vcRegLoss
+
         # Will need these for the weighted average at the end of the epoch
         step_losses.append(loss.item())
         num_targets.append(len(target_y))
 
     epoch_loss = np.average(step_losses, weights=num_targets)
     return None, epoch_loss
+
+
+# vcReg = variance covariance regularization
+def vcReg(embeddings, variance_threshold=1.0):
+    # bring covariance matrix for each embedding to identity matrix
+    # keep variance of each feature above a certain threshold via a hinge loss
+
+    # covariance matrix
+    cov = torch.cov(embeddings)
+    # identity matrix
+    I = torch.eye(cov.shape[0])
+    # Calculate the covariance loss as the Frobenius norm of the difference between the covariance matrix and the identity matrix
+    cov_loss = torch.norm(cov - I, p='fro')
+    # Calculate the variance for each feature across the batch
+    variances = torch.var(embeddings, dim=0)
+
+    # Calculate the variance loss as the sum of hinge losses to ensure each variance is above the threshold
+    var_loss = torch.relu(variance_threshold - variances).sum()
+
+    return cov_loss + var_loss

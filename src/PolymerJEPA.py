@@ -20,20 +20,16 @@ class PolymerJEPA(nn.Module):
                  rw_dim=0,
                  lap_dim=0,
                  mlpmixer_dropout=0,
-                 bn=True,
-                 res=True,
                  pooling='mean',
                  patch_rw_dim=0,
-                 num_target_patches=4):
+                 num_target_patches=2):
 
         super().__init__()
         self.use_rw = rw_dim > 0
         self.use_lap = lap_dim > 0
         self.pooling = pooling
-        self.res = res
         self.patch_rw_dim = patch_rw_dim
         self.nhid = nhid
-        self.nfeat_edge = nfeat_edge
         self.num_target_patches=num_target_patches
 
         if self.use_rw:
@@ -44,7 +40,7 @@ class PolymerJEPA(nn.Module):
             self.patch_rw_encoder = MLP(self.patch_rw_dim, nhid, 1)
 
         # Input Encoder
-        self.wdmpnn = WDNodeMPNN(nfeat_node, nfeat_edge)
+        self.wdmpnn = WDNodeMPNN(nfeat_node, nfeat_edge, out_dim=nhid)
         
         self.context_encoder = getattr(gMHA_wrapper, 'Standard')(
             nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
@@ -61,7 +57,7 @@ class PolymerJEPA(nn.Module):
         #     nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
 
     def forward(self, data):
-        # x = self.input_encoder(data.x).squeeze()
+        # x = self.input_encoder(data.x).squeeze() RISK?
         # The model first encodes node features data.x and edge attributes data.edge_attr using respective encoders (self.input_encoder and self.edge_encoder)
         # if edge_attr is None:
         #     edge_attr = data.edge_index.new_zeros(data.edge_index.size(-1)).float().unsqueeze(-1)
@@ -101,7 +97,7 @@ class PolymerJEPA(nn.Module):
         # np.cumsum(data.call_n_patches) computes the cumulative sum of the number of patches (subgraphs) across batches. This is useful for indexing when multiple graphs are batched together, and you need to keep track of the starting index of subgraphs for each graph in the batch.
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
         # torch.hstack((torch.tensor(0), batch_indexer[:-1])) prepends a 0 to the cumulative sum, shifting the indices to correctly reference the start of each graph's subgraphs within a batched setup
-        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device)
+        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device) # [TODO]: adapt this to work with different ys
 
         # Get idx of context and target subgraphs according to masks
         # Adjusts the context subgraph indices based on their position in the batch, ensuring each index points to the correct subgraph within the batched data structure.
@@ -111,6 +107,25 @@ class PolymerJEPA(nn.Module):
         # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
 
+        # import matplotlib.pyplot as plt
+        # from torch_geometric.utils import subgraph
+        # import networkx as nx
+        # # Assuming context_subgraph_idx, target_subgraphs_idx, and data are defined as per your setup
+
+        # # Initialize a figure with 3 subplots
+        # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+        # # Context Subgraph
+        # contextPlot = context_subgraph_idx[0]
+        # context_nodes = data.subgraphs_nodes_mapper[contextPlot == data.subgraphs_batch]
+        # context_edge_index, _ = subgraph(context_nodes, edge_index)
+        # G_context = nx.Graph()
+        # G_context.add_edges_from(context_edge_index.T.cpu().numpy())
+        # nx.draw(G_context, with_labels=True, ax=axes[0], node_color='skyblue')
+        # axes[0].set_title("Context Subgraph")
+        # plt.tight_layout()
+        # plt.show()
+        
         # Extract context and target subgraph (mpnn) embeddings
         context_subgraphs = subgraph_x[context_subgraph_idx]
         target_subgraphs = subgraph_x[target_subgraphs_idx.flatten()] 
@@ -133,12 +148,24 @@ class PolymerJEPA(nn.Module):
         # This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
         context_mask = data.mask.flatten()[context_subgraph_idx].reshape(-1, 1) # this should be -1 x num context which is always 1
         # pass context subgraph through context encoder
-        context_x = self.context_encoder(context_x, None, ~context_mask)
+        context_x = self.context_encoder(context_x, data.coarsen_adj if hasattr(
+            data, 'coarsen_adj') else None, ~context_mask) # Why the reverse mask?
 
         # The target forward step musn't store gradients, since the target encoder is optimized via EMA
         with torch.no_grad():
-            target_x = self.target_encoder(target_x, None, None)
-
+            if hasattr(data, 'coarsen_adj'): # if we have a coarsen adj, we use it to encode the target subgraphs
+                subgraph_incides = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs])
+                patch_adj = data.coarsen_adj[
+                    torch.arange(target_x.shape[0]).unsqueeze(1).unsqueeze(2),  # Batch dimension
+                    subgraph_incides.unsqueeze(1),  # Row dimension
+                    subgraph_incides.unsqueeze(2)   # Column dimension
+                ]
+                # target_encoder can be found in gMHA_wrapper.py, i.e. Hadamard 
+                # it s using the coarse adj matrix instead of the regular one
+                # !!! But since patch_num_diff is always 0 by default, coarsen_adj = regular adj, look at transform.py _diffuse!!!
+                target_x = self.target_encoder(target_x, patch_adj, None)
+            else:
+                target_x = self.target_encoder(target_x, None, None)
             # Predict the coordinates of the patches in the Q1 hyperbola
             # Remove this part if you wish to do euclidean or poincaré embeddings in the latent space
             x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
@@ -173,7 +200,8 @@ class PolymerJEPA(nn.Module):
         mixer_x = subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1)
 
         # Eval via target encoder
-        mixer_x = self.target_encoder(mixer_x, None, ~data.mask) # Don't attend to empty patches when doing the final encoding
+        mixer_x = self.target_encoder(mixer_x, data.coarsen_adj if hasattr(
+                                        data, 'coarsen_adj') else None, ~data.mask) # Don't attend to empty patches when doing the final encoding
         
         # Global Average Pooling
         out = (mixer_x * data.mask.unsqueeze(-1)).sum(1) / data.mask.sum(1, keepdim=True)

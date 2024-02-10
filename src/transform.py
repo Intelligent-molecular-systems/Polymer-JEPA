@@ -7,6 +7,11 @@ import torch
 import torch_geometric
 from torch_geometric.data import Data
 
+def cal_coarsen_adj(subgraphs_nodes_mask):
+    #a coarse patch adjacency matrix A′ = B*B^T ∈ Rp×p, where each A′ ij contains the node overlap between pi and pj.
+    mask = subgraphs_nodes_mask.to(torch.float)
+    coarsen_adj = torch.matmul(mask, mask.t()) # element at position (i, j) is the number of nodes that subgraphs i and j have in common.
+    return coarsen_adj # create a simplified version of a graph, the purpose of this process is to reduce the complexity of the graph, making it easier to analyze or compute on.
 
 def to_sparse(node_mask, edge_mask):
     subgraphs_nodes = node_mask.nonzero().T
@@ -129,14 +134,28 @@ class GraphJEPAPartitionTransform(object):
             self, 
             subgraphing_type=0,
             num_targets=4,
-            n_patches=20
+            n_patches=20,
+            patch_num_diff=0
         ):
         super().__init__()
         self.subgraphing_type = subgraphing_type
         # [TODO]: How to handle cases where num_targets is less than the set one?
         self.num_targets = num_targets
         self.n_patches = n_patches # [RISK]: I dont have a n_patches attribute, no fixed n of subgraphs for all graphs, i dont know if this flexibility is allowed
-
+        self.patch_num_diff = patch_num_diff
+        
+    def _diffuse(self, A):
+            # !!! since patch_num_diff is always 0, by default we are using always the regular adjacency matrix !!!
+            if self.patch_num_diff == 0:
+                return A
+            Dinv = A.sum(dim=-1).clamp(min=1).pow(-1).unsqueeze(-1)  # D^-1
+            RW = A * Dinv
+            M = RW
+            M_power = M
+            # Iterate
+            for _ in range(self.patch_num_diff-1):
+                M_power = torch.matmul(M_power, M)
+            return M_power
   
     def __call__(self, data):
         data = SubgraphsData(**{k: v for k, v in data})
@@ -153,6 +172,7 @@ class GraphJEPAPartitionTransform(object):
         
         # [RISK]: I dont have a n_patches attribute, no fixed n of subgraphs for all graphs, i dont know if this flexibility is allowed
         # basically i substitute n_patches with len(node_masks)
+        # [CHECKPOINT]: I plotted the combined_subgraphs and it looks good, it means that subgraphs_nodes and subgraphs_edges are good
         combined_subgraphs = combine_subgraphs(
             data.edge_index, 
             subgraphs_nodes, 
@@ -160,11 +180,20 @@ class GraphJEPAPartitionTransform(object):
             num_selected=self.n_patches,
             num_nodes=data.num_nodes
         )
-        
 
+        # this is basically an alternative way to compute the positional encoding based on the RWSE of the patches, i
+        # see 4.4. Ablation Studies in the paper
+        if self.patch_num_diff > -1:
+            coarsen_adj = cal_coarsen_adj(node_masks)
+            if self.patch_num_diff > -1: # patch_num_diff = Patch PE diffusion steps
+                data.coarsen_adj = self._diffuse(coarsen_adj).unsqueeze(0)
+
+        
         subgraphs_batch = subgraphs_nodes[0] # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1]
         mask = torch.zeros(self.n_patches).bool() # if say we have two patches then [False, False]
         mask[subgraphs_batch] = True # if subgraphs_batch = [0, 0, 1, 1] then [True, True]
+        # basically mask has the first 20-n elements as False and the remaining n elements as True, n is the number of subgraphs in the graph
+        # print(mask) # [RISK]: Check if this is the same in the original code 
         data.subgraphs_batch = subgraphs_batch
         data.subgraphs_nodes_mapper = subgraphs_nodes[1] # this is the node idxs [0, 2, 1, 3] (original node idxs)
         data.subgraphs_edges_mapper = subgraphs_edges[1] # this is the edge idxs [0, 1, 2] (original edge idxs)

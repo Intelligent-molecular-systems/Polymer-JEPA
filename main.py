@@ -31,14 +31,14 @@ def run():
     #             quit()
     # print(type(dataset))
     # 50-50 split for pretraining - fine-tuning data
-    pre_data = dataset[:int(0.01*len(dataset.data_list))].copy()
+    pre_data = dataset[:int(0.9*len(dataset.data_list))].copy()
 
     # 70-20-10 split for pretraining - validation - test data
     pre_trn_data = pre_data[:int(0.7*len(pre_data))].copy()
     pre_val_data = pre_data[int(0.7*len(pre_data)):int(0.9*len(pre_data))].copy()
     pre_tst_data = pre_data[int(0.9*len(pre_data)):].copy()
 
-    ft_data = dataset[int(0.98*len(dataset.data_list)):].copy()
+    ft_data = dataset[int(0.1*len(dataset.data_list)):].copy()
     ft_trn_data = ft_data[:int(0.7*len(ft_data))].copy()
     ft_val_data = ft_data[int(0.7*len(ft_data)):int(0.9*len(ft_data))].copy()
     ft_tst_data = ft_data[int(0.9*len(ft_data)):].copy()
@@ -61,6 +61,7 @@ def run():
         gMHA_type=cfg.model.gMHA_type,
         rw_dim=cfg.pos_enc.rw_dim,
         pooling=cfg.model.pool,
+        n_patches=cfg.subgraphing.n_patches,
         mlpmixer_dropout=cfg.train.mlpmixer_dropout,
         patch_rw_dim=cfg.pos_enc.patch_rw_dim,
         num_target_patches=cfg.jepa.num_targets
@@ -89,6 +90,7 @@ def run():
 
     random.seed(time.time())
     model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
+    print(f"Model name: {model_name}")
     
     # Pretraining
     for epoch in tqdm(range(cfg.train.epochs), desc='Pretraining Epochs'):
@@ -131,45 +133,36 @@ def run():
     ft_trn_loader = DataLoader(dataset=ft_trn_data, batch_size=cfg.finetune.batch_size, shuffle=True)
     ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False)
 
-    # this is the predictor head, that takes the graph embeddings and predicts the property
-    predictor = nn.Sequential(
-        nn.Linear(cfg.model.hidden_size, 128),
-        nn.ReLU(),
-        nn.Linear(128, 1)
-    ).to(cfg.device)
-
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(predictor.parameters(), lr=cfg.finetune.lr, weight_decay=cfg.finetune.wd)
-
     X_train, y_train = [], []
     X_test, y_test = [], []
     # get graph embeddings for finetuning, basically we train an MLP on top of the graph (polymer) embeddings
     for data in ft_trn_loader:
         data = data.to(cfg.device)
-        features = model.encode(data)
-        X_train.append(features.detach().cpu().numpy())
-        if cfg.finetune.property == 'ea':
-            y_train.append(data.y_EA.detach().cpu().numpy())
-        elif cfg.finetune.property == 'ip':
-            y_train.append(data.y_IP.detach().cpu().numpy())
-        else:
-            raise ValueError('Invalid property type')
+        with torch.no_grad():
+            features = model.encode(data)
+            X_train.append(features.detach().cpu().numpy())
+            if cfg.finetune.property == 'ea':
+                y_train.append(data.y_EA.detach().cpu().numpy())
+            elif cfg.finetune.property == 'ip':
+                y_train.append(data.y_IP.detach().cpu().numpy())
+            else:
+                raise ValueError('Invalid property type')
         
-
     # Concatenate the lists into numpy arrays
     X_train = np.concatenate(X_train, axis=0)
     y_train = np.concatenate(y_train, axis=0)
 
     for data in ft_val_loader:
         data = data.to(cfg.device)
-        features = model.encode(data)
-        X_test.append(features.detach().cpu().numpy())
-        if cfg.finetune.property == 'ea':
-            y_test.append(data.y_EA.detach().cpu().numpy())
-        elif cfg.finetune.property == 'ip':
-            y_test.append(data.y_IP.detach().cpu().numpy())
-        else:
-            raise ValueError('Invalid property type')
+        with torch.no_grad():
+            features = model.encode(data)
+            X_test.append(features.detach().cpu().numpy())
+            if cfg.finetune.property == 'ea':
+                y_test.append(data.y_EA.detach().cpu().numpy())
+            elif cfg.finetune.property == 'ip':
+                y_test.append(data.y_IP.detach().cpu().numpy())
+            else:
+                raise ValueError('Invalid property type')
 
     # Concatenate the lists into numpy arrays
     X_test = np.concatenate(X_test, axis=0)
@@ -181,6 +174,18 @@ def run():
     y_train = torch.from_numpy(y_train).float().to(cfg.device)
     X_test = torch.from_numpy(X_test).float().to(cfg.device)
     y_test = torch.from_numpy(y_test).float().to(cfg.device)
+
+    # this is the predictor head, that takes the graph embeddings and predicts the property
+    predictor = nn.Sequential(
+        nn.Linear(cfg.model.hidden_size, 128),
+        nn.ReLU(),
+        nn.Linear(128, 128),
+        nn.ReLU(),
+        nn.Linear(128, 1)
+    ).to(cfg.device)
+
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(predictor.parameters(), lr=cfg.finetune.lr, weight_decay=cfg.finetune.wd)
 
     for epoch in tqdm(range(cfg.finetune.epochs), desc='Finetuning Epochs'):
         model.eval()
@@ -213,7 +218,7 @@ def run():
                 epoch=epoch
             )
             
-        print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}' f' Val Loss:{val_loss:.4f}')
+            print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}' f' Val Loss:{val_loss:.4f}')
         
 if __name__ == '__main__':
     run()

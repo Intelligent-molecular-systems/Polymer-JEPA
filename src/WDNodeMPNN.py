@@ -11,9 +11,9 @@ class WDNodeMPNN(nn.Module):
             self, 
             node_attr_dim, 
             edge_attr_dim,
-            n_message_passing_layers=3,
+            n_message_passing_layers=1,
             hidden_dim=300,
-            out_dim=128, # [RISK]: transform to 128 to match with the model, but need ot test, maybe its better to upsacle the model to 300
+            out_dim=256, # [RISK]: transform to 128 to match with the model, but need ot test, maybe its better to upsacle the model to 300
             agg_func="mean"
         ):
 

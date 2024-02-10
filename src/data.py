@@ -69,7 +69,9 @@ def create_data(cfg):
     
     transform = GraphJEPAPartitionTransform(
         subgraphing_type=cfg.jepa.subgraphing_type,
-        num_targets=cfg.jepa.num_targets
+        num_targets=cfg.jepa.num_targets,
+        n_patches=cfg.subgraphing.n_patches,
+        patch_num_diff=cfg.pos_enc.patch_num_diff
     )
 
     graphs = get_graphs()

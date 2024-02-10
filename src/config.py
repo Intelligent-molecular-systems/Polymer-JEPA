@@ -9,7 +9,7 @@ def set_cfg(cfg):
     # Basic options
     # ------------------------------------------------------------------------ #
     # Additional num of worker for data loading
-    cfg.num_workers = 8
+    cfg.num_workers = 1
     # Cuda device number, used for machine with multiple gpus
     cfg.device = 'cpu'
     # Whether fix the running seed to remove randomness
@@ -24,7 +24,7 @@ def set_cfg(cfg):
     # Total graph mini-batch size
     cfg.train.batch_size = 128
     # Maximal number of epochs
-    cfg.train.epochs = 10
+    cfg.train.epochs = 30
     # Number of runs with random init
     cfg.train.runs = 4
     # Base learning rate
@@ -45,14 +45,14 @@ def set_cfg(cfg):
     cfg.train.optimizer = 'Adam'
     # Multiscale training
     cfg.train.multiscale = False    
-    # Regularization, between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
-    cfg.train.regularization = 0.9
+    # Regularization (vcReg), between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
+    cfg.train.regularization = 0.
 
     
     cfg.finetune = CN()
     # Property to train (finetune) on: 'ea' or 'ip'
     cfg.finetune.property = 'ea'
-    cfg.finetune.epochs = 300
+    cfg.finetune.epochs = 100
     # Base learning rate
     cfg.finetune.lr = 0.001
     # L2 regularization, weight decay
@@ -65,11 +65,9 @@ def set_cfg(cfg):
     # ------------------------------------------------------------------------ #
     cfg.model = CN()
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
-    cfg.model.gMHA_type = 'Hadamard'
+    cfg.model.gMHA_type = 'Hadamard' # Hadamard is the default one for all datsets (yaml files) in original code
     # Hidden size of the model
-    cfg.model.hidden_size = 128
-    # Number of gnn layers
-    cfg.model.nlayer_gnn = 4
+    cfg.model.hidden_size = 256
     # Number of mlp mixer layers
     cfg.model.nlayer_mlpmixer = 4
     # Pooling type for generaating graph/subgraph embedding from node embeddings
@@ -82,20 +80,21 @@ def set_cfg(cfg):
     # ------------------------------------------------------------------------ #
     cfg.pos_enc = CN()
     # Random walk structural encoding
-    cfg.pos_enc.rw_dim = 8 # [TODO]: idk what is the best val for this
+    # if set to 0 non pretransform? in graph-jepa it is set to 0
+    cfg.pos_enc.rw_dim = 20 # [TODO]: idk what is the best val for this
     # Laplacian eigenvectors positional encoding
     cfg.pos_enc.lap_dim = 0
     # Patch random walk structural encoding
-    cfg.pos_enc.patch_rw_dim = 8
+    cfg.pos_enc.patch_rw_dim = 20
     # Patch PE diffusion steps
-    cfg.pos_enc.patch_num_diff = -1
+    cfg.pos_enc.patch_num_diff = 0
 
     # ------------------------------------------------------------------------ #
     # Metis patch extraction options
     # ------------------------------------------------------------------------ #
-    cfg.metis = CN()
-    # The number of partitions
-    cfg.metis.n_patches = 32
+    cfg.subgraphing = CN()
+    # The number of partitions (upper bound) RISK in case of more subgraphs this would break
+    cfg.subgraphing.n_patches = 20
 
     # ------------------------------------------------------------------------ #
     # JEPA options

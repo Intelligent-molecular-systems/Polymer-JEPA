@@ -2,8 +2,8 @@ from copy import deepcopy
 from matplotlib import pyplot as plt
 from rdkit import Chem
 from rdkit.Chem import Draw
-from src.motif_subgraphing import get_motifs, plot_motifs
-import src.featurization_helper as ft
+from src.subgraphing_utils.motif_subgraphing import get_motifs, plot_motifs
+import src.featurization_utils.featurization_helper as ft
 import torch
 from torch_geometric.data import Data
 

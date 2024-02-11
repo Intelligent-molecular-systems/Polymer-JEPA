@@ -11,8 +11,9 @@ class WDNodeMPNN(nn.Module):
             self, 
             node_attr_dim, 
             edge_attr_dim,
-            n_message_passing_layers=3,
+            n_message_passing_layers=2,
             hidden_dim=300,
+            out_dim=256, # [RISK]: transform to 128 to match with the model, but need ot test, maybe its better to upsacle the model to 300
             agg_func="mean"
         ):
 
@@ -42,7 +43,7 @@ class WDNodeMPNN(nn.Module):
         # concatenate the node features with the embedding from the message passing layers
         self.final_message_passing_layer = MessagePassingLayer(
             input_dim= hidden_dim + node_attr_dim,
-            hidden_dim=hidden_dim,
+            hidden_dim=out_dim,
             add_residual=False
         )   
         
@@ -53,9 +54,8 @@ class WDNodeMPNN(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
 
-
-    def forward(self, data):
-        x, edge_index, edge_attr, edge_weight, node_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight, data.node_weight    
+    def forward(self, x, edge_index, edge_attr, edge_weight, node_weight):
+        # x, edge_index, edge_attr, edge_weight, node_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight, data.node_weight    
         # print('x:', x.shape)
         # print('edge_index:', edge_index.shape)
         # print('edge_attr:', edge_attr.shape)
@@ -82,11 +82,11 @@ class WDNodeMPNN(nn.Module):
         # concatenate the node features with the embedding from the message passing layers
         h = self.final_message_passing_layer(torch.cat([h, x], dim=1), edge_index, edge_weight, h0)
 
+        # multiply the node features by the node weights
+        h = h * node_weight.view(-1, 1)
 
-        graph_embedding = self.agg_func(h * node_weight.view(-1, 1), data.batch)
-        return graph_embedding
-        # out = self.final_mlp(graph_embedding)
-        # return out.squeeze(1)
+        return h
+    
 
     
 # https://pytorch-geometric.readthedocs.io/en/latest/tutorial/create_gnn.html#the-messagepassing-base-class

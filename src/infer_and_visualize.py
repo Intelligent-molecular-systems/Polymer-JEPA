@@ -4,7 +4,7 @@ import torch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 from src.WDNodeMPNN import WDNodeMPNN
-from src.featurization import poly_smiles_to_graph
+from src.featurization_utils.featurization import poly_smiles_to_graph
 import math
 import os
 from matplotlib import pyplot as plt
@@ -55,8 +55,8 @@ def visualize_results(store_pred: List, store_true: List, label: str, save_folde
     if save_folder is not None:
         os.makedirs(save_folder, exist_ok=True)
         plt.savefig(f"{save_folder}/{'EA' if label == 'ea' else 'IP'}_{epoch}.png")
-
-    return fig, R2, RMSE
+    plt.close(fig)
+    return R2, RMSE
 
 
 # def infer(smiles_list: List[str], ea_list: List[float], ip_list: List[float], model, device = None, visualize=False) -> np.ndarray:

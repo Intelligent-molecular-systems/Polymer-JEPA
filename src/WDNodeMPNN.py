@@ -82,6 +82,9 @@ class WDNodeMPNN(nn.Module):
         # concatenate the node features with the embedding from the message passing layers
         h = self.final_message_passing_layer(torch.cat([h, x], dim=1), edge_index, edge_weight, h0)
 
+        # multiply the node features by the node weights
+        h = h * node_weight.view(-1, 1)
+
         return h
     
 

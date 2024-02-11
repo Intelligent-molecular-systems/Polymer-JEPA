@@ -63,10 +63,10 @@ def get_graphs(file_csv = 'Data/dataset-poly_chemprop.csv', file_graphs_list = '
 
 
 def create_data(cfg):
-    pre_transform = PositionalEncodingTransform(rw_dim=cfg.pos_enc.rw_dim, lap_dim=cfg.pos_enc.lap_dim)
+    pre_transform = PositionalEncodingTransform(rw_dim=cfg.pos_enc.rw_dim)
     
     transform = GraphJEPAPartitionTransform(
-        subgraphing_type=cfg.jepa.subgraphing_type,
+        subgraphing_type=cfg.subgraphing.type,
         num_targets=cfg.jepa.num_targets,
         n_patches=cfg.subgraphing.n_patches,
         patch_num_diff=cfg.pos_enc.patch_num_diff

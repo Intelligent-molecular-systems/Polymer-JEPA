@@ -6,6 +6,7 @@ from src.config import cfg
 from src.data import create_data
 from src.infer_and_visualize import infer_by_dataloader, visualize_results
 from src.PolymerJEPA import PolymerJEPA
+from src.PolymerJEPAv2 import PolymerJEPAv2
 from src.training import train, test
 import time
 import torch
@@ -29,18 +30,31 @@ def pretrain(pre_data, transform, cfg):
     num_node_features = pre_data.data_list[0].num_node_features
     num_edge_features = pre_data.data_list[0].num_edge_features
 
-    model = PolymerJEPA(
-        nfeat_node=num_node_features,
-        nfeat_edge=num_edge_features,
-        nhid=cfg.model.hidden_size,
-        nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
-        gMHA_type=cfg.model.gMHA_type,
-        rw_dim=cfg.pos_enc.rw_dim,
-        pooling=cfg.model.pool,
-        mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
-        patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-        num_target_patches=cfg.jepa.num_targets
-    ).to(cfg.device)
+    if cfg.modelVersion == 'v1':
+        model = PolymerJEPA(
+            nfeat_node=num_node_features,
+            nfeat_edge=num_edge_features,
+            nhid=cfg.model.hidden_size,
+            nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
+            gMHA_type=cfg.model.gMHA_type,
+            rw_dim=cfg.pos_enc.rw_dim,
+            pooling=cfg.model.pool,
+            mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
+            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+            num_target_patches=cfg.jepa.num_targets
+        ).to(cfg.device)
+    elif cfg.modelVersion == 'v2':
+        model = PolymerJEPAv2(
+            nfeat_node=num_node_features,
+            nfeat_edge=num_edge_features,
+            nhid=cfg.model.hidden_size,
+            rw_dim=cfg.pos_enc.rw_dim,
+            pooling=cfg.model.pool,
+            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+            num_target_patches=cfg.jepa.num_targets
+        ).to(cfg.device)
+    else:
+        raise ValueError('Invalid model version')
 
     optimizer = torch.optim.Adam(
         model.parameters(), 
@@ -198,19 +212,33 @@ def run():
         model, model_name = pretrain(pre_data, transform, cfg)
     else:
         # load model from finetuning
-        model_name = 'oWTyZivo'
-        model = PolymerJEPA(
-            nfeat_node=dataset.data_list[0].num_node_features,
-            nfeat_edge=dataset.data_list[0].num_edge_features,
-            nhid=cfg.model.hidden_size,
-            nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
-            gMHA_type=cfg.model.gMHA_type,
-            rw_dim=cfg.pos_enc.rw_dim,
-            pooling=cfg.model.pool,
-            mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
-            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-            num_target_patches=cfg.jepa.num_targets
-        ).to(cfg.device)
+        model_name = 'jRTXB2jt'
+        if cfg.modelVersion == 'v1':
+            model = PolymerJEPA(
+                nfeat_node=dataset.data_list[0].num_node_features,
+                nfeat_edge=dataset.data_list[0].num_edge_features,
+                nhid=cfg.model.hidden_size,
+                nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
+                gMHA_type=cfg.model.gMHA_type,
+                rw_dim=cfg.pos_enc.rw_dim,
+                pooling=cfg.model.pool,
+                mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
+                patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+                num_target_patches=cfg.jepa.num_targets
+            ).to(cfg.device)
+            
+        elif cfg.modelVersion == 'v2':
+            model = PolymerJEPAv2(
+                nfeat_node=dataset.data_list[0].num_node_features,
+                nfeat_edge=dataset.data_list[0].num_edge_features,
+                nhid=cfg.model.hidden_size,
+                rw_dim=cfg.pos_enc.rw_dim,
+                pooling=cfg.model.pool,
+                patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+                num_target_patches=cfg.jepa.num_targets
+            ).to(cfg.device)
+        else:
+            raise ValueError('Invalid model version')
 
         model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}.pt'))
     

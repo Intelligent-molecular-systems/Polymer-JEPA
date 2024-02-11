@@ -20,6 +20,9 @@ def set_cfg(cfg):
     cfg.shouldPretrain = False
     cfg.shouldFinetune = True
 
+    # v1 for PolymerJEPA, v2 for PolymerJEPAv2
+    cfg.modelVersion = 'v1'
+
     # ------------------------------------------------------------------------ #
     # Training options
     # ------------------------------------------------------------------------ #
@@ -85,8 +88,6 @@ def set_cfg(cfg):
     # Random walk structural encoding
     # if set to 0 non pretransform? in graph-jepa it is set to 0
     cfg.pos_enc.rw_dim = 20 # [TODO]: idk what is the best val for this
-    # Laplacian eigenvectors positional encoding
-    cfg.pos_enc.lap_dim = 0
     # Patch random walk structural encoding
     cfg.pos_enc.patch_rw_dim = 20
     # Patch PE diffusion steps
@@ -98,6 +99,8 @@ def set_cfg(cfg):
     cfg.subgraphing = CN()
     # The number of partitions (upper bound) RISK in case of more subgraphs this would break
     cfg.subgraphing.n_patches = 20
+    # 0 = motif, 1 = metis, 2 = random walk
+    cfg.subgraphing.type = 1
 
     # ------------------------------------------------------------------------ #
     # JEPA options
@@ -110,8 +113,6 @@ def set_cfg(cfg):
     cfg.jepa.num_targets = 4
     # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 0
-    # 0 = motif, 1 = metis, 2 = random walk
-    cfg.jepa.subgraphing_type = 1
 
     return cfg
 

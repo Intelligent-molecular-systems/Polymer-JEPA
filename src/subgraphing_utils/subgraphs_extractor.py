@@ -38,20 +38,21 @@ def motifs2subgraphs(graph, n_patches, min_targets):
         if not available_nodes:
             available_nodes = set(range(len(monomer_mask)))
         
+        G = to_networkx(graph, to_undirected=True)
         while len(target_subgraphs) < min_targets: # RISK infinite loop, but it should not happen
             # pick a random node from the available nodes
             random_node = random.choice(list(available_nodes))
             # expand the node by one hop
-            new_subgraph = set([random_node])
-            new_subgraph = expand_one_hop(graph, new_subgraph)
+            new_subgraph = [random_node]
+            new_subgraph = expand_one_hop(G, new_subgraph)
             # check if subgraph is not already in the target subgraphs
             if new_subgraph not in target_subgraphs:
-                target_subgraphs.append(new_subgraph)
+                target_subgraphs.append(list(new_subgraph))
     
 
     # Plotting
     #convert to nx graphs
-    #G = to_networkx(graph, to_undirected=True)
+    # G = to_networkx(graph, to_undirected=True)
     #all_subgraphs = [context_subgraph] + target_subgraphs
     # plot_subgraphs(G, all_subgraphs)
     

@@ -18,15 +18,13 @@ class PolymerJEPA(nn.Module):
                  nlayer_mlpmixer,
                  gMHA_type='MLPMixer',
                  rw_dim=0,
-                 lap_dim=0,
                  mlpmixer_dropout=0,
                  pooling='mean',
                  patch_rw_dim=0,
-                 num_target_patches=2):
+                 num_target_patches=4):
 
         super().__init__()
         self.use_rw = rw_dim > 0
-        self.use_lap = lap_dim > 0
         self.pooling = pooling
         self.patch_rw_dim = patch_rw_dim
         self.nhid = nhid
@@ -34,8 +32,7 @@ class PolymerJEPA(nn.Module):
 
         if self.use_rw:
             self.rw_encoder = MLP(rw_dim, nhid, 1)
-        if self.use_lap:
-            self.lap_encoder = MLP(lap_dim, nhid, 1)
+        
         if self.patch_rw_dim > 0:
             self.patch_rw_encoder = MLP(self.patch_rw_dim, nhid, 1)
 
@@ -117,12 +114,12 @@ class PolymerJEPA(nn.Module):
         # Example for context subgraph; adjust according to actual data structure
         # DEBUG: to check whether indexing is correct i print the number of nodes in the context and target subgraphs.
         # indexing is correct, empty subgraphs are never considered, all contexts size are much larger than targets so its correct.
-        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
-        # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
+        n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
+        #print('n of nodes in the context_subgraph_idx:', n_context_nodes)
 
-        # # Example for target subgraphs; adjust according to actual data structure
-        # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
-        # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
+        # Example for target subgraphs; adjust according to actual data structure
+        n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
+        #print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
 
         # import matplotlib.pyplot as plt
         # from torch_geometric.utils import subgraph
@@ -162,6 +159,8 @@ class PolymerJEPA(nn.Module):
         # Given that there's only one element the attention operation "won't do anything"
         # This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
         context_mask = data.mask.flatten()[context_subgraph_idx].reshape(-1, 1) # this should be -1 x num context which is always 1
+        # print('context_mask:', context_mask) # RISK this prints a tensor n of graphs in batch x 1, with all Trues
+        
         # pass context subgraph through context encoder
         context_x = self.context_encoder(
             context_x, 

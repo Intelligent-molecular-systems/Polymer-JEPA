@@ -67,28 +67,7 @@ def RWSE(edge_index, pos_enc_dim, num_nodes):
     return PE
 
 
-def LapPE(edge_index, pos_enc_dim, num_nodes):
-    """
-        Graph positional encoding v/ Laplacian eigenvectors
-    """
 
-    # Laplacian
-    degree = torch_geometric.utils.degree(edge_index[0], num_nodes)
-    A = torch_geometric.utils.to_scipy_sparse_matrix(
-        edge_index, num_nodes=num_nodes)
-    N = sp.diags(np.array(degree.clip(1) ** -0.5, dtype=float))
-    L = sp.eye(num_nodes) - N * A * N
-
-    # Eigenvectors with numpy
-    EigVal, EigVec = np.linalg.eig(L.toarray())
-    idx = EigVal.argsort()  # increasing order
-    EigVal, EigVec = EigVal[idx], np.real(EigVec[:, idx])
-    PE = torch.from_numpy(EigVec[:, 1:pos_enc_dim+1]).float()
-    if PE.size(1) < pos_enc_dim:
-        zeros = torch.zeros(num_nodes, pos_enc_dim)
-        zeros[:, :PE.size(1)] = PE
-        PE = zeros
-    return PE
 
 
 class SubgraphsData(Data):
@@ -114,18 +93,14 @@ class SubgraphsData(Data):
 
 
 class PositionalEncodingTransform(object):
-    def __init__(self, rw_dim=0, lap_dim=0):
+    def __init__(self, rw_dim=0):
         super().__init__()
         self.rw_dim = rw_dim
-        self.lap_dim = lap_dim
 
     def __call__(self, data):
         if self.rw_dim > 0:
             data.rw_pos_enc = RWSE(
                 data.edge_index, self.rw_dim, data.num_nodes)
-        if self.lap_dim > 0:
-            data.lap_pos_enc = LapPE(
-                data.edge_index, self.lap_dim, data.num_nodes)
         return data
 
 # !!! 

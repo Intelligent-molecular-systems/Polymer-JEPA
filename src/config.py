@@ -17,39 +17,39 @@ def set_cfg(cfg):
     # Custom log file name
     cfg.logfile = None
 
-    cfg.shouldPretrain = True
+    cfg.shouldPretrain = False
     cfg.shouldFinetune = True
 
     # ------------------------------------------------------------------------ #
     # Training options
     # ------------------------------------------------------------------------ #
-    cfg.train = CN()
+    cfg.pretrain = CN()
     # Total graph mini-batch size
-    cfg.train.batch_size = 128
+    cfg.pretrain.batch_size = 128
     # Maximal number of epochs
-    cfg.train.epochs = 50
+    cfg.pretrain.epochs = 30
     # Number of runs with random init
-    cfg.train.runs = 4
+    cfg.pretrain.runs = 4
     # Base learning rate
-    cfg.train.lr = 0.001
+    cfg.pretrain.lr = 0.001
     # number of steps before reduce learning rate
-    cfg.train.lr_patience = 20
+    cfg.pretrain.lr_patience = 20
     # learning rate decay factor
-    cfg.train.lr_decay = 0.5
+    cfg.pretrain.lr_decay = 0.5
     # L2 regularization, weight decay
-    cfg.train.wd = 0.
+    cfg.pretrain.wd = 0.
     # Dropout rate
-    cfg.train.dropout = 0.
+    cfg.pretrain.dropout = 0.
     # Dropout rate for MLPMixer
-    cfg.train.mlpmixer_dropout = 0.
+    cfg.pretrain.mlpmixer_dropout = 0.
     # A lower bound on the learning rate.
-    cfg.train.min_lr = 1e-5
+    cfg.pretrain.min_lr = 1e-5
     # optimizer
-    cfg.train.optimizer = 'Adam'
+    cfg.pretrain.optimizer = 'Adam'
     # Multiscale training
-    cfg.train.multiscale = False    
+    cfg.pretrain.multiscale = False    
     # Regularization (vcReg), between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
-    cfg.train.regularization = 0.
+    cfg.pretrain.regularization = 0.
 
     
     cfg.finetune = CN()
@@ -118,7 +118,7 @@ def set_cfg(cfg):
 
 # Principle means that if an option is defined in a YACS config object,
 # then your program should set that configuration option using cfg.merge_from_list(opts) and not by defining,
-# for example, --train-scales as a command line argument that is then used to set cfg.TRAIN.SCALES.
+# for example, --train-scales as a command line argument that is then used to set cfg.pretrain.SCALES.
 
 
 def update_cfg(cfg, args_str=None):

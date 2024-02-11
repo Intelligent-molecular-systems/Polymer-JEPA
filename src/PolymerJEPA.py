@@ -163,8 +163,11 @@ class PolymerJEPA(nn.Module):
         # This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
         context_mask = data.mask.flatten()[context_subgraph_idx].reshape(-1, 1) # this should be -1 x num context which is always 1
         # pass context subgraph through context encoder
-        context_x = self.context_encoder(context_x, data.coarsen_adj if hasattr(
-            data, 'coarsen_adj') else None, ~context_mask) # Why the reverse mask?
+        context_x = self.context_encoder(
+            context_x, 
+            data.coarsen_adj if hasattr(data, 'coarsen_adj') else None, 
+            ~context_mask
+        )
 
         # The target forward step musn't store gradients, since the target encoder is optimized via EMA
         with torch.no_grad():
@@ -219,8 +222,11 @@ class PolymerJEPA(nn.Module):
         mixer_x = subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1)
 
         # Eval via target encoder
-        mixer_x = self.target_encoder(mixer_x, data.coarsen_adj if hasattr(
-                                        data, 'coarsen_adj') else None, ~data.mask) # Don't attend to empty patches when doing the final encoding
+        mixer_x = self.target_encoder(
+            mixer_x, 
+            data.coarsen_adj if hasattr(data, 'coarsen_adj') else None, 
+            ~data.mask
+        ) # Don't attend to empty patches when doing the final encoding
         
         # Global Average Pooling
         out = (mixer_x * data.mask.unsqueeze(-1)).sum(1) / data.mask.sum(1, keepdim=True)

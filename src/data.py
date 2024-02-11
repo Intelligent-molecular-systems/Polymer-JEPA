@@ -24,11 +24,10 @@ class MyDataset(InMemoryDataset):
 
     # Processes the dataset to the self.processed_dir folder.
     def process(self):
-        # self.save(self.data_list, self.processed_paths[0])
-        # For PyG<2.4:
         if self.pre_transform is not None:
             self.data_list = [self.pre_transform(data) for data in self.data_list]
-
+        # self.save(self.data_list, self.processed_paths[0])
+        # For PyG<2.4:
         torch.save(self.collate(self.data_list), self.processed_paths[0])
 
 
@@ -58,7 +57,6 @@ def get_graphs(file_csv = 'Data/dataset-poly_chemprop.csv', file_graphs_list = '
         print('Loading Graphs_list.pt')
         graphs = torch.load(file_graphs_list)
 
-    # shuffle graphs [RISK]: Unsure about this
     random.seed(12345)
     graphs = random.sample(graphs, len(graphs))
     return graphs

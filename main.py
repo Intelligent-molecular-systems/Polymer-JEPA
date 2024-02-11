@@ -23,8 +23,8 @@ def pretrain(pre_data, transform, cfg):
     pre_val_data.transform = transform
     pre_val_data = [x for x in pre_val_data] # this way we can use the same transform for the validation data all the times
 
-    pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.train.batch_size, shuffle=True)
-    pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.train.batch_size, shuffle=False)
+    pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.pretrain.batch_size, shuffle=True)
+    pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.pretrain.batch_size, shuffle=False)
 
     num_node_features = pre_data.data_list[0].num_node_features
     num_edge_features = pre_data.data_list[0].num_edge_features
@@ -37,30 +37,30 @@ def pretrain(pre_data, transform, cfg):
         gMHA_type=cfg.model.gMHA_type,
         rw_dim=cfg.pos_enc.rw_dim,
         pooling=cfg.model.pool,
-        mlpmixer_dropout=cfg.train.mlpmixer_dropout,
+        mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
         patch_rw_dim=cfg.pos_enc.patch_rw_dim,
         num_target_patches=cfg.jepa.num_targets
     ).to(cfg.device)
 
     optimizer = torch.optim.Adam(
         model.parameters(), 
-        lr=cfg.train.lr, 
-        weight_decay=cfg.train.wd
+        lr=cfg.pretrain.lr, 
+        weight_decay=cfg.pretrain.wd
     )
 
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, 
         mode='min',
-        factor=cfg.train.lr_decay,
-        patience=cfg.train.lr_patience,
+        factor=cfg.pretrain.lr_decay,
+        patience=cfg.pretrain.lr_patience,
         verbose=True
     )
 
     # Create EMA scheduler for target encoder param update
     ipe = len(pre_trn_loader)
     ema_params = [0.996, 1.0]
-    momentum_scheduler = (ema_params[0] + i*(ema_params[1]-ema_params[0])/(ipe*cfg.train.epochs)
-                        for i in range(int(ipe*cfg.train.epochs)+1))
+    momentum_scheduler = (ema_params[0] + i*(ema_params[1]-ema_params[0])/(ipe*cfg.pretrain.epochs)
+                        for i in range(int(ipe*cfg.pretrain.epochs)+1))
 
 
     random.seed(time.time())
@@ -68,7 +68,7 @@ def pretrain(pre_data, transform, cfg):
     print(f"Model name: {model_name}")
     
     # Pretraining
-    for epoch in tqdm(range(cfg.train.epochs), desc='Pretraining Epochs'):
+    for epoch in tqdm(range(cfg.pretrain.epochs), desc='Pretraining Epochs'):
         model.train()
         _, trn_loss = train(
             pre_trn_loader, 
@@ -77,7 +77,7 @@ def pretrain(pre_data, transform, cfg):
             device=cfg.device, 
             momentum_weight=next(momentum_scheduler), 
             criterion_type=cfg.jepa.dist,
-            regularization=cfg.train.regularization
+            regularization=cfg.pretrain.regularization
         )
 
         model.eval()
@@ -86,10 +86,10 @@ def pretrain(pre_data, transform, cfg):
             model,
             device=cfg.device, 
             criterion_type=cfg.jepa.dist,
-            regularization=cfg.train.regularization
+            regularization=cfg.pretrain.regularization
         )
 
-        if epoch % 20 == 0 or epoch == cfg.train.epochs - 1:
+        if epoch % 20 == 0 or epoch == cfg.pretrain.epochs - 1:
             os.makedirs('Models/Pretrain', exist_ok=True)
             torch.save(model.state_dict(), f'Models/Pretrain/{model_name}.pt')
 
@@ -153,11 +153,15 @@ def finetune(ft_data, transform, model, model_name, cfg):
 
         with torch.no_grad():
             val_loss = 0
+            all_y_pred_val = []
+            all_true_val = []
             for data in ft_val_loader:
                 data = data.to(cfg.device)
                 embeddings = model.encode(data)
                 y_pred_val = predictor(embeddings).squeeze()
                 val_loss += criterion(y_pred_val, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
+                all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
+                all_true_val.extend(data.y_EA.detach().cpu().numpy() if cfg.finetune.property == 'ea' else data.y_IP.detach().cpu().numpy())
         
         val_loss /= len(ft_val_loader)
 
@@ -166,16 +170,14 @@ def finetune(ft_data, transform, model, model_name, cfg):
 
             if cfg.finetune.property == 'ea':
                 label = 'ea'
-                true_val = data.y_EA.detach().cpu().numpy()
             elif cfg.finetune.property == 'ip':
                 label = 'ip'
-                true_val = data.y_IP.detach().cpu().numpy()
             else:
                 raise ValueError('Invalid property type')
             
             visualize_results(
-                y_pred_val.detach().cpu().numpy(), 
-                true_val, 
+                np.array(all_y_pred_val), 
+                np.array(all_true_val), 
                 label=label, 
                 save_folder=f'Results/Finetune/{model_name}',
                 epoch=epoch
@@ -196,7 +198,7 @@ def run():
         model, model_name = pretrain(pre_data, transform, cfg)
     else:
         # load model from finetuning
-        model_name = 'yQRf4Mxa'
+        model_name = 'oWTyZivo'
         model = PolymerJEPA(
             nfeat_node=dataset.data_list[0].num_node_features,
             nfeat_edge=dataset.data_list[0].num_edge_features,
@@ -205,7 +207,7 @@ def run():
             gMHA_type=cfg.model.gMHA_type,
             rw_dim=cfg.pos_enc.rw_dim,
             pooling=cfg.model.pool,
-            mlpmixer_dropout=cfg.train.mlpmixer_dropout,
+            mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
             patch_rw_dim=cfg.pos_enc.patch_rw_dim,
             num_target_patches=cfg.jepa.num_targets
         ).to(cfg.device)

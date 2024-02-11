@@ -31,12 +31,28 @@ def motifs2subgraphs(graph, n_patches, min_targets):
     # select all other cliques (except the two chosen above) as target subgraphs
     target_subgraphs = [clique for clique in cliques if clique not in [monomerA_clique, monomerB_clique]]
 
-    #convert to nx graphs
-    G = to_networkx(graph, to_undirected=True)
-
-    all_subgraphs = [context_subgraph] + target_subgraphs
+    # if target subgraphs is smaller than min_targets, add random subgraphs to reach the minimum
+    if len(target_subgraphs) < min_targets:
+        # available nodes are all nodes that are not in the context subgraph
+        available_nodes = set(range(len(monomer_mask))) - set(context_subgraph)
+        if not available_nodes:
+            available_nodes = set(range(len(monomer_mask)))
+        
+        while len(target_subgraphs) < min_targets: # RISK infinite loop, but it should not happen
+            # pick a random node from the available nodes
+            random_node = random.choice(list(available_nodes))
+            # expand the node by one hop
+            new_subgraph = set([random_node])
+            new_subgraph = expand_one_hop(graph, new_subgraph)
+            # check if subgraph is not already in the target subgraphs
+            if new_subgraph not in target_subgraphs:
+                target_subgraphs.append(new_subgraph)
+    
 
     # Plotting
+    #convert to nx graphs
+    #G = to_networkx(graph, to_undirected=True)
+    #all_subgraphs = [context_subgraph] + target_subgraphs
     # plot_subgraphs(G, all_subgraphs)
     
     node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, len(monomer_mask), n_patches)
@@ -221,32 +237,16 @@ def randomWalks2subgraphs(graph, n_patches, min_targets):
         # else:
             #print("Duplicated random walk found")
 
-    # i = 0
-    # while i < len(unique_target_rws):
-    #     has_merged = False
-    #     j = i + 1
-    #     while j < len(unique_target_rws):
-    #         # If the symmetric difference between two sets is 1, they differ by only one element
-    #         if len(unique_target_rws[i].symmetric_difference(unique_target_rws[j])) == 1:
-    #             # Merge j into i
-    #             unique_target_rws[i] = unique_target_rws[i].union(unique_target_rws[j])
-    #             # Remove the merged walk
-    #             unique_target_rws.pop(j)
-    #             has_merged = True
-    #             # No need to increment j, as we need to check the new combination against all others again
-    #         else:
-    #             j += 1
-    #     if not has_merged:
-    #         i += 1  # Only increment i if no merge happened, to avoid skipping checks
+    # [TODO]: Add method to get to min targets if not enough
 
     target_rw_walks = unique_target_rws
     
     context_subgraph = list(context_rw_walk)
     target_subgraphs = [list(rw) for rw in target_rw_walks]
 
-    subgraphs = [context_subgraph] + target_subgraphs
 
     # Plotting
+    # subgraphs = [context_subgraph] + target_subgraphs
     # plot_subgraphs(G, subgraphs)
 
     node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, total_nodes, n_patches)
@@ -310,3 +310,16 @@ def expand_one_hop(fullG, subgraph_nodes):
     for node in subgraph_nodes:
         expanded_nodes.update(fullG.neighbors(node))
     return expanded_nodes
+
+# # if target subgraphs is smaller than min_targets, add random subgraphs to reach the minimum
+    # if len(unique_target_rws) < min_targets:
+    #     #print("tooLittleTargets")
+    #     while len(unique_target_rws) < min_targets:
+    #         # pick a random node from the remaining nodes
+    #         random_node = random.choice(remaining_nodes)
+    #         # expand the node by one hop
+    #         new_subgraph = set([random_node])
+    #         new_subgraph = expand_one_hop(G, new_subgraph)
+    #         # check if subgraph is not already in the target subgraphs
+    #         if new_subgraph not in unique_target_rws:
+    #             unique_target_rws.append(new_subgraph)

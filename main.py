@@ -43,6 +43,7 @@ def pretrain(pre_data, transform, cfg):
             patch_rw_dim=cfg.pos_enc.patch_rw_dim,
             num_target_patches=cfg.jepa.num_targets
         ).to(cfg.device)
+
     elif cfg.modelVersion == 'v2':
         model = PolymerJEPAv2(
             nfeat_node=num_node_features,
@@ -53,6 +54,7 @@ def pretrain(pre_data, transform, cfg):
             patch_rw_dim=cfg.pos_enc.patch_rw_dim,
             num_target_patches=cfg.jepa.num_targets
         ).to(cfg.device)
+
     else:
         raise ValueError('Invalid model version')
 
@@ -84,7 +86,7 @@ def pretrain(pre_data, transform, cfg):
     # Pretraining
     for epoch in tqdm(range(cfg.pretrain.epochs), desc='Pretraining Epochs'):
         model.train()
-        _, trn_loss = train(
+        trn_loss = train(
             pre_trn_loader, 
             model, 
             optimizer, 
@@ -95,7 +97,8 @@ def pretrain(pre_data, transform, cfg):
         )
 
         model.eval()
-        _, val_loss = test(
+
+        val_loss = test(
             pre_val_loader, 
             model,
             device=cfg.device, 
@@ -205,14 +208,15 @@ def run():
     # https://github.com/pyg-team/pytorch_geometric/issues/4223 
     dataset, transform = create_data(cfg)
     
-    pre_data = dataset[:int(0.9*len(dataset))].copy()
-    ft_data = dataset[int(0.9*len(dataset)):].copy()
+
+    pre_data = dataset[:int(cfg.pretrainPercentage*len(dataset))].copy()
+    ft_data = dataset[int(cfg.pretrainPercentage*len(dataset)):].copy()
 
     if cfg.shouldPretrain:
         model, model_name = pretrain(pre_data, transform, cfg)
     else:
         # load model from finetuning
-        model_name = 'jRTXB2jt'
+        model_name = 'n7rx6Zj5'
         if cfg.modelVersion == 'v1':
             model = PolymerJEPA(
                 nfeat_node=dataset.data_list[0].num_node_features,
@@ -226,7 +230,7 @@ def run():
                 patch_rw_dim=cfg.pos_enc.patch_rw_dim,
                 num_target_patches=cfg.jepa.num_targets
             ).to(cfg.device)
-            
+
         elif cfg.modelVersion == 'v2':
             model = PolymerJEPAv2(
                 nfeat_node=dataset.data_list[0].num_node_features,
@@ -237,6 +241,7 @@ def run():
                 patch_rw_dim=cfg.pos_enc.patch_rw_dim,
                 num_target_patches=cfg.jepa.num_targets
             ).to(cfg.device)
+
         else:
             raise ValueError('Invalid model version')
 

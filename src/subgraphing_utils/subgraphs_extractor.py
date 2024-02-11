@@ -238,7 +238,23 @@ def randomWalks2subgraphs(graph, n_patches, min_targets):
         # else:
             #print("Duplicated random walk found")
 
-    # [TODO]: Add method to get to min targets if not enough
+    # If n of target subgraphs is smaller than min_targets, add random subgraphs to reach the minimum
+    # take a non context node, and do a 1-hop expansion
+    if len(unique_target_rws) < min_targets:
+        #print("tooLittleTargets")
+        availableNodes = remaining_nodes
+        if not availableNodes:
+            availableNodes = list(G.nodes())
+            #print("fullContexts")
+        while len(unique_target_rws) < min_targets:
+            # pick a random node from the remaining nodes
+            random_node = random.choice(remaining_nodes)
+            # expand the node by one hop
+            new_subgraph = set([random_node])
+            new_subgraph = expand_one_hop(G, new_subgraph)
+            # check if subgraph is not already in the target subgraphs
+            if new_subgraph not in unique_target_rws:
+                unique_target_rws.append(new_subgraph)
 
     target_rw_walks = unique_target_rws
     

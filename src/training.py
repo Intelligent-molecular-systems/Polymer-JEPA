@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=0.0):
     criterion = torch.nn.SmoothL1Loss(beta=0.5) # https://pytorch.org/docs/stable/generated/torch.nn.SmoothL1Loss.html
-    step_losses, num_targets = [], []
+    total_loss = 0
     for data in train_loader:
         # import networkx as nx
         # graph = data[0]
@@ -38,10 +38,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
 
         loss = (1 - regularization) * loss + regularization * vcRegLoss
 
-        # Will need these for the weighted average at the end of the epoch
-        step_losses.append(loss.item())
-        num_targets.append(len(target_y))
-        
+        total_loss += loss.item()        
         # Update weights of the network 
         loss.backward()
         optimizer.step()
@@ -50,17 +47,19 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         with torch.no_grad():
             for param_q, param_k in zip(model.context_encoder.parameters(), model.target_encoder.parameters()):
                 param_k.data.mul_(momentum_weight).add_((1.-momentum_weight) * param_q.detach().data)
-        
-    epoch_loss = np.average(step_losses, weights=num_targets)
-    return None, epoch_loss # Leave none for now since maybe we'd like to return the embeddings for visualization
+    
+    # RISK this is different from the original code where they use arrays, idk why
+    avg_trn_loss = total_loss / len(train_loader)
+    return avg_trn_loss
 
 
 @ torch.no_grad()
 def test(loader, model, device, criterion_type=0, regularization=0.0):
     criterion = torch.nn.SmoothL1Loss(beta=0.5)
-    step_losses, num_targets = [], []
+    total_loss = 0
     for data in loader:
         data = data.to(device)
+        model.eval()
         target_x, target_y, embeddings = model(data)
 
         if criterion_type == 0:
@@ -79,12 +78,11 @@ def test(loader, model, device, criterion_type=0, regularization=0.0):
 
         loss = (1 - regularization) * loss + regularization * vcRegLoss
 
-        # Will need these for the weighted average at the end of the epoch
-        step_losses.append(loss.item())
-        num_targets.append(len(target_y))
+        total_loss += loss.item()
 
-    epoch_loss = np.average(step_losses, weights=num_targets)
-    return None, epoch_loss
+    # RISK this is different from the original code where they use arrays, idk why
+    avg_val_loss = total_loss / len(loader)
+    return avg_val_loss
 
 
 # vcReg = variance covariance regularization

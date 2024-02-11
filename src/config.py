@@ -17,8 +17,10 @@ def set_cfg(cfg):
     # Custom log file name
     cfg.logfile = None
 
-    cfg.shouldPretrain = False
+    cfg.shouldPretrain = True
     cfg.shouldFinetune = True
+
+    cfg.pretrainPercentage = 0.9
 
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
     cfg.modelVersion = 'v1'

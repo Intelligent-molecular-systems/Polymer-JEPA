@@ -41,8 +41,10 @@ class PolymerJEPAv2(nn.Module):
         context_node_features = data.x[data.context_nodes_mapper]
         context_node_weights = data.node_weight[data.context_nodes_mapper]
         context_edge_index = data.combined_subgraphs[:, data.context_edges_mask]
-        context_edge_attr = data.edge_attr[data.context_edges_mask]
-        context_edge_weights = data.edge_weight[data.context_edges_mask]
+        general_edge_attr = data.edge_attr[data.subgraphs_edges_mapper]
+        context_edge_attr = general_edge_attr[data.context_edges_mask]
+        general_edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
+        context_edge_weights = general_edge_weights[data.context_edges_mask]
         
         context_subgraphs_nodes_embedding = self.context_encoder(
             context_node_features, 
@@ -51,7 +53,7 @@ class PolymerJEPAv2(nn.Module):
             context_edge_weights, 
             context_node_weights
         )
-
+        # TODO test this functions, not sure about data.batch, need to debug and trial and error
         # pool the context subgraph nodes embedding
         context_subgraph_embeddings = scatter(
             context_subgraphs_nodes_embedding, 
@@ -81,24 +83,12 @@ class PolymerJEPAv2(nn.Module):
         quit()
 
 
-        # x = data.x[data.subgraphs_nodes_mapper]
-        # node_weights = data.node_weight[data.subgraphs_nodes_mapper]
-        # # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices
-        # edge_index = data.combined_subgraphs        
-        # # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
-        # edge_attr = data.edge_attr[data.subgraphs_edges_mapper]
-        # edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
-        # batch_x = data.subgraphs_batch # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1, ...]
-        # # Positional encodings (data.rw_pos_enc) are used to enhance the node features by providing spatial information. These are aggregated per subgraph (patch_pes) using a scatter operation with a 'max' reduction to capture the most significant positional signal
-        # # pes contains the positional encodings for each node in the graph, again using mapper has the same effect as for x (few lines above)
-        # pes = data.rw_pos_enc[data.subgraphs_nodes_mapper]
-        # # knowing which nodes belong to which subgraph (batch_x), and the pos encoding for each node (pes), we can aggregate the pes for each subgraph:
-        # # the pos encoding for each patch, is the max between each patch node PE
-        # patch_pes = scatter(pes, batch_x, dim=0, reduce='max') 
-
-        # batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
-        # # torch.hstack((torch.tensor(0), batch_indexer[:-1])) prepends a 0 to the cumulative sum, shifting the indices to correctly reference the start of each graph's subgraphs within a batched setup
-        # batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device)
-        # context_subgraph_idx = data.context_subgraph_idx + batch_indexer
-
-    # Add any additional helper methods if necessary
+    def encode(self, data):
+        # pass data through the target encoder that already acts on the full graph
+        return self.target_encoder(
+            data.x, 
+            data.edge_index, 
+            data.edge_attr, 
+            data.edge_weight, 
+            data.node_weight
+        )

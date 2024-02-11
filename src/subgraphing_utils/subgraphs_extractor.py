@@ -9,7 +9,7 @@ import torch
 from torch_geometric.utils.convert import to_networkx
 
 
-def motifs2subgraphs(graph, n_patches):
+def motifs2subgraphs(graph, n_patches, min_targets):
     cliques, intermonomers_bonds, monomer_mask = graph.motifs[0], graph.intermonomers_bonds, graph.monomer_mask
     # [TODO]: Check requirements (size of context and size of targets, etc.)
 
@@ -44,7 +44,7 @@ def motifs2subgraphs(graph, n_patches):
     return node_mask, edge_mask
 
 
-def metis2subgraphs(graph, n_patches):
+def metis2subgraphs(graph, n_patches, min_targets):
     G = to_networkx(graph, to_undirected=True)
     # apply metis algorithm to the graph
     # idea divide each monomer in two partitions, join two partitions from different monomers and use as a context subgraph
@@ -91,18 +91,41 @@ def metis2subgraphs(graph, n_patches):
     
     # use the remaining subgraphs as target subgraphs
     target_subgraphs = [subgraph for subgraph in subgraphs if subgraph not in [subgraph1, subgraph2]]
+
+    # if target subgraphs is smaller than min_targets, add random subgraphs to reach the minimum
+    # take a non context node, and do a 1-hop expansion
+    # this happens in many instances
+    # [TODO]: Keep track of how many times this happens, and if it happens too often, consider a different approach
+    if len(target_subgraphs) < min_targets:
+        #print("tooLittleTargets")
+        set_target_subgraphs = set(frozenset(subgraph) for subgraph in target_subgraphs)
+        list_possible_nodes = list(monomer1_nodes.union(monomer2_nodes) - context_subgraph) 
+
+        if not list_possible_nodes: 
+            list_possible_nodes = list(monomer1_nodes.union(monomer2_nodes))
+            #print("fullContexts")
+            
+        while len(target_subgraphs) < min_targets:
+            # pick a random non context node
+            random_node = random.choice(list_possible_nodes)
+            # expand the node by one hop
+            new_subgraph = expand_one_hop(G, {random_node})
+            # check if subgraph is not already in the target subgraphs
+            if frozenset(new_subgraph) not in set_target_subgraphs:
+                target_subgraphs.append(new_subgraph)
+
     context_subgraph = list(context_subgraph)
     target_subgraphs = [list(subgraph) for subgraph in target_subgraphs]
-    all_subgraphs = [context_subgraph] + target_subgraphs
 
     # Plotting
+    # all_subgraphs = [context_subgraph] + target_subgraphs
     # plot_subgraphs(G, all_subgraphs)
 
     node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, len(parts), n_patches)
     return node_mask, edge_mask
 
 
-def randomWalks2subgraphs(graph, n_patches): 
+def randomWalks2subgraphs(graph, n_patches, min_targets): 
     # [TODO]: Consider edge probabilities (?)
     # Function to perform a single random walk step from a given node
     def random_walk_step(fullGraph, current_node, exclude_nodes):

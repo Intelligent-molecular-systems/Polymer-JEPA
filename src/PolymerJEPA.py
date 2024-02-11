@@ -101,11 +101,28 @@ class PolymerJEPA(nn.Module):
 
         # Get idx of context and target subgraphs according to masks
         # Adjusts the context subgraph indices based on their position in the batch, ensuring each index points to the correct subgraph within the batched data structure.
-        # the context subgraphs is always the first subgraph for each graph     
+        # the context subgraphs is always the first subgraph for each graph    
+        # batch_indexer = [0, 20, 40, 60...], according to my understanding, data.context_subgraph_idx is always 0 for all graphs
+        # so the correct context_subgraph_idx is always 0, 20, 40, 60... while the right index should be at 20-n of subgraphs found
         context_subgraph_idx = data.context_subgraph_idx + batch_indexer
+        # print('(forward) context_subgraph_idx:', context_subgraph_idx)
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
         # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
+        # print('(forward) target_subgraphs_idx:', target_subgraphs_idx)
+        
+        # ...(your existing code)...
+
+        # n of nodes in the context_subgraph_idx
+        # Example for context subgraph; adjust according to actual data structure
+        # DEBUG: to check whether indexing is correct i print the number of nodes in the context and target subgraphs.
+        # indexing is correct, empty subgraphs are never considered, all contexts size are much larger than targets so its correct.
+        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
+        # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
+
+        # # Example for target subgraphs; adjust according to actual data structure
+        # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
+        # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
 
         # import matplotlib.pyplot as plt
         # from torch_geometric.utils import subgraph
@@ -129,7 +146,7 @@ class PolymerJEPA(nn.Module):
         # Extract context and target subgraph (mpnn) embeddings
         context_subgraphs = subgraph_x[context_subgraph_idx]
         target_subgraphs = subgraph_x[target_subgraphs_idx.flatten()] 
-
+     
         # Construct context and target PEs frome the node pes of each subgraph
         target_pes = patch_pes[target_subgraphs_idx.flatten()]
         context_pe = patch_pes[context_subgraph_idx] 
@@ -141,8 +158,6 @@ class PolymerJEPA(nn.Module):
         target_x = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid)
         context_x = context_subgraphs.unsqueeze(1)
 
-        # create a list of all embeddings
-        embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
 
         # Given that there's only one element the attention operation "won't do anything"
         # This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
@@ -166,6 +181,10 @@ class PolymerJEPA(nn.Module):
                 target_x = self.target_encoder(target_x, patch_adj, None)
             else:
                 target_x = self.target_encoder(target_x, None, None)
+
+            # create a list of all embeddings
+            embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
+
             # Predict the coordinates of the patches in the Q1 hyperbola
             # Remove this part if you wish to do euclidean or poincaré embeddings in the latent space
             x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))

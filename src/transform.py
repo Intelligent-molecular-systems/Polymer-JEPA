@@ -160,11 +160,11 @@ class GraphJEPAPartitionTransform(object):
     def __call__(self, data):
         data = SubgraphsData(**{k: v for k, v in data})
         if self.subgraphing_type == 0:
-            node_masks, edge_masks = motifs2subgraphs(data, self.n_patches)
+            node_masks, edge_masks = motifs2subgraphs(data, self.n_patches, self.num_targets)
         elif self.subgraphing_type == 1:
-            node_masks, edge_masks = metis2subgraphs(data, self.n_patches)
+            node_masks, edge_masks = metis2subgraphs(data, self.n_patches, self.num_targets)
         elif self.subgraphing_type == 2:
-            node_masks, edge_masks = randomWalks2subgraphs(data, self.n_patches)
+            node_masks, edge_masks = randomWalks2subgraphs(data, self.n_patches, self.num_targets)
         else:
             raise ValueError('Invalid subgraphing type')
                      
@@ -190,11 +190,16 @@ class GraphJEPAPartitionTransform(object):
 
         
         subgraphs_batch = subgraphs_nodes[0] # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1]
+        # print('subgraph_batch, ', subgraphs_batch)
+        
         mask = torch.zeros(self.n_patches).bool() # if say we have two patches then [False, False]
         mask[subgraphs_batch] = True # if subgraphs_batch = [0, 0, 1, 1] then [True, True]
+        # print('mask, ', mask)
+        
         # basically mask has the first 20-n elements as False and the remaining n elements as True, n is the number of subgraphs in the graph
         # print(mask) # [RISK]: Check if this is the same in the original code 
         data.subgraphs_batch = subgraphs_batch
+        
         data.subgraphs_nodes_mapper = subgraphs_nodes[1] # this is the node idxs [0, 2, 1, 3] (original node idxs)
         data.subgraphs_edges_mapper = subgraphs_edges[1] # this is the edge idxs [0, 1, 2] (original edge idxs)
         data.combined_subgraphs = combined_subgraphs # this is the edge index of th combined subgraph made of disconnected subgraphs, where each subgraph has its own unique node ids
@@ -204,9 +209,11 @@ class GraphJEPAPartitionTransform(object):
         # take the patches in subgraphs_nodes[0].unique()[1:] and shuffle them
         subgraphs = subgraphs_nodes[0].unique()
         context_subgraph_idx = subgraphs[0]
+        # print('context_subgraph_idx, ', context_subgraph_idx)
         rand_choice = np.random.choice(subgraphs[1:], self.num_targets, replace=False)
         # target_subgraph_idxs = subgraphs[1:] # torch.tensor(rand_choice) RISK Variable number of targets per graph, if it works i shuld at least normalize the error based on the number of targets
         target_subgraph_idxs = torch.tensor(rand_choice)
+        # print('target_subgraph_idxs, ', target_subgraph_idxs)
         data.context_edges_mask = subgraphs_edges[0] == context_subgraph_idx # if context subgraph idx is 0, and subgraphs_edges[0] = [0, 0, 1, 1, 2] then [True, True, False, False, False]
         data.target_edges_mask = torch.isin(subgraphs_edges[0], target_subgraph_idxs) # if target subgraph idxs are [1, 2] then [False, False, True, True, True]
         data.context_nodes_mapper = subgraphs_nodes[1, subgraphs_nodes[0] == context_subgraph_idx] # if context subgraph idx is 0, and subgraphs_nodes[0] (subgraphs indexes) =[0 ,0, 1, 1, 2] subgraphs_nodes[1] (node indexes) = [0, 2, 1, 2, 3] then [0, 2]
@@ -216,6 +223,7 @@ class GraphJEPAPartitionTransform(object):
         data.context_subgraph_idx = context_subgraph_idx.tolist() # if context subgraph idx is 0, then[0]
         data.target_subgraph_idxs = target_subgraph_idxs.tolist() # if target subgraph idxs are [1, 2] then [1, 2]
         data.call_n_patches = [self.n_patches] # [RISK] 
+        # print('data.call_n_patches, ', data.call_n_patches)
 
         data.__num_nodes__ = data.num_nodes  # set number of nodes of the current graph
         return data

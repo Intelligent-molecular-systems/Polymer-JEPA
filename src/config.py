@@ -17,6 +17,9 @@ def set_cfg(cfg):
     # Custom log file name
     cfg.logfile = None
 
+    cfg.shouldPretrain = True
+    cfg.shouldFinetune = True
+
     # ------------------------------------------------------------------------ #
     # Training options
     # ------------------------------------------------------------------------ #
@@ -24,7 +27,7 @@ def set_cfg(cfg):
     # Total graph mini-batch size
     cfg.train.batch_size = 128
     # Maximal number of epochs
-    cfg.train.epochs = 30
+    cfg.train.epochs = 50
     # Number of runs with random init
     cfg.train.runs = 4
     # Base learning rate
@@ -52,13 +55,13 @@ def set_cfg(cfg):
     cfg.finetune = CN()
     # Property to train (finetune) on: 'ea' or 'ip'
     cfg.finetune.property = 'ea'
-    cfg.finetune.epochs = 100
+    cfg.finetune.epochs = 50
     # Base learning rate
     cfg.finetune.lr = 0.001
     # L2 regularization, weight decay
     cfg.finetune.wd = 0.
     # Total graph mini-batch size
-    cfg.finetune.batch_size = 128
+    cfg.finetune.batch_size = 64
 
     # ------------------------------------------------------------------------ #
     # Model options
@@ -104,11 +107,11 @@ def set_cfg(cfg):
     # Number of patches to use as context
     cfg.jepa.num_context = 1
     # Number of patches to use as targets
-    cfg.jepa.num_targets = 2
+    cfg.jepa.num_targets = 4
     # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 0
     # 0 = motif, 1 = metis, 2 = random walk
-    cfg.jepa.subgraphing_type = 2
+    cfg.jepa.subgraphing_type = 1
 
     return cfg
 

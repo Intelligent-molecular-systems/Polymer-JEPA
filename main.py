@@ -1,243 +1,43 @@
-import os
-import numpy as np
 import random
-import string
 from src.config import cfg
 from src.data import create_data
-from src.infer_and_visualize import infer_by_dataloader, visualize_results
+from src.finetune import finetune
 from src.PolymerJEPA import PolymerJEPA
 from src.PolymerJEPAv2 import PolymerJEPAv2
-from src.training import train, test
-import time
+from src.pretrain import pretrain
 import torch
-import torch.nn as nn
-from torch_geometric.loader import DataLoader
-from tqdm import tqdm
-
-def pretrain(pre_data, transform, cfg):
-    # 70-20-10 split for pretraining - validation - test data
-    pre_trn_data = pre_data[:int(0.9*len(pre_data))].copy()
-    pre_val_data = pre_data[int(0.9*len(pre_data)):].copy()
-    # pre_tst_data = pre_data[int(0.9*len(pre_data)):].copy()
-
-    print(f'Pretraining on: {len(pre_trn_data)} graphs')
-    print(f'PTRN-Validating on: {len(pre_val_data)} graphs')
-
-
-    pre_trn_data.transform = transform
-    pre_val_data.transform = transform
-    pre_val_data = [x for x in pre_val_data] # this way we can use the same transform for the validation data all the times
-
-    pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.pretrain.batch_size, shuffle=True)
-    pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.pretrain.batch_size, shuffle=False)
-
-    num_node_features = pre_data.data_list[0].num_node_features
-    num_edge_features = pre_data.data_list[0].num_edge_features
-
-    if cfg.modelVersion == 'v1':
-        model = PolymerJEPA(
-            nfeat_node=num_node_features,
-            nfeat_edge=num_edge_features,
-            nhid=cfg.model.hidden_size,
-            nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
-            gMHA_type=cfg.model.gMHA_type,
-            rw_dim=cfg.pos_enc.rw_dim,
-            pooling=cfg.model.pool,
-            mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
-            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-            num_target_patches=cfg.jepa.num_targets,
-            should_share_weights=cfg.pretrain.shouldShareWeights,
-            regularization = cfg.pretrain.regularization
-        ).to(cfg.device)
-
-    elif cfg.modelVersion == 'v2':
-        model = PolymerJEPAv2(
-            nfeat_node=num_node_features,
-            nfeat_edge=num_edge_features,
-            nhid=cfg.model.hidden_size,
-            rw_dim=cfg.pos_enc.rw_dim,
-            pooling=cfg.model.pool,
-            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-            num_target_patches=cfg.jepa.num_targets,
-            should_share_weights=cfg.pretrain.shouldShareWeights,
-            regularization = cfg.pretrain.regularization
-        ).to(cfg.device)
-
-    else:
-        raise ValueError('Invalid model version')
-
-    optimizer = torch.optim.Adam(
-        model.parameters(), 
-        lr=cfg.pretrain.lr, 
-        weight_decay=cfg.pretrain.wd
-    )
-
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, 
-        mode='min',
-        factor=cfg.pretrain.lr_decay,
-        patience=cfg.pretrain.lr_patience,
-        verbose=True
-    )
-
-    # Create EMA scheduler for target encoder param update
-    ipe = len(pre_trn_loader)
-    ema_params = [0.996, 1.0]
-    momentum_scheduler = (ema_params[0] + i*(ema_params[1]-ema_params[0])/(ipe*cfg.pretrain.epochs)
-                        for i in range(int(ipe*cfg.pretrain.epochs)+1))
-
-
-    random.seed(time.time())
-    model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
-    print(f"Model name: {model_name}")
-    
-    # Pretraining
-    for epoch in tqdm(range(cfg.pretrain.epochs), desc='Pretraining Epochs'):
-        model.train()
-        trn_loss = train(
-            pre_trn_loader, 
-            model, 
-            optimizer, 
-            device=cfg.device, 
-            momentum_weight=next(momentum_scheduler), 
-            criterion_type=cfg.jepa.dist,
-            regularization=cfg.pretrain.regularization,
-            inv_weight=cfg.pretrain.inv_weight, 
-            var_weight=cfg.pretrain.var_weight, 
-            cov_weight=cfg.pretrain.cov_weight
-        )
-
-        model.eval()
-
-        val_loss = test(
-            pre_val_loader, 
-            model,
-            device=cfg.device, 
-            criterion_type=cfg.jepa.dist,
-            regularization=cfg.pretrain.regularization,
-            inv_weight=cfg.pretrain.inv_weight, 
-            var_weight=cfg.pretrain.var_weight, 
-            cov_weight=cfg.pretrain.cov_weight
-        )
-
-        os.makedirs('Models/Pretrain', exist_ok=True)
-        torch.save(model.state_dict(), f'Models/Pretrain/{model_name}.pt')
-
-        scheduler.step(val_loss)
-
-        print(f'Epoch: {epoch:03d}, Train Loss: {trn_loss:.5f}' f' Test Loss:{val_loss:.5f}')
-    
-    return model, model_name
-
-
-def finetune(ft_data, transform, model, model_name, cfg):
-    ft_trn_data = ft_data[:int(0.8*len(ft_data))].copy()
-    # print(len(ft_trn_data))
-    ft_val_data = ft_data[int(0.8*len(ft_data)):].copy() # int(0.9*len(ft_data))
-    # print(len(ft_val_data))
-    # ft_tst_data = ft_data[int(0.9*len(ft_data)):].copy()
-    print(f'Finetuning on: {len(ft_trn_data)} graphs')
-    print(f'FT-Validating on: {len(ft_val_data)} graphs')
-    
-    if cfg.modelVersion == 'v1':
-        ft_trn_data.transform = transform
-        ft_trn_data = [x for x in ft_trn_data]
-        ft_val_data.transform = transform
-        ft_val_data = [x for x in ft_val_data]
-
-    ft_trn_loader = DataLoader(dataset=ft_trn_data, batch_size=cfg.finetune.batch_size, shuffle=True)
-    ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False)
-
-    # this is the predictor head, that takes the graph embeddings and predicts the property
-    predictor = nn.Sequential(
-        nn.Linear(cfg.model.hidden_size, 300),
-        nn.ReLU(),
-        # nn.Linear(256, 512),
-        # nn.ReLU(),
-        # nn.Linear(512, 256),
-        # nn.ReLU(),
-        nn.Linear(300, 1)
-    ).to(cfg.device)
-
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(list(model.parameters()) + list(predictor.parameters()), lr=cfg.finetune.lr, weight_decay=cfg.finetune.wd)
-
-    print(f"Finetuning model {model_name}")
-
-    for epoch in tqdm(range(cfg.finetune.epochs), desc='Finetuning Epochs'):
-
-        model.train()
-        predictor.train()
-        trn_loss = 0
-
-        for data in ft_trn_loader:
-            data = data.to(cfg.device)
-            optimizer.zero_grad()
-            graph_embeddings = model.encode(data)
-            y_pred_trn = predictor(graph_embeddings).squeeze()
-            train_loss = criterion(y_pred_trn, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
-            trn_loss += train_loss
-            train_loss.backward()
-            optimizer.step()    
-
-        trn_loss /= len(ft_trn_loader)
-
-
-        model.eval()
-        predictor.eval()
-        with torch.no_grad():
-            val_loss = 0
-            all_y_pred_val = []
-            all_true_val = []
-
-            for data in ft_val_loader:
-                data = data.to(cfg.device)
-                graph_embeddings = model.encode(data)
-                y_pred_val = predictor(graph_embeddings).squeeze()
-                val_loss += criterion(y_pred_val, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
-                all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
-                all_true_val.extend(data.y_EA.detach().cpu().numpy() if cfg.finetune.property == 'ea' else data.y_IP.detach().cpu().numpy())
-        
-        val_loss /= len(ft_val_loader)
-
-        if epoch % 20 == 0 or epoch == cfg.finetune.epochs - 1:
-            print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.5f}' f' Val Loss:{val_loss:.5f}')
-
-            os.makedirs('Results/Finetune/', exist_ok=True)
-
-            if cfg.finetune.property == 'ea':
-                label = 'ea'
-            elif cfg.finetune.property == 'ip':
-                label = 'ip'
-            else:
-                raise ValueError('Invalid property type')
-            
-            visualize_results(
-                np.array(all_y_pred_val), 
-                np.array(all_true_val), 
-                label=label, 
-                save_folder=f'Results/Finetune/{model_name}',
-                epoch=epoch
-            )
 
 
 def run():
     # [RISK]: how to handle the dataset? i am not sure from a dataset instance i can slice it like this
     # https://github.com/pyg-team/pytorch_geometric/issues/4223 
-    dataset, transform = create_data(cfg)
+    aldeghi_dataset, transform = create_data(cfg)
     
-    pre_data = dataset[:int(cfg.pretrain.pretrainPercentage*len(dataset))].copy()
-    ft_data = dataset[int(cfg.pretrain.pretrainPercentage*len(dataset)):].copy()
+    # pretraning always done on the aldeghi dataset since its bigger dataset and no issues with homopolymer or tri, penta...blocks polymers
+    # which would require different subgraphing techniques
+
+    pre_data = aldeghi_dataset[:int(cfg.pretrain.pretrainPercentage*len(aldeghi_dataset))].copy()
+    if cfg.finetuneDataset == 'aldeghi':
+        print('Finetuning will be on aldeghi dataset...')
+        ft_data = aldeghi_dataset[int(cfg.pretrain.pretrainPercentage*len(aldeghi_dataset)):].copy()
+    elif cfg.finetuneDataset == 'diblock':
+        print('Loading diblock dataset for finetuning...')
+        graphs = torch.load('Data/diblock_graphs_list.pt')
+        random.seed(12345)
+        graphs = random.sample(graphs, len(graphs))
+        ft_data = graphs
+    else:
+        raise ValueError('Invalid dataset name')
 
     if cfg.shouldPretrain:
         model, model_name = pretrain(pre_data, transform, cfg)
     else:
         # load model from finetuning
-        model_name = 'pWHhXRcJ'
+        model_name = 'ZspxRWsm'
         if cfg.modelVersion == 'v1':
             model = PolymerJEPA(
-                nfeat_node=dataset.data_list[0].num_node_features,
-                nfeat_edge=dataset.data_list[0].num_edge_features,
+                nfeat_node=aldeghi_dataset.data_list[0].num_node_features,
+                nfeat_edge=aldeghi_dataset.data_list[0].num_edge_features,
                 nhid=cfg.model.hidden_size,
                 nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
                 gMHA_type=cfg.model.gMHA_type,
@@ -252,8 +52,8 @@ def run():
 
         elif cfg.modelVersion == 'v2':
             model = PolymerJEPAv2(
-                nfeat_node=dataset.data_list[0].num_node_features,
-                nfeat_edge=dataset.data_list[0].num_edge_features,
+                nfeat_node=aldeghi_dataset.data_list[0].num_node_features,
+                nfeat_edge=aldeghi_dataset.data_list[0].num_edge_features,
                 nhid=cfg.model.hidden_size,
                 rw_dim=cfg.pos_enc.rw_dim,
                 pooling=cfg.model.pool,

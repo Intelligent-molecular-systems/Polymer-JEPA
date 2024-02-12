@@ -23,8 +23,8 @@ def set_cfg(cfg):
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
     cfg.modelVersion = 'v2'
 
-    # values: 'aldeghi' or 'diblock'
-    cfg.dataset = 'aldeghi'
+    # finetuning dataset, values: 'aldeghi' or 'diblock'
+    cfg.finetuneDataset = 'diblock'
 
     # ------------------------------------------------------------------------ #
     # Training options
@@ -37,7 +37,7 @@ def set_cfg(cfg):
     # Number of runs with random init
     cfg.pretrain.runs = 4
     # Base learning rate
-    cfg.pretrain.lr = 0.001
+    cfg.pretrain.lr = 0.0005 # RISK before 0.001
     # number of steps before reduce learning rate
     cfg.pretrain.lr_patience = 20
     # learning rate decay factor
@@ -57,8 +57,8 @@ def set_cfg(cfg):
     # Regularization (vcReg), between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
     cfg.pretrain.regularization = True
     # weights from the original paper (that works in the image domain though)
-    cfg.pretrain.inv_weight = 15
-    cfg.pretrain.var_weight = 15
+    cfg.pretrain.inv_weight = 25
+    cfg.pretrain.var_weight = 25
     cfg.pretrain.cov_weight = 1
     # this should be used only when using the vicReg objective, where sharing weights is beneficial
     cfg.pretrain.shouldShareWeights = True
@@ -110,7 +110,7 @@ def set_cfg(cfg):
     # The number of partitions (upper bound) RISK in case of more subgraphs this would break
     cfg.subgraphing.n_patches = 20
     # 0 = motif, 1 = metis, 2 = random walk
-    cfg.subgraphing.type = 0
+    cfg.subgraphing.type = 1
 
     # ------------------------------------------------------------------------ #
     # JEPA options

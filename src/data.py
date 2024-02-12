@@ -92,18 +92,19 @@ def create_data(cfg):
         n_patches=cfg.subgraphing.n_patches,
         patch_num_diff=cfg.pos_enc.patch_num_diff
     )
-
-    if cfg.dataset == 'aldeghi':
-        data_path = 'Data/aldeghi_coley_ea_ip_dataset.csv'
-        graphs_list = 'Data/aldeghi_graphs_list.pt'
-
-    elif cfg.dataset == 'diblock':
-        data_path = 'Data/diblock_copolymer_dataset.csv'
-        graphs_list = 'Data/diblock_graphs_list.pt'
-    else:
-        raise ValueError('Invalid dataset')
     
-    graphs = get_graphs(file_csv=data_path, file_graphs_list=graphs_list, dataset=cfg.dataset)
-    dataset = MyDataset(root=f'Data/{cfg.dataset}', data_list=graphs, pre_transform=pre_transform)
+    graphs = get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/aldeghi_graphs_list.pt', dataset='aldeghi')
+    dataset = MyDataset(root='Data/aldeghi', data_list=graphs, pre_transform=pre_transform)
 
     return dataset, transform
+
+# TODO create a function to create the pt files even for the diblock dataset
+# if cfg.finetuneDataset == 'aldeghi':
+    #     data_path = 'Data/aldeghi_coley_ea_ip_dataset.csv'
+    #     graphs_list = 'Data/aldeghi_graphs_list.pt'
+        
+    # elif cfg.finetuneDataset == 'diblock':
+    #     data_path = 'Data/diblock_copolymer_dataset.csv'
+    #     graphs_list = 'Data/diblock_graphs_list.pt'
+    # else:
+    #     raise ValueError('Invalid dataset')

@@ -16,9 +16,13 @@ from tqdm import tqdm
 
 def pretrain(pre_data, transform, cfg):
     # 70-20-10 split for pretraining - validation - test data
-    pre_trn_data = pre_data[:int(0.7*len(pre_data))].copy()
-    pre_val_data = pre_data[int(0.7*len(pre_data)):int(0.9*len(pre_data))].copy()
-    pre_tst_data = pre_data[int(0.9*len(pre_data)):].copy()
+    pre_trn_data = pre_data[:int(0.9*len(pre_data))].copy()
+    pre_val_data = pre_data[int(0.9*len(pre_data)):].copy()
+    # pre_tst_data = pre_data[int(0.9*len(pre_data)):].copy()
+
+    print(f'Pretraining on: {len(pre_trn_data)} graphs')
+    print(f'PTRN-Validating on: {len(pre_val_data)} graphs')
+
 
     pre_trn_data.transform = transform
     pre_val_data.transform = transform
@@ -41,7 +45,9 @@ def pretrain(pre_data, transform, cfg):
             pooling=cfg.model.pool,
             mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
             patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-            num_target_patches=cfg.jepa.num_targets
+            num_target_patches=cfg.jepa.num_targets,
+            should_share_weights=cfg.pretrain.shouldShareWeights,
+            regularization = cfg.pretrain.regularization
         ).to(cfg.device)
 
     elif cfg.modelVersion == 'v2':
@@ -52,7 +58,9 @@ def pretrain(pre_data, transform, cfg):
             rw_dim=cfg.pos_enc.rw_dim,
             pooling=cfg.model.pool,
             patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-            num_target_patches=cfg.jepa.num_targets
+            num_target_patches=cfg.jepa.num_targets,
+            should_share_weights=cfg.pretrain.shouldShareWeights,
+            regularization = cfg.pretrain.regularization
         ).to(cfg.device)
 
     else:
@@ -93,7 +101,10 @@ def pretrain(pre_data, transform, cfg):
             device=cfg.device, 
             momentum_weight=next(momentum_scheduler), 
             criterion_type=cfg.jepa.dist,
-            regularization=cfg.pretrain.regularization
+            regularization=cfg.pretrain.regularization,
+            inv_weight=cfg.pretrain.inv_weight, 
+            var_weight=cfg.pretrain.var_weight, 
+            cov_weight=cfg.pretrain.cov_weight
         )
 
         model.eval()
@@ -103,45 +114,49 @@ def pretrain(pre_data, transform, cfg):
             model,
             device=cfg.device, 
             criterion_type=cfg.jepa.dist,
-            regularization=cfg.pretrain.regularization
+            regularization=cfg.pretrain.regularization,
+            inv_weight=cfg.pretrain.inv_weight, 
+            var_weight=cfg.pretrain.var_weight, 
+            cov_weight=cfg.pretrain.cov_weight
         )
 
-        if epoch % 20 == 0 or epoch == cfg.pretrain.epochs - 1:
-            os.makedirs('Models/Pretrain', exist_ok=True)
-            torch.save(model.state_dict(), f'Models/Pretrain/{model_name}.pt')
+        os.makedirs('Models/Pretrain', exist_ok=True)
+        torch.save(model.state_dict(), f'Models/Pretrain/{model_name}.pt')
 
         scheduler.step(val_loss)
 
-        print(f'Epoch/Fold: {epoch:03d}, Train Loss: {trn_loss:.4f}' f' Test Loss:{val_loss:.4f}')
+        print(f'Epoch: {epoch:03d}, Train Loss: {trn_loss:.5f}' f' Test Loss:{val_loss:.5f}')
     
     return model, model_name
 
 
 def finetune(ft_data, transform, model, model_name, cfg):
-    ft_trn_data = ft_data[:int(0.7*len(ft_data))].copy()
-    ft_val_data = ft_data[int(0.7*len(ft_data)):int(0.9*len(ft_data))].copy()
-    ft_tst_data = ft_data[int(0.9*len(ft_data)):].copy()
-
+    ft_trn_data = ft_data[:int(0.8*len(ft_data))].copy()
+    # print(len(ft_trn_data))
+    ft_val_data = ft_data[int(0.8*len(ft_data)):].copy() # int(0.9*len(ft_data))
+    # print(len(ft_val_data))
+    # ft_tst_data = ft_data[int(0.9*len(ft_data)):].copy()
+    print(f'Finetuning on: {len(ft_trn_data)} graphs')
+    print(f'FT-Validating on: {len(ft_val_data)} graphs')
     
-    ft_trn_data.transform = transform
-    ft_trn_data = [x for x in ft_trn_data]
-    ft_val_data.transform = transform
-    ft_val_data = [x for x in ft_val_data]
+    if cfg.modelVersion == 'v1':
+        ft_trn_data.transform = transform
+        ft_trn_data = [x for x in ft_trn_data]
+        ft_val_data.transform = transform
+        ft_val_data = [x for x in ft_val_data]
 
     ft_trn_loader = DataLoader(dataset=ft_trn_data, batch_size=cfg.finetune.batch_size, shuffle=True)
     ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False)
 
     # this is the predictor head, that takes the graph embeddings and predicts the property
     predictor = nn.Sequential(
-        nn.Linear(cfg.model.hidden_size, 512),
+        nn.Linear(cfg.model.hidden_size, 300),
         nn.ReLU(),
-        nn.Linear(512, 1024),
-        nn.ReLU(),
-        nn.Linear(1024, 1024),
-        nn.ReLU(),
-        nn.Linear(1024, 256),
-        nn.ReLU(),
-        nn.Linear(256, 1)
+        # nn.Linear(256, 512),
+        # nn.ReLU(),
+        # nn.Linear(512, 256),
+        # nn.ReLU(),
+        nn.Linear(300, 1)
     ).to(cfg.device)
 
     criterion = nn.MSELoss()
@@ -150,14 +165,16 @@ def finetune(ft_data, transform, model, model_name, cfg):
     print(f"Finetuning model {model_name}")
 
     for epoch in tqdm(range(cfg.finetune.epochs), desc='Finetuning Epochs'):
+
         model.train()
         predictor.train()
         trn_loss = 0
+
         for data in ft_trn_loader:
             data = data.to(cfg.device)
             optimizer.zero_grad()
-            embeddings = model.encode(data)
-            y_pred_trn = predictor(embeddings).squeeze()
+            graph_embeddings = model.encode(data)
+            y_pred_trn = predictor(graph_embeddings).squeeze()
             train_loss = criterion(y_pred_trn, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
             trn_loss += train_loss
             train_loss.backward()
@@ -165,24 +182,27 @@ def finetune(ft_data, transform, model, model_name, cfg):
 
         trn_loss /= len(ft_trn_loader)
 
+
         model.eval()
         predictor.eval()
-
         with torch.no_grad():
             val_loss = 0
             all_y_pred_val = []
             all_true_val = []
+
             for data in ft_val_loader:
                 data = data.to(cfg.device)
-                embeddings = model.encode(data)
-                y_pred_val = predictor(embeddings).squeeze()
+                graph_embeddings = model.encode(data)
+                y_pred_val = predictor(graph_embeddings).squeeze()
                 val_loss += criterion(y_pred_val, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
                 all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
                 all_true_val.extend(data.y_EA.detach().cpu().numpy() if cfg.finetune.property == 'ea' else data.y_IP.detach().cpu().numpy())
         
         val_loss /= len(ft_val_loader)
 
-        if epoch % 5 == 0 or epoch == cfg.finetune.epochs - 1:
+        if epoch % 20 == 0 or epoch == cfg.finetune.epochs - 1:
+            print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.5f}' f' Val Loss:{val_loss:.5f}')
+
             os.makedirs('Results/Finetune/', exist_ok=True)
 
             if cfg.finetune.property == 'ea':
@@ -199,8 +219,6 @@ def finetune(ft_data, transform, model, model_name, cfg):
                 save_folder=f'Results/Finetune/{model_name}',
                 epoch=epoch
             )
-            
-            print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.4f}' f' Val Loss:{val_loss:.4f}')
 
 
 def run():
@@ -208,15 +226,14 @@ def run():
     # https://github.com/pyg-team/pytorch_geometric/issues/4223 
     dataset, transform = create_data(cfg)
     
-
-    pre_data = dataset[:int(cfg.pretrainPercentage*len(dataset))].copy()
-    ft_data = dataset[int(cfg.pretrainPercentage*len(dataset)):].copy()
+    pre_data = dataset[:int(cfg.pretrain.pretrainPercentage*len(dataset))].copy()
+    ft_data = dataset[int(cfg.pretrain.pretrainPercentage*len(dataset)):].copy()
 
     if cfg.shouldPretrain:
         model, model_name = pretrain(pre_data, transform, cfg)
     else:
         # load model from finetuning
-        model_name = 'n7rx6Zj5'
+        model_name = 'pWHhXRcJ'
         if cfg.modelVersion == 'v1':
             model = PolymerJEPA(
                 nfeat_node=dataset.data_list[0].num_node_features,
@@ -228,7 +245,9 @@ def run():
                 pooling=cfg.model.pool,
                 mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
                 patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-                num_target_patches=cfg.jepa.num_targets
+                num_target_patches=cfg.jepa.num_targets,
+                should_share_weights=cfg.pretrain.shouldShareWeights,
+                regularization = cfg.pretrain.regularization
             ).to(cfg.device)
 
         elif cfg.modelVersion == 'v2':
@@ -239,13 +258,15 @@ def run():
                 rw_dim=cfg.pos_enc.rw_dim,
                 pooling=cfg.model.pool,
                 patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-                num_target_patches=cfg.jepa.num_targets
+                num_target_patches=cfg.jepa.num_targets,
+                should_share_weights=cfg.pretrain.shouldShareWeights,
+                regularization = cfg.pretrain.regularization
             ).to(cfg.device)
 
         else:
             raise ValueError('Invalid model version')
 
-        model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}.pt'))
+        model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}.pt', map_location=cfg.device))
     
 
     if cfg.shouldFinetune:

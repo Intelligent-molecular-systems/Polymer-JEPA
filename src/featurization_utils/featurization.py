@@ -8,7 +8,7 @@ import torch
 from torch_geometric.data import Data
 
 # %% Make featurization function
-def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_check=False):
+def poly_smiles_to_graph(poly_strings, **label_dicts):
     '''
     Turns adjusted polymer smiles string into PyG data objects
     '''
@@ -43,7 +43,7 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
     m = mol[0]  # RDKit Mol object
     rules = mol[1]  # [str], list of rules for bonds between monomers. i.e. [1-2:0.375:0.375, 1-1:0.375:0.375, ...] 
     # parse rules on monomer connections
-    polymer_info, degree_of_polym = ft.parse_polymer_rules(rules, no_deg_check=no_deg_check)
+    polymer_info, degree_of_polym = ft.parse_polymer_rules(rules)
     # polymer_info = [(1, 2, 0.375, 0.375), (1, 1, 0.375, 0.375), ...]
     # make molecule editable
     rwmol = Chem.rdchem.RWMol(m)
@@ -248,17 +248,20 @@ def poly_smiles_to_graph(poly_strings, poly_labels_EA, poly_labels_IP, no_deg_ch
     # element at position i in x is the feature vector of atom i in the rdkit mol object, 
     # index i in the edge_index is the index of the atom in the rdkit mol object
         
-    graph = Data(
-        x=X, 
-        edge_index=edge_index, 
-        edge_attr=edge_attr,
-        y_EA=poly_labels_EA, 
-        y_IP=poly_labels_IP, 
-        node_weight=node_weights, 
-        edge_weight=edge_weights, 
-        intermonomers_bonds=intermonomers_bonds, 
-        motifs=(cliques, clique_edges),
-        monomer_mask=monomer_mask
-    )
+    graph_data_kwargs = {
+        "x": X, 
+        "edge_index": edge_index, 
+        "edge_attr": edge_attr,
+        "node_weight": node_weights, 
+        "edge_weight": edge_weights, 
+        "intermonomers_bonds": intermonomers_bonds, 
+        "motifs": (cliques, clique_edges),
+        "monomer_mask": monomer_mask
+    }
+    # Add labels dynamically from label_dicts
+    for label_name, label_values in label_dicts.items():
+        graph_data_kwargs[label_name] = label_values
+
+    graph = Data(**graph_data_kwargs)
 
     return graph

@@ -31,30 +31,51 @@ class MyDataset(InMemoryDataset):
         torch.save(self.collate(self.data_list), self.processed_paths[0])
 
 
-def get_graphs(file_csv = 'Data/dataset-poly_chemprop.csv', file_graphs_list = 'Data/Graphs_list.pt'):
+def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/aldeghi_graphs_list.pt', dataset='aldeghi'):
     graphs = []
     # check if graphs_list.pt exists
     if not os.path.isfile(file_graphs_list):
-        print('Creating Graphs_list.pt')
+        print('Creating graphs pt file...')
         df = pd.read_csv(file_csv)
         # use tqdm to show progress bar
-        for i in tqdm.tqdm(range(len(df.loc[:, 'poly_chemprop_input']))):
-            poly_strings = df.loc[i, 'poly_chemprop_input']
-            poly_labels_EA = df.loc[i, 'EA vs SHE (eV)']
-            poly_labels_IP = df.loc[i, 'IP vs SHE (eV)']
-            # given the input polymer string, this function returns a pyg data object
-            graph = poly_smiles_to_graph(
-                poly_strings=poly_strings, 
-                poly_labels_EA=poly_labels_EA, 
-                poly_labels_IP=poly_labels_IP
-            ) 
+        if dataset == 'aldeghi':
+            for i in tqdm.tqdm(range(len(df.loc[:, 'poly_chemprop_input']))):
+                poly_strings = df.loc[i, 'poly_chemprop_input']
+                ea_values = df.loc[i, 'EA vs SHE (eV)']
+                ip_values = df.loc[i, 'IP vs SHE (eV)']
+                # given the input polymer string, this function returns a pyg data object
+                graph = poly_smiles_to_graph(
+                    poly_strings=poly_strings, 
+                    y_EA=ea_values, 
+                    y_IP=ip_values
+                ) 
 
-            graphs.append(graph)
+                graphs.append(graph)
+        elif dataset == 'diblock':
+            for i in tqdm.tqdm(range(len(df.loc[:, 'poly_chemprop_input']))):
+                poly_strings = df.loc[i, 'poly_chemprop_input']
+                lamellar_values = df.loc[i, 'lamellar']
+                cylinder_values = df.loc[i, 'cylinder']
+                sphere_values = df.loc[i, 'sphere']
+                gyroid_values = df.loc[i, 'gyroid']
+                disordered_values = df.loc[i, 'disordered']
+                # given the input polymer string, this function returns a pyg data object
+                graph = poly_smiles_to_graph(
+                    poly_strings=poly_strings, 
+                    y_lamellar=lamellar_values, 
+                    y_cylinder=cylinder_values,
+                    y_sphere=sphere_values, 
+                    y_gyroid=gyroid_values,
+                    y_disordered=disordered_values
+                ) 
+                graphs.append(graph)
+        else:
+            raise ValueError('Invalid dataset name')
             
         torch.save(graphs, file_graphs_list)
-        print('Graphs_list.pt saved')
+        print('Graphs pt file saved')
     else:
-        print('Loading Graphs_list.pt')
+        print('Loading graphs pt file...')
         graphs = torch.load(file_graphs_list)
 
     random.seed(12345)
@@ -72,7 +93,17 @@ def create_data(cfg):
         patch_num_diff=cfg.pos_enc.patch_num_diff
     )
 
-    graphs = get_graphs()
-    dataset = MyDataset(root='Data', data_list=graphs, pre_transform=pre_transform)
+    if cfg.dataset == 'aldeghi':
+        data_path = 'Data/aldeghi_coley_ea_ip_dataset.csv'
+        graphs_list = 'Data/aldeghi_graphs_list.pt'
+
+    elif cfg.dataset == 'diblock':
+        data_path = 'Data/diblock_copolymer_dataset.csv'
+        graphs_list = 'Data/diblock_graphs_list.pt'
+    else:
+        raise ValueError('Invalid dataset')
+    
+    graphs = get_graphs(file_csv=data_path, file_graphs_list=graphs_list, dataset=cfg.dataset)
+    dataset = MyDataset(root=f'Data/{cfg.dataset}', data_list=graphs, pre_transform=pre_transform)
 
     return dataset, transform

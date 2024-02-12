@@ -21,7 +21,10 @@ class PolymerJEPA(nn.Module):
                  mlpmixer_dropout=0,
                  pooling='mean',
                  patch_rw_dim=0,
-                 num_target_patches=4):
+                 num_target_patches=4,
+                 should_share_weights = False,
+                 regularization = False
+        ):
 
         super().__init__()
         self.use_rw = rw_dim > 0
@@ -29,6 +32,7 @@ class PolymerJEPA(nn.Module):
         self.patch_rw_dim = patch_rw_dim
         self.nhid = nhid
         self.num_target_patches=num_target_patches
+        self.regularization=regularization
 
         if self.use_rw:
             self.rw_encoder = MLP(rw_dim, nhid, 1)
@@ -42,8 +46,12 @@ class PolymerJEPA(nn.Module):
         self.context_encoder = getattr(gMHA_wrapper, 'Standard')(
             nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
         
-        self.target_encoder = getattr(gMHA_wrapper, gMHA_type)(
-            nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
+        if should_share_weights:
+            self.target_encoder = self.context_encoder
+        else:
+            self.target_encoder = getattr(gMHA_wrapper, gMHA_type)(
+                nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
+            
 
         # Predictor
         self.target_predictor = MLP(
@@ -168,30 +176,36 @@ class PolymerJEPA(nn.Module):
             ~context_mask
         )
 
-        # The target forward step musn't store gradients, since the target encoder is optimized via EMA
-        with torch.no_grad():
-            if hasattr(data, 'coarsen_adj'): # if we have a coarsen adj, we use it to encode the target subgraphs
-                subgraph_incides = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs])
-                patch_adj = data.coarsen_adj[
-                    torch.arange(target_x.shape[0]).unsqueeze(1).unsqueeze(2),  # Batch dimension
-                    subgraph_incides.unsqueeze(1),  # Row dimension
-                    subgraph_incides.unsqueeze(2)   # Column dimension
-                ]
-                # target_encoder can be found in gMHA_wrapper.py, i.e. Hadamard 
-                # it s using the coarse adj matrix instead of the regular one
-                # !!! But since patch_num_diff is always 0 by default, coarsen_adj = regular adj, look at transform.py _diffuse!!!
-                target_x = self.target_encoder(target_x, patch_adj, None)
-            else:
-                target_x = self.target_encoder(target_x, None, None)
 
-            # create a list of all embeddings
-            embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
+        if hasattr(data, 'coarsen_adj'): # if we have a coarsen adj, we use it to encode the target subgraphs
+            subgraph_incides = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs])
+            patch_adj = data.coarsen_adj[
+                torch.arange(target_x.shape[0]).unsqueeze(1).unsqueeze(2),  # Batch dimension
+                subgraph_incides.unsqueeze(1),  # Row dimension
+                subgraph_incides.unsqueeze(2)   # Column dimension
+            ]
 
-            # Predict the coordinates of the patches in the Q1 hyperbola
-            # Remove this part if you wish to do euclidean or poincaré embeddings in the latent space
-            x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
-            y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
-            target_x = torch.cat([x_coord, y_coord], dim=-1)
+            parameters = (target_x, patch_adj, None)
+        else:
+            parameters = (target_x, None, None)
+
+        if not self.regularization:
+        # in case of EMA update to avoid collapse, the target forward step musn't store gradients, since the target encoder is optimized via EMA
+            with torch.no_grad():
+                target_x = self.target_encoder(*parameters)
+        else:
+            # in case of vicReg to avoid collapse we have regularization
+            target_x = self.target_encoder(*parameters)
+
+        # RISK in the original code these lines are put under the torch.grad but i dont think is necessary
+        # create a list of all embeddings
+        embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
+        # Predict the coordinates of the patches in the Q1 hyperbola
+        # Remove this part if you wish to do euclidean or poincaré embeddings in the latent space
+        x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
+        y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
+        target_x = torch.cat([x_coord, y_coord], dim=-1)
+
 
 
         # Make predictions using the target predictor: for each target subgraph, we use the context + the target PE

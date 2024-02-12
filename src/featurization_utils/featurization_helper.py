@@ -185,7 +185,7 @@ def remove_wildcard_atoms(rwmol):
     return rwmol
 
 
-def parse_polymer_rules(rules, no_deg_check=False): # rules i.e. [1-2:0.375:0.375, 1-1:0.375:0.375, ...]
+def parse_polymer_rules(rules): # rules i.e. [1-2:0.375:0.375, 1-1:0.375:0.375, ...]
     polymer_info = []
     counter = Counter()  # used for validating the input ( sum of incoming weight probabilites should be 1 for each vertex)
 
@@ -213,7 +213,7 @@ def parse_polymer_rules(rules, no_deg_check=False): # rules i.e. [1-2:0.375:0.37
 
     # validate input: sum of incoming weights should be one for each vertex
     for k, v in counter.items():
-        if np.isclose(v, 1.0) is False and not no_deg_check:
+        if np.isclose(v, 1.0) is False:
             raise ValueError(
                 f'sum of weights of incoming stochastic edges should be 1 -- found {v} for [*:{k}]')
     return polymer_info, 1. + np.log10(Xn) # polymer_info = [(1, 2, 0.375, 0.375), (1, 1, 0.375, 0.375), ...], degree_of_polym = 1. + np.log10(Xn)

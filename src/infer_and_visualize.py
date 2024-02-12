@@ -9,24 +9,10 @@ import math
 import os
 from matplotlib import pyplot as plt
 from scipy.stats import gaussian_kde
-from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.metrics import r2_score, mean_squared_error, precision_recall_curve, auc
 
 
-def infer_by_dataloader(loader, model, device):
-    out, ea, ip = [], [], []
-
-    model.eval()
-    model.to(device)
-
-    for batch in tqdm(loader, total=len(loader), desc="processing batches"):
-        out += model(batch.to(device)).cpu().tolist()
-        ea += batch.y_EA.tolist()
-        ip += batch.y_IP.tolist()
-
-    return out, ea, ip
-
-
-def visualize_results(store_pred: List, store_true: List, label: str, save_folder: str = None, epoch: int = 999):
+def visualize_aldeghi_results(store_pred: List, store_true: List, label: str, save_folder: str = None, epoch: int = 999):
     assert label in ['ea', 'ip']
 
     xy = np.vstack([store_pred, store_true])
@@ -52,51 +38,43 @@ def visualize_results(store_pred: List, store_true: List, label: str, save_folde
     plt.text(min(store_true), max(store_pred) - 0.3, f'RMSE = {RMSE:.3f}', fontsize=10)
 
 
-    if save_folder is not None:
+    if save_folder:
         os.makedirs(save_folder, exist_ok=True)
         plt.savefig(f"{save_folder}/{'EA' if label == 'ea' else 'IP'}_{epoch}.png")
     plt.close(fig)
-    return R2, RMSE
 
 
-# def infer(smiles_list: List[str], ea_list: List[float], ip_list: List[float], model, device = None, visualize=False) -> np.ndarray:
-#     assert type(model) == str or type(model) == WDNodeMPNN
+def visualize_diblock_results(store_pred: List, store_true: List, label: str, save_folder: str = None, epoch: int = 999):
+    # Convert lists to numpy arrays if they aren't already
+    store_pred = np.array(store_pred)
+    store_true = np.array(store_true)
 
-#     if device is None:
-#         device = torch.device("cpu")
+    # Placeholder for AUPRCs of each class
+    auprcs = []
 
-#     graphs = []
-#     valid_indexes = []
+    plt.figure(figsize=(10, 7))
 
-#     N = range(len(smiles_list))
-#     for i, smiles, ea, ip  in tqdm(zip(N, smiles_list, ea_list, ip_list), total=len(N), desc="creating graphs"):
-#         try:
-#             graph = poly_smiles_to_graph(smiles, [ea], [ip])
-#             graphs.append(graph)
-#             valid_indexes.append(i)
+    num_labels = store_true.shape[1]  # Adjust based on your true_labels' shape
 
-#         except Exception as e:
-#             print(f"{smiles} is not valid polymer string")
+    for i in range(num_labels):
+        precision, recall, _ = precision_recall_curve(store_true[:, i], store_pred[:, i])
+        auprc = auc(recall, precision)
+        auprcs.append(auprc)
+        
+        # Plot each class's Precision-Recall curve
+        plt.plot(recall, precision, lw=2, alpha=0.3, label=f'Label {i+1} (AUPRC = {auprc:.2f})')
 
-#     if type(model) == str:
-#         model_temp = WDNodeMPNN(133, 14, hidden_dim=300)
-#         model_temp.load_state_dict(torch.load(model))
-#         model = model_temp
-#         model.to(device)
+    # Calculate and display the average AUPRC
+    average_auprc = np.mean(auprcs)
+    plt.title(f'{label} Precision-Recall Curve (Average AUPRC = {average_auprc:.2f})')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.legend(loc="best")
+    plt.grid(True)
 
-#     loader = DataLoader(dataset=graphs,
-#                batch_size=16, shuffle=False)
-
-#     out, ea, ip = infer_by_dataloader(loader, model, device)
-
-#     print(f"{len(smiles_list) - len(valid_indexes)} failed entries (!)")
-
-
-#     if visualize:
-#         visualize_results(out, ea, label='ea', save_folder='Results/figs')
-#         visualize_results(out, ip, label='ip', save_folder='Results/figs')
-
-#     pred = np.full(len(smiles_list), None, dtype=object)
-#     pred[valid_indexes] = out
-
-#     return pred    
+    # Ensure save_folder exists
+    if save_folder:
+        os.makedirs(save_folder, exist_ok=True)
+        plt.savefig(os.path.join(save_folder, f"{label}_average_auprc_epoch_{epoch}.png"))
+    plt.close()
+    return average_auprc

@@ -1,0 +1,125 @@
+import os
+import random
+import string
+from src.PolymerJEPA import PolymerJEPA
+from src.PolymerJEPAv2 import PolymerJEPAv2
+from src.training import train, test
+import time
+import torch
+from torch_geometric.loader import DataLoader
+from tqdm import tqdm
+
+def pretrain(pre_data, transform, cfg):
+    # 70-20-10 split for pretraining - validation - test data
+    pre_trn_data = pre_data[:int(0.9*len(pre_data))].copy()
+    pre_val_data = pre_data[int(0.9*len(pre_data)):].copy()
+    # pre_tst_data = pre_data[int(0.9*len(pre_data)):].copy()
+
+    print(f'Pretraining on: {len(pre_trn_data)} graphs')
+    print(f'PTRN-Validating on: {len(pre_val_data)} graphs')
+
+
+    pre_trn_data.transform = transform
+    pre_val_data.transform = transform
+    pre_val_data = [x for x in pre_val_data] # this way we can use the same transform for the validation data all the times
+
+    pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.pretrain.batch_size, shuffle=True)
+    pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.pretrain.batch_size, shuffle=False)
+
+    num_node_features = pre_data.data_list[0].num_node_features
+    num_edge_features = pre_data.data_list[0].num_edge_features
+
+    if cfg.modelVersion == 'v1':
+        model = PolymerJEPA(
+            nfeat_node=num_node_features,
+            nfeat_edge=num_edge_features,
+            nhid=cfg.model.hidden_size,
+            nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
+            gMHA_type=cfg.model.gMHA_type,
+            rw_dim=cfg.pos_enc.rw_dim,
+            pooling=cfg.model.pool,
+            mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
+            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+            num_target_patches=cfg.jepa.num_targets,
+            should_share_weights=cfg.pretrain.shouldShareWeights,
+            regularization = cfg.pretrain.regularization
+        ).to(cfg.device)
+
+    elif cfg.modelVersion == 'v2':
+        model = PolymerJEPAv2(
+            nfeat_node=num_node_features,
+            nfeat_edge=num_edge_features,
+            nhid=cfg.model.hidden_size,
+            rw_dim=cfg.pos_enc.rw_dim,
+            pooling=cfg.model.pool,
+            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+            num_target_patches=cfg.jepa.num_targets,
+            should_share_weights=cfg.pretrain.shouldShareWeights,
+            regularization = cfg.pretrain.regularization
+        ).to(cfg.device)
+
+    else:
+        raise ValueError('Invalid model version')
+
+    optimizer = torch.optim.Adam(
+        model.parameters(), 
+        lr=cfg.pretrain.lr, 
+        weight_decay=cfg.pretrain.wd
+    )
+
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, 
+        mode='min',
+        factor=cfg.pretrain.lr_decay,
+        patience=cfg.pretrain.lr_patience,
+        verbose=True
+    )
+
+    # Create EMA scheduler for target encoder param update
+    ipe = len(pre_trn_loader)
+    ema_params = [0.996, 1.0]
+    momentum_scheduler = (ema_params[0] + i*(ema_params[1]-ema_params[0])/(ipe*cfg.pretrain.epochs)
+                        for i in range(int(ipe*cfg.pretrain.epochs)+1))
+
+
+    random.seed(time.time())
+    model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
+    print(f"Model name: {model_name}")
+    
+    # Pretraining
+    for epoch in tqdm(range(cfg.pretrain.epochs), desc='Pretraining Epochs'):
+        model.train()
+        trn_loss = train(
+            pre_trn_loader, 
+            model, 
+            optimizer, 
+            device=cfg.device, 
+            momentum_weight=next(momentum_scheduler), 
+            criterion_type=cfg.jepa.dist,
+            regularization=cfg.pretrain.regularization,
+            inv_weight=cfg.pretrain.inv_weight, 
+            var_weight=cfg.pretrain.var_weight, 
+            cov_weight=cfg.pretrain.cov_weight
+        )
+
+        model.eval()
+
+        val_loss = test(
+            pre_val_loader, 
+            model,
+            device=cfg.device, 
+            criterion_type=cfg.jepa.dist,
+            regularization=cfg.pretrain.regularization,
+            inv_weight=cfg.pretrain.inv_weight, 
+            var_weight=cfg.pretrain.var_weight, 
+            cov_weight=cfg.pretrain.cov_weight
+        )
+
+        os.makedirs('Models/Pretrain', exist_ok=True)
+        torch.save(model.state_dict(), f'Models/Pretrain/{model_name}.pt')
+
+        scheduler.step(val_loss)
+
+        print(f'Epoch: {epoch:03d}, Train Loss: {trn_loss:.5f}' f' Test Loss:{val_loss:.5f}')
+    
+    return model, model_name

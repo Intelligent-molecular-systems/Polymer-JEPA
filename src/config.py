@@ -17,11 +17,14 @@ def set_cfg(cfg):
     # Custom log file name
     cfg.logfile = None
 
-    cfg.shouldPretrain = False
+    cfg.shouldPretrain = True
     cfg.shouldFinetune = True
 
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
-    cfg.modelVersion = 'v1'
+    cfg.modelVersion = 'v2'
+
+    # finetuning dataset, values: 'aldeghi' or 'diblock'
+    cfg.finetuneDataset = 'diblock'
 
     # ------------------------------------------------------------------------ #
     # Training options
@@ -30,11 +33,11 @@ def set_cfg(cfg):
     # Total graph mini-batch size
     cfg.pretrain.batch_size = 128
     # Maximal number of epochs
-    cfg.pretrain.epochs = 30
+    cfg.pretrain.epochs = 15
     # Number of runs with random init
     cfg.pretrain.runs = 4
     # Base learning rate
-    cfg.pretrain.lr = 0.001
+    cfg.pretrain.lr = 0.0005 # RISK before 0.001
     # number of steps before reduce learning rate
     cfg.pretrain.lr_patience = 20
     # learning rate decay factor
@@ -52,13 +55,20 @@ def set_cfg(cfg):
     # Multiscale training
     cfg.pretrain.multiscale = False    
     # Regularization (vcReg), between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
-    cfg.pretrain.regularization = 0.
+    cfg.pretrain.regularization = True
+    # weights from the original paper (that works in the image domain though)
+    cfg.pretrain.inv_weight = 25
+    cfg.pretrain.var_weight = 25
+    cfg.pretrain.cov_weight = 1
+    # this should be used only when using the vicReg objective, where sharing weights is beneficial
+    cfg.pretrain.shouldShareWeights = True
+    cfg.pretrain.pretrainPercentage = 0.97
 
     
     cfg.finetune = CN()
     # Property to train (finetune) on: 'ea' or 'ip'
     cfg.finetune.property = 'ea'
-    cfg.finetune.epochs = 50
+    cfg.finetune.epochs = 100
     # Base learning rate
     cfg.finetune.lr = 0.001
     # L2 regularization, weight decay
@@ -73,7 +83,7 @@ def set_cfg(cfg):
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
     cfg.model.gMHA_type = 'Hadamard' # Hadamard is the default one for all datsets (yaml files) in original code
     # Hidden size of the model
-    cfg.model.hidden_size = 256
+    cfg.model.hidden_size = 300 # make it a power of 2 if using the default model with transformer attention heads
     # Number of mlp mixer layers
     cfg.model.nlayer_mlpmixer = 4
     # Pooling type for generaating graph/subgraph embedding from node embeddings

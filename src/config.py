@@ -19,11 +19,13 @@ def set_cfg(cfg):
 
     cfg.shouldPretrain = True
     cfg.shouldFinetune = True
+    # in case we want to finetune on a model that was pretrained
+    cfg.shouldFinetuneOnPretrainedModel = True
 
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
     cfg.modelVersion = 'v2'
 
-    # finetuning dataset, values: 'aldeghi' or 'diblock'
+    # finetuning dataset, values: 'aldeghi' or 'diblock', 'diblock' can only be finetuned on a v2 model, not v1.
     cfg.finetuneDataset = 'diblock'
 
     # ------------------------------------------------------------------------ #
@@ -37,7 +39,7 @@ def set_cfg(cfg):
     # Number of runs with random init
     cfg.pretrain.runs = 4
     # Base learning rate
-    cfg.pretrain.lr = 0.0005 # RISK before 0.001
+    cfg.pretrain.lr = 0.0005 # RISK before 0.001, i should try even a lower one 0.0001
     # number of steps before reduce learning rate
     cfg.pretrain.lr_patience = 20
     # learning rate decay factor
@@ -55,19 +57,20 @@ def set_cfg(cfg):
     # Multiscale training
     cfg.pretrain.multiscale = False    
     # Regularization (vcReg), between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
-    cfg.pretrain.regularization = True
+    cfg.pretrain.regularization = False
+    # this should be used only when using the vicReg objective, where sharing weights is beneficial
+    cfg.pretrain.shouldShareWeights = False
     # weights from the original paper (that works in the image domain though)
     cfg.pretrain.inv_weight = 25
     cfg.pretrain.var_weight = 25
     cfg.pretrain.cov_weight = 1
-    # this should be used only when using the vicReg objective, where sharing weights is beneficial
-    cfg.pretrain.shouldShareWeights = True
-    cfg.pretrain.pretrainPercentage = 0.97
+    # which percentage of the full dataset should be used to pretrain
+    cfg.pretrain.pretrainPercentage = 0.4
 
     
     cfg.finetune = CN()
     # Property to train (finetune) on: 'ea' or 'ip'
-    cfg.finetune.property = 'ea'
+    cfg.finetune.property = 'ip'
     cfg.finetune.epochs = 100
     # Base learning rate
     cfg.finetune.lr = 0.001
@@ -121,7 +124,7 @@ def set_cfg(cfg):
     cfg.jepa.num_context = 1
     # Number of patches to use as targets
     cfg.jepa.num_targets = 4
-    # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
+    # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 0
 
     return cfg

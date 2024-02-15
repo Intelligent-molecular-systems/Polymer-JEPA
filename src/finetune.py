@@ -1,7 +1,10 @@
 import os
 import numpy as np
+import random
+import string
 from src.config import cfg
 from src.infer_and_visualize import visualize_aldeghi_results, visualize_diblock_results
+import time
 import torch
 import torch.nn as nn
 from torch_geometric.loader import DataLoader
@@ -34,6 +37,7 @@ def finetune(ft_data, transform, model, model_name, cfg):
     elif cfg.finetuneDataset == 'diblock':
         out_dim = 5 # 5 classes
         # Binary Cross-Entropy With Logits Loss
+        # https://discuss.pytorch.org/t/using-bcewithlogisloss-for-multi-label-classification/67011/2
         criterion = nn.BCEWithLogitsLoss() # binary multiclass classification
     else:
         raise ValueError('Invalid dataset name')
@@ -50,6 +54,11 @@ def finetune(ft_data, transform, model, model_name, cfg):
     ).to(cfg.device)
     
     optimizer = torch.optim.Adam(list(model.parameters()) + list(predictor.parameters()), lr=cfg.finetune.lr, weight_decay=cfg.finetune.wd)
+
+    if model_name == '': # in case we are not finetuning on a pretrained model
+        random.seed(time.time())
+        model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
+        model_name += '_NotPretrained'
 
     print(f"Finetuning model {model_name}")
 
@@ -142,13 +151,12 @@ def finetune(ft_data, transform, model, model_name, cfg):
                 )
 
             elif cfg.finetuneDataset == 'diblock':
-                average_auprc = visualize_diblock_results(
+                visualize_diblock_results(
                     np.array(all_y_pred_val), 
                     np.array(all_true_val), 
                     label='lamellar', 
                     save_folder=f'Results/Finetune/{model_name}_diblock',
                     epoch=epoch
                 )
-                print(f'Average AUPRC at epoch {epoch}: {average_auprc:.5f}')
             else:
                 raise ValueError('Invalid dataset name')

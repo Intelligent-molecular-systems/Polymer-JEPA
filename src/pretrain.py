@@ -20,6 +20,7 @@ def pretrain(pre_data, transform, cfg):
 
 
     pre_trn_data.transform = transform
+    # pre_trn_data = [x for x in pre_trn_data] # this way we can use the same transform for the validation data all the times
     pre_val_data.transform = transform
     pre_val_data = [x for x in pre_val_data] # this way we can use the same transform for the validation data all the times
 

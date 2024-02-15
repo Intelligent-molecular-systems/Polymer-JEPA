@@ -216,7 +216,6 @@ class PolymerJEPA(nn.Module):
     
 
     def encode(self, data):
-
         x = data.x[data.subgraphs_nodes_mapper]
         node_weights = data.node_weight[data.subgraphs_nodes_mapper]
         edge_index = data.combined_subgraphs
@@ -226,8 +225,10 @@ class PolymerJEPA(nn.Module):
         pes = data.rw_pos_enc[data.subgraphs_nodes_mapper]
         patch_pes = scatter(pes, batch_x, dim=0, reduce='mean')
 
+        # encode all subgraphs separately
         x = self.wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights)
 
+        # pool the subgraph node embeddings to find the subgraph embeddings
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
         subgraph_x += self.patch_rw_encoder(patch_pes)
         

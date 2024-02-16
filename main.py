@@ -5,6 +5,8 @@ from src.finetune import finetune
 from src.PolymerJEPA import PolymerJEPA
 from src.PolymerJEPAv2 import PolymerJEPAv2
 from src.pretrain import pretrain
+import string
+import time
 import torch
 
 
@@ -32,9 +34,11 @@ def run():
         raise ValueError('Invalid dataset name')
 
     model_name = None
+
     if cfg.shouldPretrain:
         model, model_name = pretrain(pre_data, transform, cfg)
-    else:
+
+    if cfg.shouldFinetune:
         if cfg.modelVersion == 'v1':
             model = PolymerJEPA(
                 nfeat_node=aldeghi_dataset.data_list[0].num_node_features,
@@ -68,14 +72,17 @@ def run():
             raise ValueError('Invalid model version')
 
 
-    if cfg.shouldFinetune:
         if cfg.shouldFinetuneOnPretrainedModel:
             if not model_name: # it means we are not pretraining in the current run
-                model_name = 'jhV9BqvR'
+                model_name = 'biaqHvXK'
             model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}.pt', map_location=cfg.device))
             finetune(ft_data, transform, model, model_name, cfg)
         else:
-            finetune(ft_data, transform, model, '', cfg)
+            # in case we are not finetuning on a pretrained model
+            random.seed(time.time())
+            model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
+            model_name += '_NotPretrained'
+            finetune(ft_data, transform, model, model_name, cfg)
 
         
     
@@ -84,12 +91,16 @@ def run():
         
 if __name__ == '__main__':
     run()
-    # check features dimensions for batches
-    # for i in range(0, len(dataset), 20):
-    #     try:
-    #         Batch.from_data_list(dataset[i:i+20])
-    #     except Exception as e:
-    #         print(f"An error occurred: {e}")
-    #         for data in dataset[i:i+20]:
-    #             print(data)
-    #             quit()
+
+
+
+
+# check features dimensions for batches
+# for i in range(0, len(dataset), 20):
+#     try:
+#         Batch.from_data_list(dataset[i:i+20])
+#     except Exception as e:
+#         print(f"An error occurred: {e}")
+#         for data in dataset[i:i+20]:
+#             print(data)
+#             quit()

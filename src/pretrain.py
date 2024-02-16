@@ -3,7 +3,7 @@ import random
 import string
 from src.PolymerJEPA import PolymerJEPA
 from src.PolymerJEPAv2 import PolymerJEPAv2
-from src.training import train, test
+from src.training import train, test, checkRepresentationCollapse
 import time
 import torch
 from torch_geometric.loader import DataLoader
@@ -15,8 +15,8 @@ def pretrain(pre_data, transform, cfg):
     pre_val_data = pre_data[int(0.9*len(pre_data)):].copy()
     # pre_tst_data = pre_data[int(0.9*len(pre_data)):].copy()
 
-    print(f'Pretraining on: {len(pre_trn_data)} graphs')
-    print(f'PTRN-Validating on: {len(pre_val_data)} graphs')
+    print(f'Pretraining training on: {len(pre_trn_data)} graphs')
+    print(f'Pretraining validation on: {len(pre_val_data)} graphs')
 
 
     pre_trn_data.transform = transform
@@ -90,7 +90,7 @@ def pretrain(pre_data, transform, cfg):
     # Pretraining
     for epoch in tqdm(range(cfg.pretrain.epochs), desc='Pretraining Epochs'):
         model.train()
-        trn_loss = train(
+        trn_loss, embeddings = train(
             pre_trn_loader, 
             model, 
             optimizer, 
@@ -116,11 +116,23 @@ def pretrain(pre_data, transform, cfg):
             cov_weight=cfg.pretrain.cov_weight
         )
 
+        # save model weights at each epoch
         os.makedirs('Models/Pretrain', exist_ok=True)
         torch.save(model.state_dict(), f'Models/Pretrain/{model_name}.pt')
 
         scheduler.step(val_loss)
 
         print(f'Epoch: {epoch:03d}, Train Loss: {trn_loss:.5f}' f' Test Loss:{val_loss:.5f}')
+
+        # check representation collapse at beginning and end of pretraining
+        if epoch == 0 or epoch == cfg.pretrain.epochs - 1:
+            if cfg.finetuneDataset == 'aldeghi':
+                new_model_name = model_name + '_aldeghi'
+            elif cfg.finetuneDataset == 'diblock':
+                new_model_name = model_name + '_diblock'
+            else:  
+                raise ValueError('Invalid dataset name')
+            
+            checkRepresentationCollapse(embeddings=embeddings, model_name=new_model_name, epoch=epoch)
     
     return model, model_name

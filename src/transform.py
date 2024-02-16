@@ -1,3 +1,6 @@
+import math
+import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import re
 import random
@@ -6,6 +9,7 @@ from src.subgraphing_utils.subgraphs_extractor import  motifs2subgraphs, metis2s
 import torch
 import torch_geometric
 from torch_geometric.data import Data
+from torch_geometric.utils.convert import to_networkx
 
 def cal_coarsen_adj(subgraphs_nodes_mask):
     #a coarse patch adjacency matrix A′ = B*B^T ∈ Rp×p, where each A′ ij contains the node overlap between pi and pj.
@@ -198,7 +202,43 @@ class GraphJEPAPartitionTransform(object):
         data.context_subgraph_idx = context_subgraph_idx.tolist() # if context subgraph idx is 0, then[0]
         data.target_subgraph_idxs = target_subgraph_idxs.tolist() # if target subgraph idxs are [1, 2] then [1, 2]
         data.call_n_patches = [self.n_patches] # [RISK] 
-        # print('data.call_n_patches, ', data.call_n_patches)
-
         data.__num_nodes__ = data.num_nodes  # set number of nodes of the current graph
+
+        # plot_from_transform_attributes(data)
         return data
+    
+
+def plot_from_transform_attributes(data):
+    # Generate the full graph and subgraphs from the transformed data
+    G_full = to_networkx(data, to_undirected=True)
+    G_context = G_full.subgraph(data.context_nodes_mapper.numpy())
+    G_targets = [G_full.subgraph(data.target_nodes_mapper[data.target_nodes_subgraph == target_idx].numpy()) 
+                for target_idx in data.target_subgraph_idxs]
+
+    # Prepare subgraphs list including context and target subgraphs for plotting
+    subgraphs = [G_context] + G_targets
+    subgraph_titles = ['Context Subgraph'] + [f'Target Subgraph {i+1}' for i in range(len(G_targets))]
+
+    # Calculate the number of subplots needed
+    num_subgraphs = len(subgraphs)
+    num_rows = math.ceil(num_subgraphs / 3)
+    fig, axes = plt.subplots(num_rows, max(1, min(3, num_subgraphs)), figsize=(12, 4 * num_rows))
+    axes = np.array(axes).flatten() if num_subgraphs > 1 else np.array([axes])
+
+    # Generate positions for all nodes in the full graph for consistent layout
+    pos = nx.spring_layout(G_full, seed=42)
+
+    for ax, (subgraph, title) in zip(axes, zip(subgraphs, subgraph_titles)):
+        # Draw the full graph in light gray as the background
+        nx.draw(G_full, pos=pos, ax=ax, node_color='lightgray', edge_color='gray', alpha=0.3, with_labels=True)
+
+        # Highlight the current subgraph
+        nx.draw(subgraph, pos=pos, ax=ax, with_labels=True, node_color='orange', edge_color='black', alpha=0.7)
+        ax.set_title(title)
+
+    # Hide any unused axes
+    for i in range(num_subgraphs, len(axes)):
+        axes[i].axis('off')
+
+    plt.tight_layout()
+    plt.show()

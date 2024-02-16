@@ -1,10 +1,8 @@
 import os
 import numpy as np
 import random
-import string
 from src.config import cfg
 from src.infer_and_visualize import visualize_aldeghi_results, visualize_diblock_results
-import time
 import torch
 import torch.nn as nn
 from torch_geometric.loader import DataLoader
@@ -54,11 +52,7 @@ def finetune(ft_data, transform, model, model_name, cfg):
     ).to(cfg.device)
     
     optimizer = torch.optim.Adam(list(model.parameters()) + list(predictor.parameters()), lr=cfg.finetune.lr, weight_decay=cfg.finetune.wd)
-
-    if model_name == '': # in case we are not finetuning on a pretrained model
-        random.seed(time.time())
-        model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
-        model_name += '_NotPretrained'
+        
 
     print(f"Finetuning model {model_name}")
 
@@ -83,7 +77,6 @@ def finetune(ft_data, transform, model, model_name, cfg):
 
                 true_labels = torch.stack([y_lamellar, y_cylinder, y_sphere, y_gyroid, y_disordered], dim=1)
 
-                # i need to stack the 5 properties in a tensor and use them as the true values
                 train_loss = criterion(y_pred_trn, true_labels)
             else:
                 raise ValueError('Invalid dataset name')
@@ -132,7 +125,7 @@ def finetune(ft_data, transform, model, model_name, cfg):
         if epoch % 20 == 0 or epoch == cfg.finetune.epochs - 1:
             print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.5f}' f' Val Loss:{val_loss:.5f}')
 
-            os.makedirs('Results/Finetune/', exist_ok=True)
+            os.makedirs('Results/', exist_ok=True)
 
             if cfg.finetuneDataset == 'aldeghi':
                 if cfg.finetune.property == 'ea':
@@ -146,7 +139,7 @@ def finetune(ft_data, transform, model, model_name, cfg):
                     np.array(all_y_pred_val), 
                     np.array(all_true_val), 
                     label=label, 
-                    save_folder=f'Results/Finetune/{model_name}_aldeghi',
+                    save_folder=f'Results/{model_name}_aldeghi',
                     epoch=epoch
                 )
 
@@ -155,7 +148,7 @@ def finetune(ft_data, transform, model, model_name, cfg):
                     np.array(all_y_pred_val), 
                     np.array(all_true_val), 
                     label='lamellar', 
-                    save_folder=f'Results/Finetune/{model_name}_diblock',
+                    save_folder=f'Results/{model_name}_diblock',
                     epoch=epoch
                 )
             else:

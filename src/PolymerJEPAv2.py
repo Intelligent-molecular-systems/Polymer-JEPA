@@ -1,6 +1,7 @@
 import numpy as np
 from src.model_utils.elements import MLP  
 from src.WDNodeMPNN import WDNodeMPNN
+from src.transform import plot_from_transform_attributes
 import torch
 import torch.nn as nn
 from torch_geometric.nn import global_mean_pool
@@ -47,13 +48,25 @@ class PolymerJEPAv2(nn.Module):
         # according to g-jepa when using hyperbolic space, the target predictor should be a linear layer
         # otherwise representation collapse
         self.target_predictor = nn.Linear(nhid, 2) # V2: Directly predict (depends on the definition of self.target_predictor)
+        # Use this if you wish to do euclidean or poincaré embeddings in the latent space
         # self.target_predictor = MLP(
-        #     nin=nhid, 
-        #     nout=2, 
-        #     nlayer=3, 
-        #     with_final_activation=False, 
-        #     with_norm=False
-        # )
+        #     nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
+        
+        # as suggested in JEPA original paper, we apply vicReg not directly on embeddings, but on the expanded embeddings
+        # The role of the expander is twofold: (1) eliminate the information by which the two representations differ, (2) expand the dimension in a non-linear fashion so that decorrelating the embedding variables will reduce the dependencies (not just the correlations) between the variables of the representation vector.
+        if self.regularization: 
+            self.expander_dim = 512
+            self.context_expander = nn.Sequential(
+                nn.Linear(nhid, self.expander_dim),
+                nn.ReLU(),
+                nn.Linear(self.expander_dim, self.expander_dim)
+            )
+
+            self.target_expander = nn.Sequential(
+                nn.Linear(nhid, self.expander_dim),
+                nn.ReLU(),
+                nn.Linear(self.expander_dim, self.expander_dim)
+            )
         
 
     def forward(self, data):
@@ -71,7 +84,7 @@ class PolymerJEPAv2(nn.Module):
 
         # initial encoder, encode all the subgraphs, then consider only the context subgraphs
         x = self.context_encoder(x, edge_index, edge_attr, edge_weights, node_weights)
-        subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
+        subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling) # batch_size*call_n_patches x nhid
 
 
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
@@ -82,9 +95,8 @@ class PolymerJEPAv2(nn.Module):
         context_subgraphs_x = subgraph_x[context_subgraph_idx]
         context_pe = patch_pes[context_subgraph_idx] 
         context_subgraphs_x += self.patch_rw_encoder(context_pe)
-        context_x = context_subgraphs_x.unsqueeze(1)  # batch_size x num_target_patches x nhid
-        
-        
+        context_x = context_subgraphs_x.unsqueeze(1)  # batch_size x 1 x nhid
+
         # full graph nodes embedding (original full graph)
         parameters = (data.x, data.edge_index, data.edge_attr, data.edge_weight, data.node_weight)
 
@@ -99,25 +111,40 @@ class PolymerJEPAv2(nn.Module):
 
         # map it as we do for x at the beginning
         full_graph_nodes_embedding = full_graph_nodes_embedding[data.subgraphs_nodes_mapper]
+
         # pool the embeddings found for the full graph, this will produce the pooled subgraphs embeddings for all subgraphs (context and target subgraphs)
-        subgraphs_x_from_full = scatter(full_graph_nodes_embedding, batch_x, dim=0, reduce=self.pooling)
+        subgraphs_x_from_full = scatter(full_graph_nodes_embedding, batch_x, dim=0, reduce=self.pooling) # batch_size*call_n_patches x nhid
 
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
         # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
 
+        # Debug print n of nodes in the context and target subgraphs (already with the new index keeping the batch
+        # indexer into account) they always match with the n of nodes
+        # we can see in the plot from the original datat
         # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
         # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
 
         # # Example for target subgraphs; adjust according to actual data structure
         # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
         # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
+        # for graph in data.to_data_list():
+        #     plot_from_transform_attributes(graph)
+
+
         # target subgraphs nodes embedding
         # Construct context and target PEs frome the node pes of each subgraph
         target_subgraphs = subgraphs_x_from_full[target_subgraphs_idx.flatten()] 
         target_pes = patch_pes[target_subgraphs_idx.flatten()]
         encoded_tpatch_pes = self.patch_rw_encoder(target_pes)
         target_x = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
+        
+        expanded_embeddings = torch.tensor([]) # save the embeddings for regularization
+        if self.regularization: 
+            expanded_context_x = self.context_expander(context_x)
+            expanded_target_x = self.target_expander(target_x)
+            expanded_embeddings = torch.vstack([expanded_context_x.reshape(-1, self.expander_dim), expanded_target_x.reshape(-1, self.expander_dim)])
+
         embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
         x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
         y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
@@ -133,7 +160,7 @@ class PolymerJEPAv2(nn.Module):
         # print('target_y:', target_y.shape)
         # target_y shape: batch_size x num_target_patches x 2
         # return the predicted target (via context + PE) and the true target obtained via the target encoder.
-        return target_x, target_y, embeddings
+        return target_x, target_y, embeddings, expanded_embeddings
 
 
     def encode(self, data):

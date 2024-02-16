@@ -5,6 +5,8 @@ from src.finetune import finetune
 from src.PolymerJEPA import PolymerJEPA
 from src.PolymerJEPAv2 import PolymerJEPAv2
 from src.pretrain import pretrain
+import string
+import time
 import torch
 
 
@@ -16,11 +18,13 @@ def run():
     # pretraning always done on the aldeghi dataset since its bigger dataset and no issues with homopolymer or tri, penta...blocks polymers
     # which would require different subgraphing techniques
 
-    pre_data = aldeghi_dataset[:int(cfg.pretrain.pretrainPercentage*len(aldeghi_dataset))].copy()
     if cfg.finetuneDataset == 'aldeghi':
         print('Finetuning will be on aldeghi dataset...')
+        pre_data = aldeghi_dataset[:int(cfg.pretrain.pretrainPercentage*len(aldeghi_dataset))].copy()
         ft_data = aldeghi_dataset[int(cfg.pretrain.pretrainPercentage*len(aldeghi_dataset)):].copy()
+
     elif cfg.finetuneDataset == 'diblock':
+        pre_data = aldeghi_dataset # we can use the full dataset for pretraining
         print('Loading diblock dataset for finetuning...')
         graphs = torch.load('Data/diblock_graphs_list.pt')
         random.seed(12345)
@@ -29,11 +33,12 @@ def run():
     else:
         raise ValueError('Invalid dataset name')
 
+    model_name = None
+
     if cfg.shouldPretrain:
         model, model_name = pretrain(pre_data, transform, cfg)
-    else:
-        # load model from finetuning
-        model_name = 'ZspxRWsm'
+
+    if cfg.shouldFinetune:
         if cfg.modelVersion == 'v1':
             model = PolymerJEPA(
                 nfeat_node=aldeghi_dataset.data_list[0].num_node_features,
@@ -66,23 +71,36 @@ def run():
         else:
             raise ValueError('Invalid model version')
 
-        model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}.pt', map_location=cfg.device))
-    
 
-    if cfg.shouldFinetune:
-        finetune(ft_data, transform, model, model_name, cfg)
+        if cfg.shouldFinetuneOnPretrainedModel:
+            if not model_name: # it means we are not pretraining in the current run
+                model_name = 'biaqHvXK'
+            model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}.pt', map_location=cfg.device))
+            finetune(ft_data, transform, model, model_name, cfg)
+        else:
+            # in case we are not finetuning on a pretrained model
+            random.seed(time.time())
+            model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
+            model_name += '_NotPretrained'
+            finetune(ft_data, transform, model, model_name, cfg)
+
+        
     
 
 
         
 if __name__ == '__main__':
     run()
-    # check features dimensions for batches
-    # for i in range(0, len(dataset), 20):
-    #     try:
-    #         Batch.from_data_list(dataset[i:i+20])
-    #     except Exception as e:
-    #         print(f"An error occurred: {e}")
-    #         for data in dataset[i:i+20]:
-    #             print(data)
-    #             quit()
+
+
+
+
+# check features dimensions for batches
+# for i in range(0, len(dataset), 20):
+#     try:
+#         Batch.from_data_list(dataset[i:i+20])
+#     except Exception as e:
+#         print(f"An error occurred: {e}")
+#         for data in dataset[i:i+20]:
+#             print(data)
+#             quit()

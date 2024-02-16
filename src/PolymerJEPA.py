@@ -52,14 +52,25 @@ class PolymerJEPA(nn.Module):
             self.target_encoder = getattr(gMHA_wrapper, gMHA_type)(
                 nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
             
-
-        # Predictor
-        self.target_predictor = MLP(
-            nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
-
+        # in g-jepa they say 2d hyperbolic should use linear predictor, g-jepa code does not use this though
+        self.target_predictor = nn.Linear(nhid, 2) # V2: Directly predict (depends on the definition of self.target_predictor)
         # Use this if you wish to do euclidean or poincaré embeddings in the latent space
         # self.target_predictor = MLP(
         #     nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
+
+        if self.regularization:
+            self.expander_dim = 512
+            self.context_expander = nn.Sequential(
+                nn.Linear(nhid, self.expander_dim),
+                nn.ReLU(),
+                nn.Linear(self.expander_dim, self.expander_dim)
+            )
+
+            self.target_expander = nn.Sequential(
+                nn.Linear(nhid, self.expander_dim),
+                nn.ReLU(),
+                nn.Linear(self.expander_dim, self.expander_dim)
+            )
 
     def forward(self, data):
         # x = self.input_encoder(data.x).squeeze() RISK?
@@ -177,6 +188,7 @@ class PolymerJEPA(nn.Module):
         )
 
 
+        # RISK in the original code these lines are put under the torch.grad but i dont think is necessary
         if hasattr(data, 'coarsen_adj'): # if we have a coarsen adj, we use it to encode the target subgraphs
             subgraph_incides = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs])
             patch_adj = data.coarsen_adj[
@@ -184,7 +196,6 @@ class PolymerJEPA(nn.Module):
                 subgraph_incides.unsqueeze(1),  # Row dimension
                 subgraph_incides.unsqueeze(2)   # Column dimension
             ]
-
             parameters = (target_x, patch_adj, None)
         else:
             parameters = (target_x, None, None)
@@ -193,30 +204,36 @@ class PolymerJEPA(nn.Module):
         # in case of EMA update to avoid collapse, the target forward step musn't store gradients, since the target encoder is optimized via EMA
             with torch.no_grad():
                 target_x = self.target_encoder(*parameters)
+                # Predict the coordinates of the patches in the Q1 hyperbola
+                # Remove this part if you wish to do euclidean or poincaré embeddings in the latent space
+                x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
+                y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
+                target_x = torch.cat([x_coord, y_coord], dim=-1)
         else:
             # in case of vicReg to avoid collapse we have regularization
             target_x = self.target_encoder(*parameters)
+            x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
+            y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
+            target_x = torch.cat([x_coord, y_coord], dim=-1)
 
-        # RISK in the original code these lines are put under the torch.grad but i dont think is necessary
-        # create a list of all embeddings
+
+        expanded_embeddings = torch.tensor([]) # save the embeddings for regularization
+        if self.regularization: 
+            expanded_context_x = self.context_expander(context_x)
+            expanded_target_x = self.target_expander(target_x)
+            expanded_embeddings = torch.vstack([expanded_context_x.reshape(-1, self.expander_dim), expanded_target_x.reshape(-1, self.expander_dim)])
+
         embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
-        # Predict the coordinates of the patches in the Q1 hyperbola
-        # Remove this part if you wish to do euclidean or poincaré embeddings in the latent space
-        x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
-        y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
-        target_x = torch.cat([x_coord, y_coord], dim=-1)
-
 
 
         # Make predictions using the target predictor: for each target subgraph, we use the context + the target PE
         target_prediction_embeddings = context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid)
         target_y = self.target_predictor(target_prediction_embeddings) # V1: Directly predict (depends on the definition of self.target_predictor)
         # return the predicted target (via context + PE) and the true target obtained via the target encoder.
-        return target_x, target_y, embeddings
+        return target_x, target_y, embeddings, expanded_embeddings
     
 
     def encode(self, data):
-
         x = data.x[data.subgraphs_nodes_mapper]
         node_weights = data.node_weight[data.subgraphs_nodes_mapper]
         edge_index = data.combined_subgraphs
@@ -226,8 +243,10 @@ class PolymerJEPA(nn.Module):
         pes = data.rw_pos_enc[data.subgraphs_nodes_mapper]
         patch_pes = scatter(pes, batch_x, dim=0, reduce='mean')
 
+        # encode all subgraphs separately
         x = self.wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights)
 
+        # pool the subgraph node embeddings to find the subgraph embeddings
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
         subgraph_x += self.patch_rw_encoder(patch_pes)
         

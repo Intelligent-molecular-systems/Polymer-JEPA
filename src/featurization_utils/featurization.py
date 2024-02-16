@@ -260,6 +260,10 @@ def poly_smiles_to_graph(poly_strings, **label_dicts):
     }
     # Add labels dynamically from label_dicts
     for label_name, label_values in label_dicts.items():
+        #if type is float64 convert to float32 # for training on mps on mac
+        if label_values.dtype == 'float64': 
+            label_values = label_values.astype('float32')
+            
         graph_data_kwargs[label_name] = label_values
 
     graph = Data(**graph_data_kwargs)

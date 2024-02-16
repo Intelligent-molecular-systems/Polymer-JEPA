@@ -2,6 +2,7 @@ import os
 import argparse
 from yacs.config import CfgNode as CN
 
+# This file was copied from graph-jepa, some of the defined options are not used in the code at the moment
 
 def set_cfg(cfg):
 

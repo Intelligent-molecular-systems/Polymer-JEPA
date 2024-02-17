@@ -41,7 +41,7 @@ class PolymerJEPA(nn.Module):
             self.patch_rw_encoder = MLP(self.patch_rw_dim, nhid, 1)
 
         # Input Encoder
-        self.wdmpnn = WDNodeMPNN(nfeat_node, nfeat_edge, out_dim=nhid)
+        self.wdmpnn = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=2, out_dim=nhid)
         
         self.context_encoder = getattr(gMHA_wrapper, 'Standard')(
             nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
@@ -200,10 +200,16 @@ class PolymerJEPA(nn.Module):
         else:
             parameters = (target_x, None, None)
 
+        
+        expanded_embeddings = torch.tensor([]) # save the embeddings for regularization
+
         if not self.regularization:
         # in case of EMA update to avoid collapse, the target forward step musn't store gradients, since the target encoder is optimized via EMA
             with torch.no_grad():
                 target_x = self.target_encoder(*parameters)
+                # save embeddings for visualization of embedding space
+                # embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
+
                 # Predict the coordinates of the patches in the Q1 hyperbola
                 # Remove this part if you wish to do euclidean or poincaré embeddings in the latent space
                 x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
@@ -212,25 +218,26 @@ class PolymerJEPA(nn.Module):
         else:
             # in case of vicReg to avoid collapse we have regularization
             target_x = self.target_encoder(*parameters)
+            # save embeddings for visualization of embedding space
+            # embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
+            
+            # Regularization
+            expanded_context_x = self.context_expander(context_x)
+            expanded_target_x = self.target_expander(target_x)
+            expanded_embeddings = torch.vstack([expanded_context_x.reshape(-1, self.expander_dim), expanded_target_x.reshape(-1, self.expander_dim)])
+            
+            # Predict the coordinates of the patches in the Q1 hyperbola
             x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
             y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
             target_x = torch.cat([x_coord, y_coord], dim=-1)
 
 
-        expanded_embeddings = torch.tensor([]) # save the embeddings for regularization
-        if self.regularization: 
-            expanded_context_x = self.context_expander(context_x)
-            expanded_target_x = self.target_expander(target_x)
-            expanded_embeddings = torch.vstack([expanded_context_x.reshape(-1, self.expander_dim), expanded_target_x.reshape(-1, self.expander_dim)])
-
-        embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
-
-
+        
         # Make predictions using the target predictor: for each target subgraph, we use the context + the target PE
         target_prediction_embeddings = context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid)
         target_y = self.target_predictor(target_prediction_embeddings) # V1: Directly predict (depends on the definition of self.target_predictor)
         # return the predicted target (via context + PE) and the true target obtained via the target encoder.
-        return target_x, target_y, embeddings, expanded_embeddings
+        return target_x, target_y, expanded_embeddings
     
 
     def encode(self, data):
@@ -261,8 +268,8 @@ class PolymerJEPA(nn.Module):
         ) # Don't attend to empty patches when doing the final encoding
         
         # Global Average Pooling
-        out = (mixer_x * data.mask.unsqueeze(-1)).sum(1) / data.mask.sum(1, keepdim=True)
-        return out
+        embeddings = (mixer_x * data.mask.unsqueeze(-1)).sum(1) / data.mask.sum(1, keepdim=True)
+        return embeddings
 
 
 

@@ -71,31 +71,35 @@ class PolymerJEPAv2(nn.Module):
 
     def forward(self, data):
         x = data.x[data.subgraphs_nodes_mapper]
+        # print('x:', x.shape)
         node_weights = data.node_weight[data.subgraphs_nodes_mapper]
+
         # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices
         edge_index = data.combined_subgraphs        
+        # print('edge_index:', edge_index.shape)
         # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
         edge_attr = data.edge_attr[data.subgraphs_edges_mapper]
         edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
         batch_x = data.subgraphs_batch # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1, ...]
-
+        # print('batch_x:', batch_x.shape)
         pes = data.rw_pos_enc[data.subgraphs_nodes_mapper]
         patch_pes = scatter(pes, batch_x, dim=0, reduce='max') 
-
+        # print('patch_pes:', patch_pes.shape)
         # initial encoder, encode all the subgraphs, then consider only the context subgraphs
         x = self.context_encoder(x, edge_index, edge_attr, edge_weights, node_weights)
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling) # batch_size*call_n_patches x nhid
-
+        # print('subgraph_x:', subgraph_x.shape)
 
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
         batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device) # [TODO]: adapt this to work with different ys
-
+        # print('batch_indexer:', batch_indexer)
         context_subgraph_idx = data.context_subgraph_idx + batch_indexer
         # print('context_subgraph_idx:', context_subgraph_idx)
         context_subgraphs_x = subgraph_x[context_subgraph_idx]
         context_pe = patch_pes[context_subgraph_idx] 
         context_subgraphs_x += self.patch_rw_encoder(context_pe)
         context_x = context_subgraphs_x.unsqueeze(1)  # batch_size x 1 x nhid
+        # print('context_x:', context_x.shape)
 
         # full graph nodes embedding (original full graph)
         parameters = (data.x, data.edge_index, data.edge_attr, data.edge_weight, data.node_weight)
@@ -118,19 +122,18 @@ class PolymerJEPAv2(nn.Module):
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
         # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
-
+        # print('target_subgraphs_idx:', target_subgraphs_idx)
         # Debug print n of nodes in the context and target subgraphs (already with the new index keeping the batch
         # indexer into account) they always match with the n of nodes
         # we can see in the plot from the original datat
         # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
         # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
 
-        # # Example for target subgraphs; adjust according to actual data structure
+        # Example for target subgraphs; adjust according to actual data structure
         # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
         # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
         # for graph in data.to_data_list():
         #     plot_from_transform_attributes(graph)
-
 
         # target subgraphs nodes embedding
         # Construct context and target PEs frome the node pes of each subgraph
@@ -145,7 +148,9 @@ class PolymerJEPAv2(nn.Module):
             expanded_target_x = self.target_expander(target_x)
             expanded_embeddings = torch.vstack([expanded_context_x.reshape(-1, self.expander_dim), expanded_target_x.reshape(-1, self.expander_dim)])
 
-        embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
+        
+        # embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
+
         x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
         y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
         target_x = torch.cat([x_coord, y_coord], dim=-1) # target_x shape: batch_size x num_target_patches x 2
@@ -160,7 +165,7 @@ class PolymerJEPAv2(nn.Module):
         # print('target_y:', target_y.shape)
         # target_y shape: batch_size x num_target_patches x 2
         # return the predicted target (via context + PE) and the true target obtained via the target encoder.
-        return target_x, target_y, embeddings, expanded_embeddings
+        return target_x, target_y, expanded_embeddings
 
 
     def encode(self, data):

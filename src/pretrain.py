@@ -90,7 +90,7 @@ def pretrain(pre_data, transform, cfg):
     # Pretraining
     for epoch in tqdm(range(cfg.pretrain.epochs), desc='Pretraining Epochs'):
         model.train()
-        trn_loss, embeddings = train(
+        trn_loss, visualize_info = train(
             pre_trn_loader, 
             model, 
             optimizer, 
@@ -125,14 +125,20 @@ def pretrain(pre_data, transform, cfg):
         print(f'Epoch: {epoch:03d}, Train Loss: {trn_loss:.5f}' f' Test Loss:{val_loss:.5f}')
 
         # check representation collapse at beginning and end of pretraining
-        if epoch == 0 or epoch == cfg.pretrain.epochs - 1:
+        if epoch == 0 or epoch == cfg.pretrain.epochs - 1 or epoch == cfg.pretrain.epochs//2:
             if cfg.finetuneDataset == 'aldeghi':
                 new_model_name = model_name + '_aldeghi'
             elif cfg.finetuneDataset == 'diblock':
                 new_model_name = model_name + '_diblock'
             else:  
                 raise ValueError('Invalid dataset name')
-            
-            checkRepresentationCollapse(embeddings=embeddings, model_name=new_model_name, epoch=epoch)
+                      
+            checkRepresentationCollapse(
+                embeddings=visualize_info[0], 
+                mon_A_type=visualize_info[1], 
+                stoichiometry=visualize_info[2],
+                model_name=new_model_name, 
+                epoch=epoch
+            )
     
     return model, model_name

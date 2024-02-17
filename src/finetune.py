@@ -153,3 +153,5 @@ def finetune(ft_data, transform, model, model_name, cfg):
                 )
             else:
                 raise ValueError('Invalid dataset name')
+    
+    return model

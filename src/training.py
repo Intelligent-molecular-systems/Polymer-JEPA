@@ -11,11 +11,16 @@ import torch.nn.functional as F
 def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1):
     total_loss = 0
     all_embeddings = torch.tensor([], device=device)
+    mon_A_type = torch.tensor([], device=device)
+    stoichiometry = []
     for data in train_loader:
         data = data.to(device)
         optimizer.zero_grad()
-        target_x, target_y, embeddings, expanded_embeddings = model(data)
-        all_embeddings = torch.cat((all_embeddings, embeddings))
+        target_x, target_y, expanded_embeddings = model(data)
+        embeddings = model.encode(data)
+        mon_A_type = torch.cat((mon_A_type, data.mon_A_type), dim=0)
+        all_embeddings = torch.cat((all_embeddings, embeddings), dim=0)
+        stoichiometry.extend(data.stoichiometry)
         # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
         if criterion_type == 0:
             criterion = torch.nn.SmoothL1Loss(beta=0.5) # https://pytorch.org/docs/stable/generated/torch.nn.SmoothL1Loss.html
@@ -50,7 +55,8 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     
     # RISK this is different from the original code where they use arrays, idk why
     avg_trn_loss = total_loss / len(train_loader)
-    return avg_trn_loss, all_embeddings
+    visualize_info = (all_embeddings, mon_A_type, stoichiometry)
+    return avg_trn_loss, visualize_info
 
 
 @ torch.no_grad()
@@ -59,7 +65,7 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
     for data in loader:
         data = data.to(device)
         model.eval()
-        target_x, target_y, _, expanded_embeddings = model(data)
+        target_x, target_y, expanded_embeddings = model(data)
 
         if criterion_type == 0:
             criterion = torch.nn.SmoothL1Loss(beta=0.5)
@@ -113,7 +119,7 @@ def vcReg(embeddings):
     return cov_loss, std_loss
 
 
-def checkRepresentationCollapse(embeddings, model_name='', epoch=999):
+def checkRepresentationCollapse(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999): 
     embeddings = embeddings.detach().cpu().numpy()
     means = np.mean(embeddings, axis=0)  # Mean across embedding dimensions
     stds = np.std(embeddings, axis=0)  # Standard deviation across embedding dimensions
@@ -121,32 +127,60 @@ def checkRepresentationCollapse(embeddings, model_name='', epoch=999):
     avg_std = np.mean(stds)  # Average variance of embeddings
     print(f'Average mean of embeddings: {avg_mean:.3f}, highest feat mean: {np.max(means):.3f}, lowest feat mean: {np.min(means):.3f}')
     print(f'Average std of embeddings: {avg_std:.3f}')
-    
+
+    # randomly sample 4000 embeddings for plotting so that its easier to visualize and faster to compute
+    if len(embeddings) > 4000:
+        indices = np.random.choice(len(embeddings), 2000, replace=False)
+        embeddings = embeddings[indices]
+        mon_A_type = mon_A_type[indices]
+        stoichiometry = np.array(stoichiometry)[indices]
+
+    # Dimensionality reduction
     pca = PCA(n_components=2)
     pca_results = pca.fit_transform(embeddings)
     tsne = TSNE(n_components=2, perplexity=40, n_iter=300)
     tsne_results = tsne.fit_transform(embeddings)
 
-    # Plotting
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    num_classes = 9
+    colors_monA = plt.cm.get_cmap('tab10', num_classes)
+    colors_stoch = plt.cm.get_cmap('viridis', 3)  # 3 stoichiometry classes
 
-    # PCA Plot
-    ax1.scatter(pca_results[:, 0], pca_results[:, 1])
-    ax1.set_xlabel('PCA Dimension 1')
-    ax1.set_ylabel('PCA Dimension 2')
-    ax1.set_title(f'PCA Visualization')
-
-    # t-SNE Plot
-    ax2.scatter(tsne_results[:, 0], tsne_results[:, 1])
-    ax2.set_xlabel('t-SNE Dimension 1')
-    ax2.set_ylabel('t-SNE Dimension 2')
-    ax2.set_title(f't-SNE Visualization')
-
-    fig.suptitle(f'Combined PCA and t-SNE - Avg Mean: {avg_mean:.3f} - Avg Std: {avg_std:.3f}')
     save_folder = f'Results/{model_name}'
     os.makedirs(save_folder, exist_ok=True)
-    plt.savefig(os.path.join(save_folder, f"Embedding_space_{epoch}.png"))
-    plt.close()
+
+    # Plot colored by mon_A_type
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    for i in range(num_classes):
+        indices = np.where(mon_A_type == i)
+        axes[0].scatter(pca_results[indices, 0], pca_results[indices, 1], color=colors_monA(i), label=f'Mon_A {i+1}')
+        axes[1].scatter(tsne_results[indices, 0], tsne_results[indices, 1], color=colors_monA(i), label=f'Mon_A {i+1}')
+    for ax in axes:
+        ax.set_xlabel('Dimension 1')
+        ax.set_ylabel('Dimension 2')
+        ax.legend()
+    axes[0].set_title('PCA Visualization')
+    axes[1].set_title('t-SNE Visualization')
+    fig.suptitle(f' PCA and t-SNE Embeddings Colored by Monomer A type - Avg Mean: {avg_mean:.3f} - Avg Std: {avg_std:.3f}')
+    plt.savefig(os.path.join(save_folder, f"Embedding_mon_A_{epoch}.png"))
+    plt.close(fig)
+    
+    stoichiometry = np.array(stoichiometry)
+    # Plot colored by stoichiometry classification
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    stoichiometries = ["1:1", "3:1", "1:3"]
+    for i, stoch in enumerate(stoichiometries):  # 3 stoichiometry classes
+        indices = np.where(stoichiometry == stoch)[0]
+        axes[0].scatter(pca_results[indices, 0], pca_results[indices, 1], color=colors_stoch(i), label=f'Stoich Class {stoch}')
+        axes[1].scatter(tsne_results[indices, 0], tsne_results[indices, 1], color=colors_stoch(i), label=f'Stoich Class {stoch}')
+    for ax in axes:
+        ax.set_xlabel('Dimension 1')
+        ax.set_ylabel('Dimension 2')
+        ax.legend()
+    axes[0].set_title('PCA Visualization')
+    axes[1].set_title('t-SNE Visualization')
+    fig.suptitle(f' PCA and t-SNE Embeddings Colored by Stoichiometry - Avg Mean: {avg_mean:.3f} - Avg Std: {avg_std:.3f}')
+    plt.savefig(os.path.join(save_folder, f"Embedding_stoichiometry_{epoch}.png"))
+    plt.close(fig)
 #plot
 
 # import networkx as nx

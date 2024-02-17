@@ -74,9 +74,32 @@ def run():
 
         if cfg.shouldFinetuneOnPretrainedModel:
             if not model_name: # it means we are not pretraining in the current run
-                model_name = 'biaqHvXK'
+                model_name = '68KEphLP'
+            # To print the model parameters after loading
+            # params_before = {name: param.clone() for name, param in model.named_parameters()}
+
             model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}.pt', map_location=cfg.device))
-            finetune(ft_data, transform, model, model_name, cfg)
+            # params_after = {name: param.clone() for name, param in model.named_parameters()}
+
+            # # Compare parameters
+            # for name, param_before in params_before.items():
+            #     param_after = params_after[name]
+            #     # Check if the same (using torch.equal to compare tensors)
+            #     if not torch.equal(param_before, param_after):
+            #         print(f"Parameter {name} has changed.")
+            #     else:
+            #         print(f"Parameter {name} remains the same.")
+
+            fine_tuned_model = finetune(ft_data, transform, model, model_name, cfg)
+            # params_after_finetune = {name: param for name, param in fine_tuned_model.named_parameters()}
+            # Compare parameters
+            # for name, param_after in params_after.items():
+            #     param_after_finetune = params_after_finetune[name]
+            #     # Check if the same (using torch.equal to compare tensors)
+            #     if not torch.equal(param_after, param_after_finetune):
+            #         print(f"Parameter {name} has changed.")
+            #     else:
+            #         print(f"Parameter {name} remains the same.")
         else:
             # in case we are not finetuning on a pretrained model
             random.seed(time.time())

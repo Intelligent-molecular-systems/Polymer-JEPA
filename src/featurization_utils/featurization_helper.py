@@ -257,7 +257,9 @@ def make_polymer_mol(smiles: str, keep_h: bool, add_h: bool, fragment_weights: l
     # of each atom, and merge fragments into a single molecule object
     mols = []
     monomer_idx = 0
-    for s, w in zip(smiles.split('.'), fragment_weights): # i.e. (*:1]c1cc(F)c([*:2])cc1F, 0.5)
+    for idx, (s, w) in enumerate(zip(smiles.split('.'), fragment_weights)): # i.e. (*:1]c1cc(F)c([*:2])cc1F, 0.5)
+        if idx == 0:
+            mon_A_type = get_mon_A_type(s)
         m = make_mol(s, keep_h, add_h) # creates rdkit mol object from smiles string
         for a in m.GetAtoms():
             a.SetDoubleProp('w_frag', float(w)) 
@@ -271,7 +273,7 @@ def make_polymer_mol(smiles: str, keep_h: bool, add_h: bool, fragment_weights: l
         m2 = mols.pop(0)
         mol = Chem.CombineMols(mol, m2) # use rdkit to combine the individual monomer rdkit mol objects into a single rdkit mol object, without adding bonds between them for now
 
-    return mol
+    return mol, mon_A_type
 
 
 def check_missing_bonds(m, cliques_edges_list):
@@ -303,3 +305,26 @@ def check_bonds_included_more_than_once(cliques_edges_list):
 
     return bonds_included_more_than_once
 # %%
+
+
+def get_mon_A_type(s):
+    if s == '[*:1]c1cc(F)c([*:2])cc1F':
+        return 0
+    elif s == '[*:1]c1cc2ccc3cc([*:2])cc4ccc(c1)c2c34':
+        return 1
+    elif s == '[*:1]c1ccc(-c2ccc([*:2])s2)s1':
+        return 2
+    elif s == '[*:1]c1ccc([*:2])cc1':
+        return 3
+    elif s == '[*:1]c1ccc2c(c1)[nH]c1cc([*:2])ccc12':
+        return 4
+    elif s == '[*:1]c1ccc([*:2])c2nsnc12':
+        return 5
+    elif s == '[*:1]c1ccc2c(c1)C(C)(C)c1cc([*:2])ccc1-2':
+        return 6
+    elif s == '[*:1]c1cc2cc3sc([*:2])cc3cc2s1':
+        return 7
+    elif s == '[*:1]c1ccc2c(c1)S(=O)(=O)c1cc([*:2])ccc1-2':
+        return 8
+    else:
+        raise ValueError(f'unknown monomer type {s}')

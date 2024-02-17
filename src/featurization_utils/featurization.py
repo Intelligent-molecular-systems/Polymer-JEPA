@@ -16,15 +16,17 @@ def poly_smiles_to_graph(poly_strings, **label_dicts):
     # [*:1]c1cc(F)c([*:2])cc1F.[*:3]c1c(O)cc(O)c([*:4])c1O|0.5|0.5|<1-2:0.375:0.375<1-1:0.375:0.375<2-2:0.375:0.375<3- 4:0.375:0.375<3-3:0.375:0.375<4-4:0.125:0.125<1-3:0.125:0.125<1-4:0.125:0.125<2-3:0.125:0.125<2- 4:0.125:0.125
     # Turn into RDKIT mol object
     # mol is a tuple of (RDKit Mol object, list of bonds weights rules)
-    mol = (
-        ft.make_polymer_mol(
+    molecule, mon_A_type = ft.make_polymer_mol(
             smiles=poly_strings.split("|")[0], # smiles -> [*:1]c1cc(F)c([*:2])cc1F.[*:3]c1c(O)cc(O)c([*:4])c1O
             keep_h=False, 
             add_h=False,  
             fragment_weights=poly_strings.split("|")[1:-1]  # fraction of each fragment -> [0.5, 0.5]
-        ), 
+        )
+    mol = (
+        molecule, 
         poly_strings.split("<")[1:] #poly_input.split("<")[1:] split the string at < and take everything after the first <, tells the weight of each bond
     ) 
+    
 
     # Set some variables needed later
     n_atoms = 0  # number of atoms
@@ -208,6 +210,17 @@ def poly_smiles_to_graph(poly_strings, **label_dicts):
     # associated atom weights we alread found
     node_weights = torch.FloatTensor(w_atoms)
 
+    stoichiometry = ''
+    if node_weights[0] == 0.25 and node_weights[-1] == 0.75:
+        stoichiometry = '1:3'
+    elif node_weights[0] == 0.75 and node_weights[-1] == 0.25:
+        stoichiometry = '3:1'
+    elif node_weights[0] == 0.5 and node_weights[-1] == 0.5:
+        stoichiometry = '1:1'
+    else: 
+        raise ValueError('Stoichiometry not recognized')
+
+
     # get edge_index and associated edge attribute and edge weight
     # edge index is of shape [2, num_edges],  edge_attribute of shape [num_edges, num_bond_features], edge_weights = [num_edges]
     edge_index = torch.empty(2, 0, dtype=torch.long)
@@ -248,6 +261,12 @@ def poly_smiles_to_graph(poly_strings, **label_dicts):
     # element at position i in x is the feature vector of atom i in the rdkit mol object, 
     # index i in the edge_index is the index of the atom in the rdkit mol object
         
+    # add attributes saying the chain architecture and stoichiometry
+    # alternating if edge_weights are 1s or if they are between different monomers and they are 0.5
+    # random if edge_weights are 0.5 and are between same monomer
+    # block if edge weights are either big or small like 0.8 and 0.2 or 0.9 and 0.1 or bigger
+
+    # stoichiometry can be seen from node_weights
     graph_data_kwargs = {
         "x": X, 
         "edge_index": edge_index, 
@@ -256,13 +275,16 @@ def poly_smiles_to_graph(poly_strings, **label_dicts):
         "edge_weight": edge_weights, 
         "intermonomers_bonds": intermonomers_bonds, 
         "motifs": (cliques, clique_edges),
-        "monomer_mask": monomer_mask
+        "monomer_mask": monomer_mask,
+        "mon_A_type": mon_A_type,
+        "stoichiometry": stoichiometry
     }
+
     # Add labels dynamically from label_dicts
     for label_name, label_values in label_dicts.items():
         #if type is float64 convert to float32 # for training on mps on mac
-        if label_values.dtype == 'float64': 
-            label_values = label_values.astype('float32')
+        # if label_values.dtype == 'float64': 
+        #     label_values = label_values.astype('float32')
             
         graph_data_kwargs[label_name] = label_values
 

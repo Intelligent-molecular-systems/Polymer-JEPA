@@ -60,6 +60,113 @@ def motifs2subgraphs(graph, n_patches, min_targets):
 
     return node_mask, edge_mask
 
+def metis_subgraph_gjepa(g, n_patches, drop_rate=0.0, num_hops=1, is_directed=False):
+    import torch
+    from torch_sparse import SparseTensor  # for propagation
+    import numpy as np
+    import metis
+    import torch_geometric
+    import networkx as nx
+    if is_directed:
+        if g.num_nodes < n_patches:
+            # assigns each node to its own partition
+            membership = torch.arange(g.num_nodes) # each node is assigned to its own partition
+        else:
+            # https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.to_networkx
+            G = torch_geometric.utils.to_networkx(g, to_undirected="lower") #  If set to "lower", the undirected graph will only correspond to the lower triangle of the input adjacency matrix.
+            cuts, membership = metis.part_graph(G, n_patches, recursive=True) #  n_patches= The target number of partitions. You might get fewer.
+            # i.e. membership[i] is the partition ID of node i
+    else:
+        if g.num_nodes < n_patches: # basically each node a different partition
+            # in this case membership is longer than g.num_nodes, but we only need the first g.num_nodes elements
+            membership = torch.randperm(n_patches) # torch.randperm(4) = tensor([2, 1, 0, 3])
+        else:
+            # data augmentation
+            # this is about dropping some edges in the grpah to ensure patches are different at each epoch
+            adjlist = g.edge_index.t()
+            arr = torch.rand(len(adjlist))
+            selected = arr > drop_rate
+            G = nx.Graph()
+            G.add_nodes_from(np.arange(g.num_nodes))
+            G.add_edges_from(adjlist[selected].tolist())
+            # metis partition
+            cuts, membership = metis.part_graph(G, n_patches, recursive=True)
+
+    assert len(membership) >= g.num_nodes 
+    # take only the first g.num_nodes elements and convert membership to tensor
+    membership = torch.tensor(np.array(membership[:g.num_nodes])) # i think this is useful in the randperm case above
+    max_patch_id = torch.max(membership)+1
+    # membership = tensor([0, 2, 1, 3]), max_patch_id = 4, n_patches = 32, membership+(n_patches-max_patch_id) = tensor([0, 2, 1, 3]) + 32-4 = tensor([28, 30, 29, 31])
+    # tensor([10, 19,  3, 30, 17,  1, 26, 16, 14, 15, 13, 21, 11, 28, 22, 24, 20,  2,
+    #      9,  6,  8, 23, 29, 27, 25])
+    old_membership = membership
+    membership = membership+(n_patches-max_patch_id)
+    # tensor([11, 20,  4, 31, 18,  2, 27, 17, 15, 16, 14, 22, 12, 29, 23, 25, 21,  3,
+    #     10,  7,  9, 24, 30, 28, 26])
+
+
+
+    # This stacks the list of tensors along a new dimension. The result is a 2D tensor, where each row 
+    # corresponds to a subgraph, and each column corresponds to a node. 
+    # The element at position (i, j) is True if node j belongs to subgraph i, and False otherwise.
+    # !!! the node mask has always n_patches rows !!!
+    node_mask = torch.stack([membership == i for i in range(n_patches)])
+    # in this case the node mask is a 32xN tensor, where N is the number of nodes in the graph
+    # in practice we have single node subgraphs in most of the instances, so each row in node_mask
+    # has all elements false but one of them which is true.
+    # each row of the tensor is a mask for a subgraph
+    # each column of the tensor is a node, and the element at position (i, j) is True if node j belongs to subgraph i, and False otherwise.
+    def k_hop_subgraph(edge_index, num_nodes, num_hops, is_directed=False):
+        # return k-hop subgraphs for all nodes in the graph
+        if is_directed:
+            row, col = edge_index
+            birow, bicol = torch.cat([row, col]), torch.cat([col, row])
+            edge_index = torch.stack([birow, bicol])
+        else:
+            row, col = edge_index
+        sparse_adj = SparseTensor(
+            row=row, col=col, sparse_sizes=(num_nodes, num_nodes))
+        # each one contains <= i hop masks
+        hop_masks = [torch.eye(num_nodes, dtype=torch.bool,
+                            device=edge_index.device)]
+        hop_indicator = row.new_full((num_nodes, num_nodes), -1)
+        hop_indicator[hop_masks[0]] = 0
+        for i in range(num_hops):
+            next_mask = sparse_adj.matmul(hop_masks[i].float()) > 0
+            hop_masks.append(next_mask)
+            hop_indicator[(hop_indicator == -1) & next_mask] = i+1
+        hop_indicator = hop_indicator.T  # N x N
+        node_mask = (hop_indicator >= 0)  # N x N dense mask matrix
+        return node_mask
+
+    if num_hops > 0:
+        subgraphs_batch, subgraphs_node_mapper = node_mask.nonzero().T
+        k_hop_node_mask = k_hop_subgraph(
+            g.edge_index, g.num_nodes, num_hops, is_directed)
+        node_mask.index_add_(0, subgraphs_batch,
+                                k_hop_node_mask[subgraphs_node_mapper])
+        
+    # After this one hop expansion, each row in node_mask has multiple elements set to True
+        
+        
+    torch.set_printoptions(threshold=10_000)
+
+    # print(node_mask)
+    # quit(0)
+    # DIFFERENTLY from my code, most of the rows have some elements set to True, its only when there s a shift
+    # that the first n rows that were shifted will be false
+
+    # so eventually this code works like mine, only thign is that i have more empty subgraphs
+
+    # if not torch.equal(membership, old_membership):
+    #     print(old_membership)
+    #     print(membership)
+    #     print(node_mask)
+    #     quit(0)
+
+    edge_mask = node_mask[:, g.edge_index[0]] & node_mask[:, g.edge_index[1]]
+    return node_mask, edge_mask
+
 
 def metis2subgraphs(graph, n_patches, min_targets):
     G = to_networkx(graph, to_undirected=True)

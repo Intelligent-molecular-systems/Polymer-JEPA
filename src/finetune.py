@@ -3,6 +3,7 @@ import numpy as np
 import random
 from src.config import cfg
 from src.infer_and_visualize import visualize_aldeghi_results, visualize_diblock_results
+from src.training import visualeEmbeddingSpace
 import torch
 import torch.nn as nn
 from torch_geometric.loader import DataLoader
@@ -51,20 +52,32 @@ def finetune(ft_data, transform, model, model_name, cfg):
         nn.Linear(300, out_dim)
     ).to(cfg.device)
     
-    optimizer = torch.optim.Adam(list(model.parameters()) + list(predictor.parameters()), lr=cfg.finetune.lr, weight_decay=cfg.finetune.wd)
+    if cfg.frozenWeights:
+        print(f'Finetuning while freezing the weights of the model {model_name}')
+        optimizer = torch.optim.Adam(predictor.parameters(), lr=cfg.finetune.lr, weight_decay=cfg.finetune.wd)
+    else:
+        print(f'End-to-End finetuning for model {model_name}')
+        optimizer = torch.optim.Adam(list(model.parameters()) + list(predictor.parameters()), lr=cfg.finetune.lr, weight_decay=cfg.finetune.wd)
         
 
-    print(f"Finetuning model {model_name}")
 
     for epoch in tqdm(range(cfg.finetune.epochs), desc='Finetuning Epochs'):
-        model.train()
+        model.train() if not cfg.frozenWeights else model.eval()
         predictor.train()
         trn_loss = 0
+
+        all_embeddings = torch.tensor([], device=cfg.device)
+        mon_A_type = torch.tensor([], device=cfg.device)
+        stoichiometry = []
 
         for data in ft_trn_loader:
             data = data.to(cfg.device)
             optimizer.zero_grad()
             graph_embeddings = model.encode(data)
+            if cfg.finetuneDataset == 'aldeghi':
+                mon_A_type = torch.cat((mon_A_type, data.mon_A_type.detach()), dim=0)
+                all_embeddings = torch.cat((all_embeddings, graph_embeddings), dim=0)
+                stoichiometry.extend(data.stoichiometry)
             y_pred_trn = predictor(graph_embeddings).squeeze()
             if cfg.finetuneDataset == 'aldeghi':
                 train_loss = criterion(y_pred_trn, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
@@ -134,7 +147,9 @@ def finetune(ft_data, transform, model, model_name, cfg):
                     label = 'ip'
                 else:
                     raise ValueError('Invalid property type')
-            
+
+                visualeEmbeddingSpace(all_embeddings, mon_A_type, stoichiometry, model_name, epoch, isFineTuning=True)
+
                 visualize_aldeghi_results(
                     np.array(all_y_pred_val), 
                     np.array(all_true_val), 
@@ -142,6 +157,7 @@ def finetune(ft_data, transform, model, model_name, cfg):
                     save_folder=f'Results/{model_name}_aldeghi',
                     epoch=epoch
                 )
+                
 
             elif cfg.finetuneDataset == 'diblock':
                 visualize_diblock_results(

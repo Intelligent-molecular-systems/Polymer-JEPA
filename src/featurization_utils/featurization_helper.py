@@ -237,7 +237,7 @@ def make_mol(s: str, keep_h: bool, add_h: bool):
     return mol
 
 
-def make_polymer_mol(smiles: str, keep_h: bool, add_h: bool, fragment_weights: list):
+def make_polymer_mol(smiles: str, keep_h: bool, add_h: bool, fragment_weights: list, isAldeghiDataset=True):
     """
     Builds an RDKit molecule from a SMILES string.
 
@@ -257,8 +257,9 @@ def make_polymer_mol(smiles: str, keep_h: bool, add_h: bool, fragment_weights: l
     # of each atom, and merge fragments into a single molecule object
     mols = []
     monomer_idx = 0
+    mon_A_type = None
     for idx, (s, w) in enumerate(zip(smiles.split('.'), fragment_weights)): # i.e. (*:1]c1cc(F)c([*:2])cc1F, 0.5)
-        if idx == 0:
+        if isAldeghiDataset and idx == 0:
             mon_A_type = get_mon_A_type(s)
         m = make_mol(s, keep_h, add_h) # creates rdkit mol object from smiles string
         for a in m.GetAtoms():

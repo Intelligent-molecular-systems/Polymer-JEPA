@@ -3,7 +3,7 @@ import random
 import string
 from src.PolymerJEPA import PolymerJEPA
 from src.PolymerJEPAv2 import PolymerJEPAv2
-from src.training import train, test, checkRepresentationCollapse
+from src.training import train, test, visualeEmbeddingSpace
 import time
 import torch
 from torch_geometric.loader import DataLoader
@@ -125,7 +125,7 @@ def pretrain(pre_data, transform, cfg):
         print(f'Epoch: {epoch:03d}, Train Loss: {trn_loss:.5f}' f' Test Loss:{val_loss:.5f}')
 
         # check representation collapse at beginning and end of pretraining
-        if epoch == 0 or epoch == cfg.pretrain.epochs - 1 or epoch == cfg.pretrain.epochs//2:
+        if epoch == 0 or epoch == cfg.pretrain.epochs - 1 or epoch % 5 == 0:
             if cfg.finetuneDataset == 'aldeghi':
                 new_model_name = model_name + '_aldeghi'
             elif cfg.finetuneDataset == 'diblock':
@@ -133,7 +133,7 @@ def pretrain(pre_data, transform, cfg):
             else:  
                 raise ValueError('Invalid dataset name')
                       
-            checkRepresentationCollapse(
+            visualeEmbeddingSpace(
                 embeddings=visualize_info[0], 
                 mon_A_type=visualize_info[1], 
                 stoichiometry=visualize_info[2],

@@ -13,14 +13,15 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     all_embeddings = torch.tensor([], device=device)
     mon_A_type = torch.tensor([], device=device)
     stoichiometry = []
-    for data in train_loader:
+    for i, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
         target_x, target_y, expanded_embeddings = model(data)
-        embeddings = model.encode(data)
-        mon_A_type = torch.cat((mon_A_type, data.mon_A_type), dim=0)
-        all_embeddings = torch.cat((all_embeddings, embeddings), dim=0)
-        stoichiometry.extend(data.stoichiometry)
+        if i % 5 == 0: # around 6k if training on 35/40k
+            embeddings = model.encode(data).detach()
+            mon_A_type = torch.cat((mon_A_type, data.mon_A_type.detach()), dim=0)
+            all_embeddings = torch.cat((all_embeddings, embeddings), dim=0)
+            stoichiometry.extend(data.stoichiometry)
         # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
         if criterion_type == 0:
             criterion = torch.nn.SmoothL1Loss(beta=0.5) # https://pytorch.org/docs/stable/generated/torch.nn.SmoothL1Loss.html
@@ -119,8 +120,12 @@ def vcReg(embeddings):
     return cov_loss, std_loss
 
 
-def checkRepresentationCollapse(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999): 
-    embeddings = embeddings.detach().cpu().numpy()
+def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999, isFineTuning=False): 
+    # print(len(stoichiometry))
+    if isFineTuning:
+         embeddings = embeddings.detach().cpu().numpy()
+    else:
+        embeddings = embeddings.cpu().numpy()
     means = np.mean(embeddings, axis=0)  # Mean across embedding dimensions
     stds = np.std(embeddings, axis=0)  # Standard deviation across embedding dimensions
     avg_mean = np.mean(means)  # Average mean of embeddings
@@ -129,7 +134,7 @@ def checkRepresentationCollapse(embeddings, mon_A_type, stoichiometry, model_nam
     print(f'Average std of embeddings: {avg_std:.3f}')
 
     # randomly sample 4000 embeddings for plotting so that its easier to visualize and faster to compute
-    if len(embeddings) > 4000:
+    if len(embeddings) > 6000:
         indices = np.random.choice(len(embeddings), 2000, replace=False)
         embeddings = embeddings[indices]
         mon_A_type = mon_A_type[indices]
@@ -161,7 +166,11 @@ def checkRepresentationCollapse(embeddings, mon_A_type, stoichiometry, model_nam
     axes[0].set_title('PCA Visualization')
     axes[1].set_title('t-SNE Visualization')
     fig.suptitle(f' PCA and t-SNE Embeddings Colored by Monomer A type - Avg Mean: {avg_mean:.3f} - Avg Std: {avg_std:.3f}')
-    plt.savefig(os.path.join(save_folder, f"Embedding_mon_A_{epoch}.png"))
+    if isFineTuning:
+        filename = f"Embedding_mon_A_{epoch}_FT.png" 
+    else:
+        filename = f"Embedding_mon_A_{epoch}.png"
+    plt.savefig(os.path.join(save_folder, filename))
     plt.close(fig)
     
     stoichiometry = np.array(stoichiometry)
@@ -170,8 +179,8 @@ def checkRepresentationCollapse(embeddings, mon_A_type, stoichiometry, model_nam
     stoichiometries = ["1:1", "3:1", "1:3"]
     for i, stoch in enumerate(stoichiometries):  # 3 stoichiometry classes
         indices = np.where(stoichiometry == stoch)[0]
-        axes[0].scatter(pca_results[indices, 0], pca_results[indices, 1], color=colors_stoch(i), label=f'Stoich Class {stoch}')
-        axes[1].scatter(tsne_results[indices, 0], tsne_results[indices, 1], color=colors_stoch(i), label=f'Stoich Class {stoch}')
+        axes[0].scatter(pca_results[indices, 0], pca_results[indices, 1], color=colors_stoch(i), label=f'Stoichiometry {stoch}')
+        axes[1].scatter(tsne_results[indices, 0], tsne_results[indices, 1], color=colors_stoch(i), label=f'Stoichiometry {stoch}')
     for ax in axes:
         ax.set_xlabel('Dimension 1')
         ax.set_ylabel('Dimension 2')
@@ -179,7 +188,11 @@ def checkRepresentationCollapse(embeddings, mon_A_type, stoichiometry, model_nam
     axes[0].set_title('PCA Visualization')
     axes[1].set_title('t-SNE Visualization')
     fig.suptitle(f' PCA and t-SNE Embeddings Colored by Stoichiometry - Avg Mean: {avg_mean:.3f} - Avg Std: {avg_std:.3f}')
-    plt.savefig(os.path.join(save_folder, f"Embedding_stoichiometry_{epoch}.png"))
+    if isFineTuning:
+        filename = f"Embedding_stoichiometry_{epoch}_FT.png" 
+    else:
+        filename = f"Embedding_stoichiometry_{epoch}.png"
+    plt.savefig(os.path.join(save_folder, filename))
     plt.close(fig)
 #plot
 

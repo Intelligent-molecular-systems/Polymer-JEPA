@@ -30,6 +30,7 @@ def run():
         random.seed(12345)
         graphs = random.sample(graphs, len(graphs))
         ft_data = graphs
+        # ft_data = graphs[:int(0.07*len(graphs))]
     else:
         raise ValueError('Invalid dataset name')
 

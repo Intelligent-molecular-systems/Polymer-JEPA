@@ -8,7 +8,7 @@ import torch
 from torch_geometric.data import Data
 
 # %% Make featurization function
-def poly_smiles_to_graph(poly_strings, **label_dicts):
+def poly_smiles_to_graph(poly_strings, isAldeghiDataset=True, **label_dicts):
     '''
     Turns adjusted polymer smiles string into PyG data objects
     '''
@@ -20,7 +20,8 @@ def poly_smiles_to_graph(poly_strings, **label_dicts):
             smiles=poly_strings.split("|")[0], # smiles -> [*:1]c1cc(F)c([*:2])cc1F.[*:3]c1c(O)cc(O)c([*:4])c1O
             keep_h=False, 
             add_h=False,  
-            fragment_weights=poly_strings.split("|")[1:-1]  # fraction of each fragment -> [0.5, 0.5]
+            fragment_weights=poly_strings.split("|")[1:-1],
+            isAldeghiDataset=isAldeghiDataset  # fraction of each fragment -> [0.5, 0.5]
         )
     mol = (
         molecule, 
@@ -210,15 +211,16 @@ def poly_smiles_to_graph(poly_strings, **label_dicts):
     # associated atom weights we alread found
     node_weights = torch.FloatTensor(w_atoms)
 
-    stoichiometry = ''
-    if node_weights[0] == 0.25 and node_weights[-1] == 0.75:
-        stoichiometry = '1:3'
-    elif node_weights[0] == 0.75 and node_weights[-1] == 0.25:
-        stoichiometry = '3:1'
-    elif node_weights[0] == 0.5 and node_weights[-1] == 0.5:
-        stoichiometry = '1:1'
-    else: 
-        raise ValueError('Stoichiometry not recognized')
+    if isAldeghiDataset:
+        stoichiometry = ''
+        if node_weights[0] == 0.25 and node_weights[-1] == 0.75:
+            stoichiometry = '1:3'
+        elif node_weights[0] == 0.75 and node_weights[-1] == 0.25:
+            stoichiometry = '3:1'
+        elif node_weights[0] == 0.5 and node_weights[-1] == 0.5:
+            stoichiometry = '1:1'
+        else: 
+            raise ValueError('Stoichiometry not recognized')
 
 
     # get edge_index and associated edge attribute and edge weight
@@ -266,7 +268,6 @@ def poly_smiles_to_graph(poly_strings, **label_dicts):
     # random if edge_weights are 0.5 and are between same monomer
     # block if edge weights are either big or small like 0.8 and 0.2 or 0.9 and 0.1 or bigger
 
-    # stoichiometry can be seen from node_weights
     graph_data_kwargs = {
         "x": X, 
         "edge_index": edge_index, 
@@ -276,9 +277,11 @@ def poly_smiles_to_graph(poly_strings, **label_dicts):
         "intermonomers_bonds": intermonomers_bonds, 
         "motifs": (cliques, clique_edges),
         "monomer_mask": monomer_mask,
-        "mon_A_type": mon_A_type,
-        "stoichiometry": stoichiometry
     }
+
+    if isAldeghiDataset:
+        graph_data_kwargs["mon_A_type"] = mon_A_type
+        graph_data_kwargs["stoichiometry"] = stoichiometry
 
     # Add labels dynamically from label_dicts
     for label_name, label_values in label_dicts.items():

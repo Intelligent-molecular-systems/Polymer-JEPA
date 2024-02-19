@@ -46,6 +46,7 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
                 # given the input polymer string, this function returns a pyg data object
                 graph = poly_smiles_to_graph(
                     poly_strings=poly_strings, 
+                    isAldeghiDataset=True,
                     y_EA=ea_values, 
                     y_IP=ip_values
                 ) 
@@ -62,6 +63,7 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
                 # given the input polymer string, this function returns a pyg data object
                 graph = poly_smiles_to_graph(
                     poly_strings=poly_strings, 
+                    isAldeghiDataset=False,
                     y_lamellar=lamellar_values, 
                     y_cylinder=cylinder_values,
                     y_sphere=sphere_values, 
@@ -95,6 +97,8 @@ def create_data(cfg):
     
     graphs = get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/aldeghi_graphs_list.pt', dataset='aldeghi')
     dataset = MyDataset(root='Data/aldeghi', data_list=graphs, pre_transform=pre_transform)
+    # graphs = get_graphs(file_csv='Data/diblock_copolymer_dataset.csv', file_graphs_list='Data/diblock_graphs_list.pt', dataset='diblock')
+    # dataset = MyDataset(root='Data/diblock', data_list=graphs, pre_transform=pre_transform)
 
     return dataset, transform
 

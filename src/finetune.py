@@ -2,8 +2,7 @@ import os
 import numpy as np
 import random
 from src.config import cfg
-from src.infer_and_visualize import visualize_aldeghi_results, visualize_diblock_results
-from src.training import visualeEmbeddingSpace
+from src.visualize import visualize_aldeghi_results, visualize_diblock_results, visualeEmbeddingSpace
 import torch
 import torch.nn as nn
 from torch_geometric.loader import DataLoader

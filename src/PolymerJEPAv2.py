@@ -38,11 +38,14 @@ class PolymerJEPAv2(nn.Module):
         # Context and Target Encoders are both WDNodeMPNN
         # TODO: for now i must keep the context and target models equal for EMA update, with vicReg (no weight sharing case obviously) i can change this
         # i think n_message_passing_layers could be lower for context encoder
-        self.context_encoder = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=3, out_dim=nhid)
+        self.context_encoder = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=3)
+        self.contextLinearTransform = nn.Linear(300, nhid)
         if should_share_weights:
             self.target_encoder = self.context_encoder
+            self.targetLinearTransform = self.contextLinearTransform
         else:
-            self.target_encoder = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=3, out_dim=nhid)
+            self.target_encoder = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=3)
+            self.targetLinearTransform = nn.Linear(300, nhid)
         
         # Predictor MLP for the target subgraphs
         # according to g-jepa when using hyperbolic space, the target predictor should be a linear layer
@@ -50,7 +53,7 @@ class PolymerJEPAv2(nn.Module):
         self.target_predictor = nn.Linear(nhid, 2) # V2: Directly predict (depends on the definition of self.target_predictor)
         # Use this if you wish to do euclidean or poincaré embeddings in the latent space
         # self.target_predictor = MLP(
-        #     nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
+        #     nhid, 2, nlayer=2, with_final_activation=False, with_norm=False)
         
         # as suggested in JEPA original paper, we apply vicReg not directly on embeddings, but on the expanded embeddings
         # The role of the expander is twofold: (1) eliminate the information by which the two representations differ, (2) expand the dimension in a non-linear fashion so that decorrelating the embedding variables will reduce the dependencies (not just the correlations) between the variables of the representation vector.
@@ -70,8 +73,10 @@ class PolymerJEPAv2(nn.Module):
         
 
     def forward(self, data):
+        # print('x:', data.x.shape)
         x = data.x[data.subgraphs_nodes_mapper]
         # print('x:', x.shape)
+        # quit()
         node_weights = data.node_weight[data.subgraphs_nodes_mapper]
 
         # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices
@@ -87,6 +92,7 @@ class PolymerJEPAv2(nn.Module):
         # print('patch_pes:', patch_pes.shape)
         # initial encoder, encode all the subgraphs, then consider only the context subgraphs
         x = self.context_encoder(x, edge_index, edge_attr, edge_weights, node_weights)
+        x = self.contextLinearTransform(x)
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling) # batch_size*call_n_patches x nhid
         # print('subgraph_x:', subgraph_x.shape)
 
@@ -109,9 +115,11 @@ class PolymerJEPAv2(nn.Module):
             with torch.no_grad():
                 # work on the original full graph
                 full_graph_nodes_embedding = self.target_encoder(*parameters)
+                full_graph_nodes_embedding = self.targetLinearTransform(full_graph_nodes_embedding)
         else:
             # in case of vicReg to avoid collapse we have regularization
             full_graph_nodes_embedding = self.target_encoder(*parameters)
+            full_graph_nodes_embedding = self.targetLinearTransform(full_graph_nodes_embedding)
 
         # map it as we do for x at the beginning
         full_graph_nodes_embedding = full_graph_nodes_embedding[data.subgraphs_nodes_mapper]
@@ -122,14 +130,35 @@ class PolymerJEPAv2(nn.Module):
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
         # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
+
+        # from collections import Counter
+
+        # # Step 1: Count the occurrences of each node in the mapper
+        # node_occurrences = Counter(data.subgraphs_nodes_mapper.tolist())
+
+        # # Step 2: Identify nodes that are repeated (appear more than once)
+        # repeated_nodes = {node: count for node, count in node_occurrences.items() if count > 1}
+
+        # print("Repeated Nodes and their counts:", repeated_nodes)
+
+        # node_to_subgraphs = {node: [] for node in repeated_nodes.keys()}
+        # for idx, node in enumerate(data.subgraphs_nodes_mapper.tolist()):
+        #     if node in node_to_subgraphs:
+        #         subgraph_idx = data.subgraphs_batch[idx].item()
+        #         node_to_subgraphs[node].append(subgraph_idx)
+        # i = 0
+        # for node, subgraphs in node_to_subgraphs.items():
+        #     if i < 4:
+        #         print(f"Node {node} belongs to subgraphs: {subgraphs}")
+        #     i += 1
         # print('target_subgraphs_idx:', target_subgraphs_idx)
-        # Debug print n of nodes in the context and target subgraphs (already with the new index keeping the batch
-        # indexer into account) they always match with the n of nodes
-        # we can see in the plot from the original datat
+        # # Debug print n of nodes in the context and target subgraphs (already with the new index keeping the batch
+        # # indexer into account) they always match with the n of nodes
+        # # we can see in the plot from the original datat
         # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
         # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
 
-        # Example for target subgraphs; adjust according to actual data structure
+        # # Example for target subgraphs; adjust according to actual data structure
         # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
         # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
         # for graph in data.to_data_list():

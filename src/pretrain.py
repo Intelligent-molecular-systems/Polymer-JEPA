@@ -3,7 +3,8 @@ import random
 import string
 from src.PolymerJEPA import PolymerJEPA
 from src.PolymerJEPAv2 import PolymerJEPAv2
-from src.training import train, test, visualeEmbeddingSpace
+from src.training import train, test
+from src.visualize import visualeEmbeddingSpace, visualize_hyperbolic_space
 import time
 import torch
 from torch_geometric.loader import DataLoader
@@ -90,7 +91,7 @@ def pretrain(pre_data, transform, cfg):
     # Pretraining
     for epoch in tqdm(range(cfg.pretrain.epochs), desc='Pretraining Epochs'):
         model.train()
-        trn_loss, visualize_info = train(
+        trn_loss, visualize_embedding_data, visualize_hyperbola_data = train(
             pre_trn_loader, 
             model, 
             optimizer, 
@@ -134,11 +135,16 @@ def pretrain(pre_data, transform, cfg):
                 raise ValueError('Invalid dataset name')
                       
             visualeEmbeddingSpace(
-                embeddings=visualize_info[0], 
-                mon_A_type=visualize_info[1], 
-                stoichiometry=visualize_info[2],
+                embeddings=visualize_embedding_data[0], 
+                mon_A_type=visualize_embedding_data[1], 
+                stoichiometry=visualize_embedding_data[2],
                 model_name=new_model_name, 
                 epoch=epoch
+            )
+
+            visualize_hyperbolic_space(
+                target_x=visualize_hyperbola_data[0], 
+                target_y=visualize_hyperbola_data[1]
             )
     
     return model, model_name

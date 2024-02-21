@@ -15,4 +15,5 @@ runs
 *.png
 *.pdf
 *.ipynb
+*.html
 .DS_Store

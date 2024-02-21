@@ -63,11 +63,11 @@ def set_cfg(cfg):
     # this should be used only when using the vicReg objective, where sharing weights is beneficial
     cfg.pretrain.shouldShareWeights = True
     # weights from the original paper (that works in the image domain though)
-    cfg.pretrain.inv_weight = 30
-    cfg.pretrain.var_weight = 20
-    cfg.pretrain.cov_weight = 1
+    cfg.pretrain.inv_weight = 150
+    cfg.pretrain.var_weight = 1
+    cfg.pretrain.cov_weight = 2
     # which percentage of the full dataset should be used to pretrain
-    cfg.pretrain.pretrainPercentage = 0.97
+    cfg.pretrain.pretrainPercentage = 0.98
 
     
     cfg.finetune = CN()
@@ -75,7 +75,7 @@ def set_cfg(cfg):
     cfg.finetune.property = 'ip'
     cfg.finetune.epochs = 100
     # Base learning rate
-    cfg.finetune.lr = 0.001
+    cfg.finetune.lr = 0.0005
     # L2 regularization, weight decay
     cfg.finetune.wd = 0.
     # Total graph mini-batch size
@@ -88,7 +88,7 @@ def set_cfg(cfg):
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
     cfg.model.gMHA_type = 'Hadamard' # Hadamard is the default one for all datsets (yaml files) in original code
     # Hidden size of the model
-    cfg.model.hidden_size = 64 # make it a power of 2 if using the default model with transformer attention heads
+    cfg.model.hidden_size = 128 # make it a power of 2 if using the default model with transformer attention heads
     # Number of mlp mixer layers
     cfg.model.nlayer_mlpmixer = 2
     # Pooling type for generaating graph/subgraph embedding from node embeddings
@@ -115,7 +115,7 @@ def set_cfg(cfg):
     # The number of partitions (upper bound) RISK in case of more subgraphs this would break
     cfg.subgraphing.n_patches = 20
     # 0 = motif, 1 = metis, 2 = random walk
-    cfg.subgraphing.type = 0
+    cfg.subgraphing.type = 2
 
     # ------------------------------------------------------------------------ #
     # JEPA options
@@ -128,6 +128,10 @@ def set_cfg(cfg):
     cfg.jepa.num_targets = 4
     # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 0
+
+
+    cfg.metis = CN()
+    cfg.metis.drop_rate = 0.3
 
     return cfg
 

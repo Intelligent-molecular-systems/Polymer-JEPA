@@ -1,22 +1,35 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
 from src.model_utils.hyperbolic_dist import hyperbolic_dist
 import torch
 import torch.nn.functional as F
 
 
 def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1):
+    # check target and context parameters are the same (weight sharing)
+    # for param_q, param_k in zip(model.context_encoder.parameters(), model.target_encoder.parameters()):
+    #     if not torch.equal(param_q, param_k):
+    #         print(f"context and target are not same.")
+    #     else:
+    #         print(f"context == target !!")
+
     total_loss = 0
     all_embeddings = torch.tensor([], device=device)
     mon_A_type = torch.tensor([], device=device)
     stoichiometry = []
+    inv_losses = []
+    cov_losses = []
+    var_losses = []
+    target_x_saved = None
+    target_y_saved = None
     for i, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
         target_x, target_y, expanded_embeddings = model(data)
+        if i == 0:
+            target_x_saved = target_x
+            target_y_saved = target_y
         if i % 5 == 0: # around 6k if training on 35/40k
             embeddings = model.encode(data).detach()
             mon_A_type = torch.cat((mon_A_type, data.mon_A_type.detach()), dim=0)
@@ -35,13 +48,14 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             exit()
 
         if regularization:
-            cov_loss, var_loss = vcReg(expanded_embeddings)
-            inv_weight = inv_weight
-            var_weight = var_weight
-            cov_weight = cov_weight
-        
+            cov_loss, var_loss = vcReg(expanded_embeddings)  
+            inv_losses.append(loss.item())
+            cov_losses.append(cov_loss.item())
+            var_losses.append(var_loss.item())  
+            
             # vicReg objective
             loss = inv_weight * loss + var_weight * var_loss + cov_weight * cov_loss
+            
 
         total_loss += loss.item()        
         # Update weights of the network 
@@ -56,8 +70,16 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     
     # RISK this is different from the original code where they use arrays, idk why
     avg_trn_loss = total_loss / len(train_loader)
-    visualize_info = (all_embeddings, mon_A_type, stoichiometry)
-    return avg_trn_loss, visualize_info
+    if regularization:
+        avg_inv_loss = np.mean(inv_losses)
+        avg_cov_loss = np.mean(cov_losses)
+        avg_var_loss = np.mean(var_losses)
+        print(f'Average Inverse Loss: {avg_inv_loss:.5f}, Average Covariance Loss: {avg_cov_loss:.5f}, Average Variance Loss: {avg_var_loss:.5f}')        
+        print(f'weighted values: inv_loss: {inv_weight*avg_inv_loss:.5f}, cov_loss: {cov_weight*avg_cov_loss:.5f}, var_loss: {var_weight*avg_var_loss:.5f}')
+
+    visualize_embedding_data = (all_embeddings, mon_A_type, stoichiometry)
+    visualize_hyperbola_data = (target_x_saved, target_y_saved)
+    return avg_trn_loss, visualize_embedding_data, visualize_hyperbola_data
 
 
 @ torch.no_grad()
@@ -118,83 +140,6 @@ def vcReg(embeddings):
     std_loss = torch.mean(F.relu(1 - std_devs))
     
     return cov_loss, std_loss
-
-
-def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999, isFineTuning=False): 
-    # print(len(stoichiometry))
-    if isFineTuning:
-         embeddings = embeddings.detach().cpu().numpy()
-    else:
-        embeddings = embeddings.cpu().numpy()
-    means = np.mean(embeddings, axis=0)  # Mean across embedding dimensions
-    stds = np.std(embeddings, axis=0)  # Standard deviation across embedding dimensions
-    avg_mean = np.mean(means)  # Average mean of embeddings
-    avg_std = np.mean(stds)  # Average variance of embeddings
-    print(f'Average mean of embeddings: {avg_mean:.3f}, highest feat mean: {np.max(means):.3f}, lowest feat mean: {np.min(means):.3f}')
-    print(f'Average std of embeddings: {avg_std:.3f}')
-
-    # randomly sample 4000 embeddings for plotting so that its easier to visualize and faster to compute
-    if len(embeddings) > 6000:
-        indices = np.random.choice(len(embeddings), 2000, replace=False)
-        embeddings = embeddings[indices]
-        mon_A_type = mon_A_type[indices]
-        stoichiometry = np.array(stoichiometry)[indices]
-
-    # Dimensionality reduction
-    pca = PCA(n_components=2)
-    pca_results = pca.fit_transform(embeddings)
-    tsne = TSNE(n_components=2, perplexity=40, n_iter=300)
-    tsne_results = tsne.fit_transform(embeddings)
-
-    num_classes = 9
-    colors_monA = plt.cm.get_cmap('tab10', num_classes)
-    colors_stoch = plt.cm.get_cmap('viridis', 3)  # 3 stoichiometry classes
-
-    save_folder = f'Results/{model_name}'
-    os.makedirs(save_folder, exist_ok=True)
-
-    # Plot colored by mon_A_type
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-    for i in range(num_classes):
-        indices = np.where(mon_A_type == i)
-        axes[0].scatter(pca_results[indices, 0], pca_results[indices, 1], color=colors_monA(i), label=f'Mon_A {i+1}')
-        axes[1].scatter(tsne_results[indices, 0], tsne_results[indices, 1], color=colors_monA(i), label=f'Mon_A {i+1}')
-    for ax in axes:
-        ax.set_xlabel('Dimension 1')
-        ax.set_ylabel('Dimension 2')
-        ax.legend()
-    axes[0].set_title('PCA Visualization')
-    axes[1].set_title('t-SNE Visualization')
-    fig.suptitle(f' PCA and t-SNE Embeddings Colored by Monomer A type - Avg Mean: {avg_mean:.3f} - Avg Std: {avg_std:.3f}')
-    if isFineTuning:
-        filename = f"Embedding_mon_A_{epoch}_FT.png" 
-    else:
-        filename = f"Embedding_mon_A_{epoch}.png"
-    plt.savefig(os.path.join(save_folder, filename))
-    plt.close(fig)
-    
-    stoichiometry = np.array(stoichiometry)
-    # Plot colored by stoichiometry classification
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-    stoichiometries = ["1:1", "3:1", "1:3"]
-    for i, stoch in enumerate(stoichiometries):  # 3 stoichiometry classes
-        indices = np.where(stoichiometry == stoch)[0]
-        axes[0].scatter(pca_results[indices, 0], pca_results[indices, 1], color=colors_stoch(i), label=f'Stoichiometry {stoch}')
-        axes[1].scatter(tsne_results[indices, 0], tsne_results[indices, 1], color=colors_stoch(i), label=f'Stoichiometry {stoch}')
-    for ax in axes:
-        ax.set_xlabel('Dimension 1')
-        ax.set_ylabel('Dimension 2')
-        ax.legend()
-    axes[0].set_title('PCA Visualization')
-    axes[1].set_title('t-SNE Visualization')
-    fig.suptitle(f' PCA and t-SNE Embeddings Colored by Stoichiometry - Avg Mean: {avg_mean:.3f} - Avg Std: {avg_std:.3f}')
-    if isFineTuning:
-        filename = f"Embedding_stoichiometry_{epoch}_FT.png" 
-    else:
-        filename = f"Embedding_stoichiometry_{epoch}.png"
-    plt.savefig(os.path.join(save_folder, filename))
-    plt.close(fig)
-#plot
 
 # import networkx as nx
         # graph = data[0]

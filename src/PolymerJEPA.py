@@ -3,7 +3,7 @@ import numpy as np
 from src.model_utils.elements import MLP
 import src.model_utils.gMHA_wrapper as gMHA_wrapper
 from src.model_utils.gnn import GNN
-from src.WDNodeMPNN import WDNodeMPNN
+from src.WDNodeMPNNLayer import WDNodeMPNNLayer
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,7 +14,7 @@ class PolymerJEPA(nn.Module):
     def __init__(self,
                  nfeat_node, 
                  nfeat_edge,
-                 nhid, 
+                 nhid,
                  nlayer_mlpmixer,
                  gMHA_type='MLPMixer',
                  rw_dim=0,
@@ -22,8 +22,10 @@ class PolymerJEPA(nn.Module):
                  pooling='mean',
                  patch_rw_dim=0,
                  num_target_patches=4,
-                 should_share_weights = False,
-                 regularization = False
+                 should_share_weights=False,
+                 regularization=False,
+                 nlayer_gnn=3,
+                 n_hid_wdmpnn=300
         ):
 
         super().__init__()
@@ -41,7 +43,18 @@ class PolymerJEPA(nn.Module):
             self.patch_rw_encoder = MLP(self.patch_rw_dim, nhid, 1)
 
         # Input Encoder
-        self.wdmpnn = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=2, out_dim=nhid)
+        # self.wdmpnn = WDNodeMPNN(nfeat_node, nfeat_edge)
+
+        self.wdmpnns = nn.ModuleList()
+        self.wdmpnns.append(WDNodeMPNNLayer(nfeat_node, nfeat_edge, hidden_dim=n_hid_wdmpnn, isFirstLayer=True))
+        for _ in range(nlayer_gnn-2):
+            self.wdmpnns.append(WDNodeMPNNLayer(nfeat_node, nfeat_edge, hidden_dim=n_hid_wdmpnn))
+        self.wdmpnns.append(WDNodeMPNNLayer(nfeat_node, nfeat_edge, hidden_dim=n_hid_wdmpnn, isLastLayer=True))
+
+        self.U = nn.ModuleList(
+            [MLP(n_hid_wdmpnn, n_hid_wdmpnn, nlayer=1, with_final_activation=True) for _ in range(nlayer_gnn-1)])
+        
+        self.linTranform = nn.Linear(n_hid_wdmpnn, nhid)
         
         self.context_encoder = getattr(gMHA_wrapper, 'Standard')(
             nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
@@ -99,13 +112,25 @@ class PolymerJEPA(nn.Module):
         # the pos encoding for each patch, is the max between each patch node PE
         patch_pes = scatter(pes, batch_x, dim=0, reduce='max') 
 
-        # initial encoder
-        # gnn is working on the combined graph (graph of disconnected subgraphs)
-        x = self.wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights)
-        
+        for i, wdmpnn in enumerate(self.wdmpnns):
+            if i > 0:
+                subgraph = scatter(x, batch_x, dim=0,
+                                   reduce=self.pooling)[batch_x]
+                
+                x = x + self.U[i-1](subgraph)
+                x = scatter(x, data.subgraphs_nodes_mapper,
+                            dim=0, reduce='mean')[data.subgraphs_nodes_mapper]
+            if i == 0: 
+                x, h0 = wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights)
+            else:
+                x, _ = wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights, h0)
+            # linear transformation to the desired hidden size at last layer
+            if i == len(self.wdmpnns)-1:
+                x = self.linTranform(x)
+               
         # this is the final operation (pooling) to obtain an embedding for each subgraph/patch from the subgraph nodes embeddings
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
-
+        
 
         ######################## Graph-JEPA ########################
         # Create the correct indexer for each subgraph given the batching procedure
@@ -250,8 +275,26 @@ class PolymerJEPA(nn.Module):
         pes = data.rw_pos_enc[data.subgraphs_nodes_mapper]
         patch_pes = scatter(pes, batch_x, dim=0, reduce='mean')
 
-        # encode all subgraphs separately
-        x = self.wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights)
+        for i, wdmpnn in enumerate(self.wdmpnns):
+            if i > 0:
+                subgraph = scatter(x, batch_x, dim=0,
+                                   reduce=self.pooling)[batch_x]
+                
+                x = x + self.U[i-1](subgraph)
+                x = scatter(x, data.subgraphs_nodes_mapper,
+                            dim=0, reduce='mean')[data.subgraphs_nodes_mapper]
+                
+            if i == 0: 
+                x, h0 = wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights)
+            else:
+                x, _ = wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights, h0)
+
+            # linear transformation to the desired hidden size at last layer
+            if i == len(self.wdmpnns)-1:
+                x = self.linTranform(x)
+               
+        # this is the final operation (pooling) to obtain an embedding for each subgraph/patch from the subgraph nodes embeddings
+        # subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
 
         # pool the subgraph node embeddings to find the subgraph embeddings
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)

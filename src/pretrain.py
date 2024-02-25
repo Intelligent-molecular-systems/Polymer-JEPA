@@ -1,21 +1,18 @@
 import os
 import random
 import string
-from src.PolymerJEPA import PolymerJEPA
+# from PolymerJEPA_old import PolymerJEPA
 from src.PolymerJEPAv2 import PolymerJEPAv2
+from src.PolymerJEPA import PolymerJEPA
 from src.training import train, test
-from src.visualize import visualeEmbeddingSpace, visualize_hyperbolic_space
+from src.visualize import visualeEmbeddingSpace, visualize_loss_space
 import time
 import torch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-def pretrain(pre_data, transform, cfg):
+def pretrain(pre_trn_data, pre_val_data, transform, cfg):
     # 70-20-10 split for pretraining - validation - test data
-    pre_trn_data = pre_data[:int(0.9*len(pre_data))].copy()
-    pre_val_data = pre_data[int(0.9*len(pre_data)):].copy()
-    # pre_tst_data = pre_data[int(0.9*len(pre_data)):].copy()
-
     print(f'Pretraining training on: {len(pre_trn_data)} graphs')
     print(f'Pretraining validation on: {len(pre_val_data)} graphs')
 
@@ -28,8 +25,8 @@ def pretrain(pre_data, transform, cfg):
     pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.pretrain.batch_size, shuffle=True)
     pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.pretrain.batch_size, shuffle=False)
 
-    num_node_features = pre_data.data_list[0].num_node_features
-    num_edge_features = pre_data.data_list[0].num_edge_features
+    num_node_features = pre_trn_data.data_list[0].num_node_features
+    num_edge_features = pre_trn_data.data_list[0].num_edge_features
 
     if cfg.modelVersion == 'v1':
         model = PolymerJEPA(
@@ -44,7 +41,9 @@ def pretrain(pre_data, transform, cfg):
             patch_rw_dim=cfg.pos_enc.patch_rw_dim,
             num_target_patches=cfg.jepa.num_targets,
             should_share_weights=cfg.pretrain.shouldShareWeights,
-            regularization = cfg.pretrain.regularization
+            regularization = cfg.pretrain.regularization,
+            n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
+            shouldUse2dHyperbola=cfg.jepa.dist == 0
         ).to(cfg.device)
 
     elif cfg.modelVersion == 'v2':
@@ -57,7 +56,9 @@ def pretrain(pre_data, transform, cfg):
             patch_rw_dim=cfg.pos_enc.patch_rw_dim,
             num_target_patches=cfg.jepa.num_targets,
             should_share_weights=cfg.pretrain.shouldShareWeights,
-            regularization = cfg.pretrain.regularization
+            regularization = cfg.pretrain.regularization,
+            n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
+            shouldUse2dHyperbola=cfg.jepa.dist == 0
         ).to(cfg.device)
 
     else:
@@ -91,7 +92,7 @@ def pretrain(pre_data, transform, cfg):
     # Pretraining
     for epoch in tqdm(range(cfg.pretrain.epochs), desc='Pretraining Epochs'):
         model.train()
-        trn_loss, visualize_embedding_data, visualize_hyperbola_data = train(
+        trn_loss, embedding_data, loss_data = train(
             pre_trn_loader, 
             model, 
             optimizer, 
@@ -125,7 +126,6 @@ def pretrain(pre_data, transform, cfg):
 
         print(f'Epoch: {epoch:03d}, Train Loss: {trn_loss:.5f}' f' Test Loss:{val_loss:.5f}')
 
-        # check representation collapse at beginning and end of pretraining
         if epoch == 0 or epoch == cfg.pretrain.epochs - 1 or epoch % 5 == 0:
             if cfg.finetuneDataset == 'aldeghi':
                 new_model_name = model_name + '_aldeghi'
@@ -135,16 +135,20 @@ def pretrain(pre_data, transform, cfg):
                 raise ValueError('Invalid dataset name')
                       
             visualeEmbeddingSpace(
-                embeddings=visualize_embedding_data[0], 
-                mon_A_type=visualize_embedding_data[1], 
-                stoichiometry=visualize_embedding_data[2],
+                embeddings=embedding_data[0], 
+                mon_A_type=embedding_data[1], 
+                stoichiometry=embedding_data[2],
                 model_name=new_model_name, 
                 epoch=epoch
             )
 
-            visualize_hyperbolic_space(
-                target_x=visualize_hyperbola_data[0], 
-                target_y=visualize_hyperbola_data[1]
+            visualize_loss_space(
+                target_x=loss_data[0], 
+                target_y=loss_data[1],
+                model_name=model_name, 
+                epoch=epoch,
+                loss_type=cfg.jepa.dist,
+                hidden_size=cfg.model.hidden_size
             )
     
     return model, model_name

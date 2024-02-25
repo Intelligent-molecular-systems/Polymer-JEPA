@@ -60,113 +60,6 @@ def motifs2subgraphs(graph, n_patches, min_targets):
 
     return node_mask, edge_mask
 
-def metis_subgraph_gjepa(g, n_patches, drop_rate=0.0, num_hops=1, is_directed=False):
-    import torch
-    from torch_sparse import SparseTensor  # for propagation
-    import numpy as np
-    import metis
-    import torch_geometric
-    import networkx as nx
-    if is_directed:
-        if g.num_nodes < n_patches:
-            # assigns each node to its own partition
-            membership = torch.arange(g.num_nodes) # each node is assigned to its own partition
-        else:
-            # https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.to_networkx
-            G = torch_geometric.utils.to_networkx(g, to_undirected="lower") #  If set to "lower", the undirected graph will only correspond to the lower triangle of the input adjacency matrix.
-            cuts, membership = metis.part_graph(G, n_patches, recursive=True) #  n_patches= The target number of partitions. You might get fewer.
-            # i.e. membership[i] is the partition ID of node i
-    else:
-        if g.num_nodes < n_patches: # basically each node a different partition
-            # in this case membership is longer than g.num_nodes, but we only need the first g.num_nodes elements
-            membership = torch.randperm(n_patches) # torch.randperm(4) = tensor([2, 1, 0, 3])
-        else:
-            # data augmentation
-            # this is about dropping some edges in the grpah to ensure patches are different at each epoch
-            adjlist = g.edge_index.t()
-            arr = torch.rand(len(adjlist))
-            selected = arr > drop_rate
-            G = nx.Graph()
-            G.add_nodes_from(np.arange(g.num_nodes))
-            G.add_edges_from(adjlist[selected].tolist())
-            # metis partition
-            cuts, membership = metis.part_graph(G, n_patches, recursive=True)
-
-    assert len(membership) >= g.num_nodes 
-    # take only the first g.num_nodes elements and convert membership to tensor
-    membership = torch.tensor(np.array(membership[:g.num_nodes])) # i think this is useful in the randperm case above
-    max_patch_id = torch.max(membership)+1
-    # membership = tensor([0, 2, 1, 3]), max_patch_id = 4, n_patches = 32, membership+(n_patches-max_patch_id) = tensor([0, 2, 1, 3]) + 32-4 = tensor([28, 30, 29, 31])
-    # tensor([10, 19,  3, 30, 17,  1, 26, 16, 14, 15, 13, 21, 11, 28, 22, 24, 20,  2,
-    #      9,  6,  8, 23, 29, 27, 25])
-    old_membership = membership
-    membership = membership+(n_patches-max_patch_id)
-    # tensor([11, 20,  4, 31, 18,  2, 27, 17, 15, 16, 14, 22, 12, 29, 23, 25, 21,  3,
-    #     10,  7,  9, 24, 30, 28, 26])
-
-
-
-    # This stacks the list of tensors along a new dimension. The result is a 2D tensor, where each row 
-    # corresponds to a subgraph, and each column corresponds to a node. 
-    # The element at position (i, j) is True if node j belongs to subgraph i, and False otherwise.
-    # !!! the node mask has always n_patches rows !!!
-    node_mask = torch.stack([membership == i for i in range(n_patches)])
-    # in this case the node mask is a 32xN tensor, where N is the number of nodes in the graph
-    # in practice we have single node subgraphs in most of the instances, so each row in node_mask
-    # has all elements false but one of them which is true.
-    # each row of the tensor is a mask for a subgraph
-    # each column of the tensor is a node, and the element at position (i, j) is True if node j belongs to subgraph i, and False otherwise.
-    def k_hop_subgraph(edge_index, num_nodes, num_hops, is_directed=False):
-        # return k-hop subgraphs for all nodes in the graph
-        if is_directed:
-            row, col = edge_index
-            birow, bicol = torch.cat([row, col]), torch.cat([col, row])
-            edge_index = torch.stack([birow, bicol])
-        else:
-            row, col = edge_index
-        sparse_adj = SparseTensor(
-            row=row, col=col, sparse_sizes=(num_nodes, num_nodes))
-        # each one contains <= i hop masks
-        hop_masks = [torch.eye(num_nodes, dtype=torch.bool,
-                            device=edge_index.device)]
-        hop_indicator = row.new_full((num_nodes, num_nodes), -1)
-        hop_indicator[hop_masks[0]] = 0
-        for i in range(num_hops):
-            next_mask = sparse_adj.matmul(hop_masks[i].float()) > 0
-            hop_masks.append(next_mask)
-            hop_indicator[(hop_indicator == -1) & next_mask] = i+1
-        hop_indicator = hop_indicator.T  # N x N
-        node_mask = (hop_indicator >= 0)  # N x N dense mask matrix
-        return node_mask
-
-    if num_hops > 0:
-        subgraphs_batch, subgraphs_node_mapper = node_mask.nonzero().T
-        k_hop_node_mask = k_hop_subgraph(
-            g.edge_index, g.num_nodes, num_hops, is_directed)
-        node_mask.index_add_(0, subgraphs_batch,
-                                k_hop_node_mask[subgraphs_node_mapper])
-        
-    # After this one hop expansion, each row in node_mask has multiple elements set to True
-        
-        
-    torch.set_printoptions(threshold=10_000)
-
-    # print(node_mask)
-    # quit(0)
-    # DIFFERENTLY from my code, most of the rows have some elements set to True, its only when there s a shift
-    # that the first n rows that were shifted will be false
-
-    # so eventually this code works like mine, only thign is that i have more empty subgraphs
-
-    # if not torch.equal(membership, old_membership):
-    #     print(old_membership)
-    #     print(membership)
-    #     print(node_mask)
-    #     quit(0)
-
-    edge_mask = node_mask[:, g.edge_index[0]] & node_mask[:, g.edge_index[1]]
-    return node_mask, edge_mask
-
 
 def metis2subgraphs(graph, n_patches, min_targets):
     G = to_networkx(graph, to_undirected=True)
@@ -375,9 +268,142 @@ def randomWalks2subgraphs(graph, n_patches, min_targets):
 
     node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, total_nodes, n_patches)
     return node_mask, edge_mask
+
+
+def newImprovedSubgraphing(graph, n_patches, min_targets): 
+    # Function to perform a single random walk step from a given node
+    def random_walk_step(fullGraph, current_node, exclude_nodes):
+            neighbors = list(set(fullGraph.neighbors(current_node)) - exclude_nodes)
+            return random.choice(neighbors) if neighbors else None
+    
+    # Function to perform a random walk from a given node
+    def random_walk_from_node(fullGraph, start_node, exclude_nodes, total_nodes, size=0.2):
+        walk = [start_node]
+        while len(walk) / total_nodes < size:
+            next_node = random_walk_step(fullGraph=fullGraph, current_node=walk[-1], exclude_nodes=exclude_nodes)
+            if next_node:
+                walk.append(next_node)
+            else:
+                break
+        return walk
+    
+    # reqs:
+    # 1. use random walks
+    # 2. context subgraph should include elements from both monomers
+    # 3. every edge of the original graph should be in at least one subgraph (i.e. no edge loss)
+    # 4. the context subgraph should be around 50% of the original graph size
+    # 5. the target subgraphs should be around 20% of the original graph size  
+    G = to_networkx(graph, to_undirected=True)
+    total_nodes = len(graph.monomer_mask)
+
+    # Initialize context and target subgraphs
+    context_nodes = set()  # Now using a set for all context nodes
+    all_possible_target_subgraphs = []  # Will remain as a list of sets
+
+    # 1. Start with intermonomer bonds
+    for bond in graph.intermonomers_bonds:
+        # Add both nodes of the bond to the context
+        context_nodes.update(bond)
+    
+    # take a random node from context and expand it by one hop
+    # this is to avoid edge loss and at the same time to avoid too much overlap or little diversity between the subgraphs
+    random_context_node = random.choice(list(context_nodes))
+    context_nodes.update(expand_one_hop(G, {random_context_node}))
+
+    # context_nodes = expand_one_hop(G, context_nodes)
+
+    exclude_nodes = set(context_nodes)
+    # remaining_nodes = list(set(G.nodes()) - exclude_nodes)
+    # 2. Perform random walks to generate new subgraphs, excluding nodes already in context
+    while len(exclude_nodes) <= total_nodes:
+        remaining_nodes = list(set(G.nodes()) - exclude_nodes)
+        if not remaining_nodes:
+            break
+        start_node = random.choice(remaining_nodes)
+        rw_subgraph = random_walk_from_node(fullGraph=G, start_node=start_node, exclude_nodes=exclude_nodes, total_nodes=total_nodes, size=0.02)
+        rw_expanded = expand_one_hop(G, rw_subgraph)
+        exclude_nodes.update(rw_expanded)
+        all_possible_target_subgraphs.append(rw_expanded)
+    
+    # all_subgraphs = [context_nodes] + target_subgraphs
+    # plot_subgraphs(G, all_subgraphs)
+
+    # pick randomly 4 target subgraphs, put the nodes in the remaining subgraphs not selected as targets, inside the context
+    if len(all_possible_target_subgraphs) < min_targets:
+        # print("tooLittleTargets")
+        remaining_nodes = list(set(G.nodes()) - context_nodes)
+        random.shuffle(remaining_nodes)
+        for _ in range(min_targets - len(all_possible_target_subgraphs)):
+            node = remaining_nodes.pop()
+            target_subgraph = expand_one_hop(G, {node})
+            all_possible_target_subgraphs.append(target_subgraph)
+
+    random.shuffle(all_possible_target_subgraphs)
+
+    selected_target_subgraphs = all_possible_target_subgraphs[:min_targets]
+
+    # # THIS IS NEEDED TO ENSURE THE CONTEXT HAS ENOUGH ELEMENTS FROM BOTH MONOMERS
+    # make sure that selected_target_subgraphs contain elemetns from both monomers
+    monomer1nodes = {node for node, monomer in enumerate(graph.monomer_mask) if monomer == 0}
+    monomer2nodes = {node for node, monomer in enumerate(graph.monomer_mask) if monomer == 1}
+    flagMonomer1 = False
+    flagMonomer2 = False 
+    for subgraph in selected_target_subgraphs:
+        if subgraph.intersection(monomer1nodes):
+            flagMonomer1 = True
+        if subgraph.intersection(monomer2nodes):
+            flagMonomer2 = True
+    
+    if not flagMonomer1:
+        # remove the first subgraph and add a random one till we have a subgraph that contains nodes from both monomers
+        temp = selected_target_subgraphs.pop(0)
+        while not flagMonomer1:
+            random_idx = random.choice(range(len(all_possible_target_subgraphs[min_targets:])))
+            random_subgraph = all_possible_target_subgraphs[min_targets:][random_idx]
+            if random_subgraph.intersection(monomer1nodes):
+                selected_target_subgraphs.append(random_subgraph)
+                all_possible_target_subgraphs[0] = random_subgraph
+                all_possible_target_subgraphs[random_idx + min_targets] = temp
+                flagMonomer1 = True
+    
+    if not flagMonomer2:
+        # remove the first subgraph and add a random one till we have a subgraph that contains nodes from both monomers
+        temp = selected_target_subgraphs.pop(0)
+        while not flagMonomer2:
+            random_idx = random.choice(range(len(all_possible_target_subgraphs[min_targets:])))
+            random_subgraph = all_possible_target_subgraphs[min_targets:][random_idx]
+            if random_subgraph.intersection(monomer2nodes):
+                selected_target_subgraphs.append(random_subgraph)
+                all_possible_target_subgraphs[0] = random_subgraph
+                all_possible_target_subgraphs[random_idx + min_targets] = temp
+                flagMonomer2 = True
+
+
+    # find a list of all nodes in selected_target_subgraphs
+    target_subgraphs_nodes = set()
+    for subgraph in selected_target_subgraphs:
+        target_subgraphs_nodes.update(subgraph)
+
+    # add the nodes of the remaining subgraphs to the context
+    for subgraph in all_possible_target_subgraphs[min_targets:]:
+        for node in subgraph:
+            if node not in target_subgraphs_nodes:
+                context_nodes.add(node)
+        
+    
+    # Continue with your processing, such as creating masks or other operations based on context and targets
+    context_subgraph = list(context_nodes)
+    all_possible_target_subgraphs = [list(subgraph) for subgraph in all_possible_target_subgraphs]
+
+    # subgraphs = [context_subgraph] + all_possible_target_subgraphs
+    # plot_subgraphs(G, subgraphs)
+
+    node_mask, edge_mask = create_masks(graph, context_subgraph, all_possible_target_subgraphs, total_nodes, n_patches)
+    return node_mask, edge_mask
+    
     
 
-def create_masks(graph, context_subgraph, target_subgraphs, n_of_nodes, n_patches):
+def create_masks(graph, context_subgraph, target_subgraphs, n_of_nodes, n_patches):#
     # create always a fixed number of patches, the non existing patches will have all the nodes masked
     node_mask = torch.zeros((n_patches, n_of_nodes), dtype=torch.bool)
     # actual subgraphs 
@@ -435,6 +461,7 @@ def expand_one_hop(fullG, subgraph_nodes):
         expanded_nodes.update(fullG.neighbors(node))
     return expanded_nodes
 
+
 # # if target subgraphs is smaller than min_targets, add random subgraphs to reach the minimum
     # if len(unique_target_rws) < min_targets:
     #     #print("tooLittleTargets")
@@ -447,3 +474,147 @@ def expand_one_hop(fullG, subgraph_nodes):
     #         # check if subgraph is not already in the target subgraphs
     #         if new_subgraph not in unique_target_rws:
     #             unique_target_rws.append(new_subgraph)
+
+
+
+
+
+# def motifs2subgraphs_gjepa(graph, n_patches, min_targets):
+#     cliques, intermonomers_bonds, monomer_mask = graph.motifs[0], graph.intermonomers_bonds, graph.monomer_mask
+#     # [TODO]: Check requirements (size of context and size of targets, etc.)
+
+#     # randomly pick one intermonomer bond
+#     # 
+
+#     # if target subgraphs is smaller than min_targets, add random subgraphs to reach the minimum
+#     if len(cliques) < min_targets:
+#         # available nodes are all nodes that are not in the context subgraph
+#         available_nodes = set(range(len(monomer_mask))) - set(cliques)
+#         if not available_nodes:
+#             available_nodes = set(range(len(monomer_mask)))
+        
+#         G = to_networkx(graph, to_undirected=True)
+#         while len(cliques) < min_targets: # RISK infinite loop, but it should not happen
+#             # pick a random node from the available nodes
+#             random_node = random.choice(list(available_nodes))
+#             # expand the node by one hop
+#             new_subgraph = [random_node]
+#             new_subgraph = expand_one_hop(G, new_subgraph)
+#             # check if subgraph is not already in the target subgraphs
+#             if new_subgraph not in cliques:
+#                 cliques.append(list(new_subgraph))
+    
+
+#     # Plotting
+#     #convert to nx graphs
+#     # G = to_networkx(graph, to_undirected=True)
+#     #all_subgraphs = [context_subgraph] + target_subgraphs
+#     # plot_subgraphs(G, all_subgraphs)
+    
+#     node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, len(monomer_mask), n_patches)
+
+#     return node_mask, edge_mask
+
+# def metis_subgraph_gjepa(g, n_patches, drop_rate=0.0, num_hops=1, is_directed=False):
+#     import torch
+#     from torch_sparse import SparseTensor  # for propagation
+#     import numpy as np
+#     import metis
+#     import torch_geometric
+#     import networkx as nx
+#     if is_directed:
+#         if g.num_nodes < n_patches:
+#             # assigns each node to its own partition
+#             membership = torch.arange(g.num_nodes) # each node is assigned to its own partition
+#         else:
+#             # https://pytorch-geometric.readthedocs.io/en/latest/modules/utils.html#torch_geometric.utils.to_networkx
+#             G = torch_geometric.utils.to_networkx(g, to_undirected="lower") #  If set to "lower", the undirected graph will only correspond to the lower triangle of the input adjacency matrix.
+#             cuts, membership = metis.part_graph(G, n_patches, recursive=True) #  n_patches= The target number of partitions. You might get fewer.
+#             # i.e. membership[i] is the partition ID of node i
+#     else:
+#         if g.num_nodes < n_patches: # basically each node a different partition
+#             # in this case membership is longer than g.num_nodes, but we only need the first g.num_nodes elements
+#             membership = torch.randperm(n_patches) # torch.randperm(4) = tensor([2, 1, 0, 3])
+#         else:
+#             # data augmentation
+#             # this is about dropping some edges in the grpah to ensure patches are different at each epoch
+#             adjlist = g.edge_index.t()
+#             arr = torch.rand(len(adjlist))
+#             selected = arr > drop_rate
+#             G = nx.Graph()
+#             G.add_nodes_from(np.arange(g.num_nodes))
+#             G.add_edges_from(adjlist[selected].tolist())
+#             # metis partition
+#             cuts, membership = metis.part_graph(G, n_patches, recursive=True)
+
+#     assert len(membership) >= g.num_nodes 
+#     # take only the first g.num_nodes elements and convert membership to tensor
+#     membership = torch.tensor(np.array(membership[:g.num_nodes])) # i think this is useful in the randperm case above
+#     max_patch_id = torch.max(membership)+1
+#     # membership = tensor([0, 2, 1, 3]), max_patch_id = 4, n_patches = 32, membership+(n_patches-max_patch_id) = tensor([0, 2, 1, 3]) + 32-4 = tensor([28, 30, 29, 31])
+#     # tensor([10, 19,  3, 30, 17,  1, 26, 16, 14, 15, 13, 21, 11, 28, 22, 24, 20,  2,
+#     #      9,  6,  8, 23, 29, 27, 25])
+#     old_membership = membership
+#     membership = membership+(n_patches-max_patch_id)
+#     # tensor([11, 20,  4, 31, 18,  2, 27, 17, 15, 16, 14, 22, 12, 29, 23, 25, 21,  3,
+#     #     10,  7,  9, 24, 30, 28, 26])
+    # # This stacks the list of tensors along a new dimension. The result is a 2D tensor, where each row 
+    # # corresponds to a subgraph, and each column corresponds to a node. 
+    # # The element at position (i, j) is True if node j belongs to subgraph i, and False otherwise.
+    # # !!! the node mask has always n_patches rows !!!
+    # node_mask = torch.stack([membership == i for i in range(n_patches)])
+    # # in this case the node mask is a 32xN tensor, where N is the number of nodes in the graph
+    # # in practice we have single node subgraphs in most of the instances, so each row in node_mask
+    # # has all elements false but one of them which is true.
+    # # each row of the tensor is a mask for a subgraph
+    # # each column of the tensor is a node, and the element at position (i, j) is True if node j belongs to subgraph i, and False otherwise.
+    # def k_hop_subgraph(edge_index, num_nodes, num_hops, is_directed=False):
+    #     # return k-hop subgraphs for all nodes in the graph
+    #     if is_directed:
+    #         row, col = edge_index
+    #         birow, bicol = torch.cat([row, col]), torch.cat([col, row])
+    #         edge_index = torch.stack([birow, bicol])
+    #     else:
+    #         row, col = edge_index
+    #     sparse_adj = SparseTensor(
+    #         row=row, col=col, sparse_sizes=(num_nodes, num_nodes))
+    #     # each one contains <= i hop masks
+    #     hop_masks = [torch.eye(num_nodes, dtype=torch.bool,
+    #                         device=edge_index.device)]
+    #     hop_indicator = row.new_full((num_nodes, num_nodes), -1)
+    #     hop_indicator[hop_masks[0]] = 0
+    #     for i in range(num_hops):
+    #         next_mask = sparse_adj.matmul(hop_masks[i].float()) > 0
+    #         hop_masks.append(next_mask)
+    #         hop_indicator[(hop_indicator == -1) & next_mask] = i+1
+    #     hop_indicator = hop_indicator.T  # N x N
+    #     node_mask = (hop_indicator >= 0)  # N x N dense mask matrix
+    #     return node_mask
+
+    # if num_hops > 0:
+    #     subgraphs_batch, subgraphs_node_mapper = node_mask.nonzero().T
+    #     k_hop_node_mask = k_hop_subgraph(
+    #         g.edge_index, g.num_nodes, num_hops, is_directed)
+    #     node_mask.index_add_(0, subgraphs_batch,
+    #                             k_hop_node_mask[subgraphs_node_mapper])
+        
+    # # After this one hop expansion, each row in node_mask has multiple elements set to True
+        
+        
+    # torch.set_printoptions(threshold=10_000)
+
+    # # print(node_mask)
+    # # quit(0)
+    # # DIFFERENTLY from my code, most of the rows have some elements set to True, its only when there s a shift
+    # # that the first n rows that were shifted will be false
+
+    # # so eventually this code works like mine, only thign is that i have more empty subgraphs
+
+    # # if not torch.equal(membership, old_membership):
+    # #     print(old_membership)
+    # #     print(membership)
+    # #     print(node_mask)
+    # #     quit(0)
+
+    # edge_mask = node_mask[:, g.edge_index[0]] & node_mask[:, g.edge_index[1]]
+    # return node_mask, edge_mask

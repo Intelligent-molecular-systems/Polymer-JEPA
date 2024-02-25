@@ -9,15 +9,12 @@ from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
 
+def finetune(ft_trn_data, ft_val_data, transform, model, model_name, cfg):
 
-def finetune(ft_data, transform, model, model_name, cfg):
-    ft_trn_data = ft_data[:int(0.8*len(ft_data))].copy()
-    # print(len(ft_trn_data))
-    ft_val_data = ft_data[int(0.8*len(ft_data)):].copy() # int(0.9*len(ft_data))
     # print(len(ft_val_data))
     # ft_tst_data = ft_data[int(0.9*len(ft_data)):].copy()
-    print(f'Finetuning on: {len(ft_trn_data)} graphs')
-    print(f'FT-Validating on: {len(ft_val_data)} graphs')
+    print(f'Finetuning training on: {len(ft_trn_data)} graphs')
+    print(f'Finetuning validating on: {len(ft_val_data)} graphs')
     
     if cfg.modelVersion == 'v1': # only model v1 requires the transforms, since finetuning on v2 inputs directly the full graph, no subgraphs
         ft_trn_data.transform = transform
@@ -42,13 +39,9 @@ def finetune(ft_data, transform, model, model_name, cfg):
     
     # this is the predictor head, that takes the graph embeddings and predicts the property
     predictor = nn.Sequential(
-        nn.Linear(cfg.model.hidden_size, 300),
+        nn.Linear(cfg.model.hidden_size, cfg.model.wdmpnn_hid_dim),
         nn.ReLU(),
-        # nn.Linear(256, 512),
-        # nn.ReLU(),
-        # nn.Linear(512, 256),
-        # nn.ReLU(),
-        nn.Linear(300, out_dim)
+        nn.Linear(cfg.model.wdmpnn_hid_dim, out_dim)
     ).to(cfg.device)
     
     if cfg.frozenWeights:
@@ -61,9 +54,14 @@ def finetune(ft_data, transform, model, model_name, cfg):
 
 
     for epoch in tqdm(range(cfg.finetune.epochs), desc='Finetuning Epochs'):
-        model.train() if not cfg.frozenWeights else model.eval()
+
+        if cfg.frozenWeights:
+            model.eval()
+        else:
+            model.train()
+
         predictor.train()
-        trn_loss = 0
+        total_train_loss = 0
 
         all_embeddings = torch.tensor([], device=cfg.device)
         mon_A_type = torch.tensor([], device=cfg.device)
@@ -73,13 +71,17 @@ def finetune(ft_data, transform, model, model_name, cfg):
             data = data.to(cfg.device)
             optimizer.zero_grad()
             graph_embeddings = model.encode(data)
+
             if cfg.finetuneDataset == 'aldeghi':
-                mon_A_type = torch.cat((mon_A_type, data.mon_A_type.detach()), dim=0)
+                mon_A_type = torch.cat((mon_A_type, data.mon_A_type), dim=0)
                 all_embeddings = torch.cat((all_embeddings, graph_embeddings), dim=0)
                 stoichiometry.extend(data.stoichiometry)
+
             y_pred_trn = predictor(graph_embeddings).squeeze()
+
             if cfg.finetuneDataset == 'aldeghi':
                 train_loss = criterion(y_pred_trn, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
+
             elif cfg.finetuneDataset == 'diblock':
                 y_lamellar = torch.tensor(data.y_lamellar, dtype=torch.float32, device=cfg.device)
                 y_cylinder = torch.tensor(data.y_cylinder, dtype=torch.float32, device=cfg.device)
@@ -92,11 +94,12 @@ def finetune(ft_data, transform, model, model_name, cfg):
                 train_loss = criterion(y_pred_trn, true_labels)
             else:
                 raise ValueError('Invalid dataset name')
-            trn_loss += train_loss
+            
+            total_train_loss += train_loss
             train_loss.backward()
             optimizer.step()    
 
-        trn_loss /= len(ft_trn_loader)
+        total_train_loss /= len(ft_trn_loader)
 
 
         model.eval()

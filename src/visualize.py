@@ -93,15 +93,16 @@ def visualize_diblock_results(store_pred: List, store_true: List, label: str, sa
     plt.close()
 
 
-def visualize_hyperbolic_space(target_x, target_y):
-    target_x = target_x.reshape(-1, 2).detach().cpu().numpy()
-    target_y = target_y.reshape(-1, 2).detach().cpu().numpy()
+def visualize_loss_space(target_x, target_y, model_name='', epoch=999, loss_type=0, hidden_size=128):
+    target_x = target_x.reshape(-1, 2).detach().clone().cpu().numpy()
+    target_y = target_y.reshape(-1, 2).detach().clone().cpu().numpy()
+  
     # Unpack the points: convert lists of tuples to separate lists for x and y coordinates
     x_x, x_y = zip(*target_x)  # Unpack target_x points
     y_x, y_y = zip(*target_y)  # Unpack target_y points
 
     # Create a figure and a set of subplots
-    plt.figure(figsize=(12, 5))
+    fig = plt.figure(figsize=(12, 5))
 
     # Plot for target_x
     plt.subplot(1, 2, 1)  # 1 row, 2 columns, 1st subplot
@@ -114,12 +115,12 @@ def visualize_hyperbolic_space(target_x, target_y):
     # Plot for target_y
     plt.subplot(1, 2, 2)  # 1 row, 2 columns, 2nd subplot
     # Generate data for the hyperbola (Q=1 case)
-    x = np.linspace(1, 2, 400)  # Q1: x > 1
-    y = np.sqrt(x**2 - 1)
-    plt.plot(x, y, color='blue', linestyle='-', linewidth=2)
+    if loss_type == 0:
+        x_min, x_max = np.min(target_x), np.max(target_x)
+        x_vals = np.linspace(max(1, x_min), x_max, 400)
+        y_vals = np.sqrt(x_vals**2 - 1)
+        plt.plot(x_vals, y_vals, color='blue', linestyle='-', linewidth=2)
 
-    # Plot the hyperbola
-    plt.plot(x, y)
     plt.scatter(y_x, y_y, color='red', label='Target Y')
     plt.title('Predicted coordinates from context and predictor network')
     plt.xlabel('X Coordinate')
@@ -128,7 +129,10 @@ def visualize_hyperbolic_space(target_x, target_y):
 
     # Show plot
     plt.tight_layout()
-    plt.show()
+    save_folder = f'Results/{model_name}'
+    os.makedirs(save_folder, exist_ok=True)
+    plt.savefig(os.path.join(save_folder, f"hyperbolic_space_{epoch}.png"))
+    plt.close(fig)
 
 
 def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999, isFineTuning=False): 
@@ -136,9 +140,9 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     stoichiometry = np.array(stoichiometry)
     # print(len(stoichiometry))
     if isFineTuning:
-         embeddings = embeddings.detach().cpu().numpy()
+         embeddings = embeddings.detach().clone().cpu().numpy()
     else:
-        embeddings = embeddings.cpu().numpy()
+        embeddings = embeddings.cpu().clone().numpy()
     means = np.mean(embeddings, axis=0)  # Mean across embedding dimensions
     stds = np.std(embeddings, axis=0)  # Standard deviation across embedding dimensions
     avg_mean = np.mean(means)  # Average mean of embeddings

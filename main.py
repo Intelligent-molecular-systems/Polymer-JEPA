@@ -2,8 +2,9 @@ import random
 from src.config import cfg
 from src.data import create_data
 from src.finetune import finetune
-from src.PolymerJEPA import PolymerJEPA
+# from PolymerJEPA_old import PolymerJEPA
 from src.PolymerJEPAv2 import PolymerJEPAv2
+from src.PolymerJEPA import PolymerJEPA
 from src.pretrain import pretrain
 import string
 import time
@@ -20,24 +21,31 @@ def run():
 
     if cfg.finetuneDataset == 'aldeghi':
         print('Finetuning will be on aldeghi dataset...')
-        pre_data = aldeghi_dataset[:int(cfg.pretrain.pretrainPercentage*len(aldeghi_dataset))].copy()
-        ft_data = aldeghi_dataset[int(cfg.pretrain.pretrainPercentage*len(aldeghi_dataset)):].copy()
+        # 40% unlabelled split, 40% labelled, 20% test split
+        # of the labelled we are gonna use only aldeghiFTPercentage
+        pre_data = aldeghi_dataset[:int(0.4*len(aldeghi_dataset))].copy()
+        ft_data = aldeghi_dataset[int(0.4*len(aldeghi_dataset)):int(0.8*len(aldeghi_dataset))].copy()
+        ft_data = ft_data[:int(cfg.pretrain.aldeghiFTPercentage*len(ft_data))]
+        pre_test_data = aldeghi_dataset[int(0.8*len(aldeghi_dataset)):].copy()
+        ft_test_data = pre_test_data
+
 
     elif cfg.finetuneDataset == 'diblock':
-        pre_data = aldeghi_dataset # we can use the full dataset for pretraining
+        pre_data = aldeghi_dataset[:int(0.8*len(aldeghi_dataset))].copy()
+        pre_test_data = aldeghi_dataset[int(0.8*len(aldeghi_dataset)):].copy()
         print('Loading diblock dataset for finetuning...')
         graphs = torch.load('Data/diblock_graphs_list.pt')
         random.seed(12345)
         graphs = random.sample(graphs, len(graphs))
-        # ft_data = graphs
-        ft_data = graphs[:int(0.2*len(graphs))]
+        ft_data = graphs[:int(cfg.pretrain.diblockFTPercentage*len(graphs))]
+        ft_test_data = graphs[int(cfg.pretrain.diblockFTPercentage*len(graphs)):]
     else:
         raise ValueError('Invalid dataset name')
 
     model_name = None
 
     if cfg.shouldPretrain:
-        model, model_name = pretrain(pre_data, transform, cfg)
+        model, model_name = pretrain(pre_data, pre_test_data, transform, cfg)
 
     if cfg.shouldFinetune:
         if cfg.modelVersion == 'v1':
@@ -53,7 +61,9 @@ def run():
                 patch_rw_dim=cfg.pos_enc.patch_rw_dim,
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
-                regularization = cfg.pretrain.regularization
+                regularization = cfg.pretrain.regularization,
+                n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
+                shouldUse2dHyperbola=cfg.jepa.dist == 0
             ).to(cfg.device)
 
         elif cfg.modelVersion == 'v2':
@@ -66,7 +76,9 @@ def run():
                 patch_rw_dim=cfg.pos_enc.patch_rw_dim,
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
-                regularization = cfg.pretrain.regularization
+                regularization = cfg.pretrain.regularization,
+                n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
+                shouldUse2dHyperbola=cfg.jepa.dist == 0
             ).to(cfg.device)
 
         else:
@@ -75,7 +87,7 @@ def run():
 
         if cfg.shouldFinetuneOnPretrainedModel:
             if not model_name: # it means we are not pretraining in the current run
-                model_name = 'Y66tN9Wz'
+                model_name = '2uR3dzxD'
             # To print the model parameters after loading
             # params_before = {name: param.clone() for name, param in model.named_parameters()}
 
@@ -91,7 +103,7 @@ def run():
             #     else:
             #         print(f"Parameter {name} remains the same.")
 
-            fine_tuned_model = finetune(ft_data, transform, model, model_name, cfg)
+            fine_tuned_model = finetune(ft_data, ft_test_data, transform, model, model_name, cfg)
             # params_after_finetune = {name: param for name, param in fine_tuned_model.named_parameters()}
             # # Compare parameters
             # for name, param_after in params_after.items():
@@ -106,7 +118,7 @@ def run():
             random.seed(time.time())
             model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
             model_name += '_NotPretrained'
-            finetune(ft_data, transform, model, model_name, cfg)
+            finetune(ft_data, ft_test_data, transform, model, model_name, cfg)
 
         
     

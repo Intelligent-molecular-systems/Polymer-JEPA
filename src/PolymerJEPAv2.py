@@ -18,7 +18,9 @@ class PolymerJEPAv2(nn.Module):
         patch_rw_dim=0,
         num_target_patches=4,
         should_share_weights = False,
-        regularization = False
+        regularization = False,
+        n_hid_wdmpnn=300,
+        shouldUse2dHyperbola=False
     ):
         
         super().__init__()
@@ -31,42 +33,45 @@ class PolymerJEPAv2(nn.Module):
 
         if rw_dim > 0: #[TODO] Understand what is this for, right now it is not used
             self.rw_encoder = MLP(rw_dim, nhid, 1)
-        
-        if self.patch_rw_dim > 0:
-            self.patch_rw_encoder = MLP(self.patch_rw_dim, nhid, 1)
 
         # Context and Target Encoders are both WDNodeMPNN
         # TODO: for now i must keep the context and target models equal for EMA update, with vicReg (no weight sharing case obviously) i can change this
         # i think n_message_passing_layers could be lower for context encoder
-        self.context_encoder = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=3)
-        self.contextLinearTransform = nn.Linear(300, nhid)
+        self.context_encoder = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=2, hidden_dim=n_hid_wdmpnn)
+        self.contextLinearTransform = nn.Linear(n_hid_wdmpnn, nhid)
         if should_share_weights:
             self.target_encoder = self.context_encoder
             self.targetLinearTransform = self.contextLinearTransform
         else:
-            self.target_encoder = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=3)
-            self.targetLinearTransform = nn.Linear(300, nhid)
+            self.target_encoder = WDNodeMPNN(nfeat_node, nfeat_edge, n_message_passing_layers=3, hidden_dim=n_hid_wdmpnn)
+            self.targetLinearTransform = nn.Linear(n_hid_wdmpnn, nhid)
         
         # Predictor MLP for the target subgraphs
         # according to g-jepa when using hyperbolic space, the target predictor should be a linear layer
         # otherwise representation collapse
-        self.target_predictor = nn.Linear(nhid, 2) # V2: Directly predict (depends on the definition of self.target_predictor)
+        #self.target_predictor = nn.Linear(nhid, 2) # V2: Directly predict (depends on the definition of self.target_predictor)
         # Use this if you wish to do euclidean or poincaré embeddings in the latent space
-        # self.target_predictor = MLP(
-        #     nhid, 2, nlayer=2, with_final_activation=False, with_norm=False)
+        self.shouldUse2dHyperbola = shouldUse2dHyperbola
+        if self.shouldUse2dHyperbola:
+            # consider reshaping the input to batch_size*num_target_patches x nhid (while now is batch_size x num_target_patches x nhid) in order to use batch norm
+            self.target_predictor = MLP(nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
+        else:
+            self.target_predictor = MLP(nhid, nhid, nlayer=3, with_final_activation=False, with_norm=False)
         
         # as suggested in JEPA original paper, we apply vicReg not directly on embeddings, but on the expanded embeddings
         # The role of the expander is twofold: (1) eliminate the information by which the two representations differ, (2) expand the dimension in a non-linear fashion so that decorrelating the embedding variables will reduce the dependencies (not just the correlations) between the variables of the representation vector.
         if self.regularization: 
-            self.expander_dim = 512
+            self.expander_dim = 256
             self.context_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
             self.target_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
@@ -103,7 +108,7 @@ class PolymerJEPAv2(nn.Module):
         # print('context_subgraph_idx:', context_subgraph_idx)
         context_subgraphs_x = subgraph_x[context_subgraph_idx]
         context_pe = patch_pes[context_subgraph_idx] 
-        context_subgraphs_x += self.patch_rw_encoder(context_pe)
+        context_subgraphs_x += self.rw_encoder(context_pe)
         context_x = context_subgraphs_x.unsqueeze(1)  # batch_size x 1 x nhid
         # print('context_x:', context_x.shape)
 
@@ -168,21 +173,23 @@ class PolymerJEPAv2(nn.Module):
         # Construct context and target PEs frome the node pes of each subgraph
         target_subgraphs = subgraphs_x_from_full[target_subgraphs_idx.flatten()] 
         target_pes = patch_pes[target_subgraphs_idx.flatten()]
-        encoded_tpatch_pes = self.patch_rw_encoder(target_pes)
+        encoded_tpatch_pes = self.rw_encoder(target_pes)
         target_x = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
         
-        expanded_embeddings = torch.tensor([]) # save the embeddings for regularization
+        expanded_context_embeddings = torch.tensor([]) # save the embeddings for regularization
+        expanded_target_embeddings = torch.tensor([])
         if self.regularization: 
-            expanded_context_x = self.context_expander(context_x)
-            expanded_target_x = self.target_expander(target_x)
-            expanded_embeddings = torch.vstack([expanded_context_x.reshape(-1, self.expander_dim), expanded_target_x.reshape(-1, self.expander_dim)])
+            input_context_x = context_x.reshape(-1, self.nhid)
+            expanded_context_embeddings = self.context_expander(input_context_x)#.reshape(-1, self.expander_dim)
+            # expanded_target_x = self.target_expander(target_x)
+            input_target_x = target_x.reshape(-1, self.nhid)
+            expanded_target_embeddings = self.target_expander(input_target_x)#.reshape(-1, self.expander_dim)
+            # expanded_context_embeddings = torch.vstack([expanded_context_x.reshape(-1, self.expander_dim), expanded_target_x.reshape(-1, self.expander_dim)])
 
-        
-        # embeddings = torch.vstack([context_x.reshape(-1, self.nhid), target_x.reshape(-1, self.nhid)])
-
-        x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
-        y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
-        target_x = torch.cat([x_coord, y_coord], dim=-1) # target_x shape: batch_size x num_target_patches x 2
+        if self.shouldUse2dHyperbola:
+            x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
+            y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
+            target_x = torch.cat([x_coord, y_coord], dim=-1) # target_x shape: batch_size x num_target_patches x 2
 
         # Make predictions using the target predictor: for each target subgraph, we use the context + the target PE
         target_prediction_embeddings = context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
@@ -194,7 +201,7 @@ class PolymerJEPAv2(nn.Module):
         # print('target_y:', target_y.shape)
         # target_y shape: batch_size x num_target_patches x 2
         # return the predicted target (via context + PE) and the true target obtained via the target encoder.
-        return target_x, target_y, expanded_embeddings
+        return target_x, target_y, expanded_context_embeddings, expanded_target_embeddings
 
 
     def encode(self, data):
@@ -206,6 +213,8 @@ class PolymerJEPAv2(nn.Module):
             data.edge_weight, 
             data.node_weight
         )
+
+        node_embeddings = self.targetLinearTransform(node_embeddings)
 
         graph_embedding = global_mean_pool(node_embeddings, data.batch)
         return graph_embedding

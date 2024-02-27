@@ -23,10 +23,13 @@ def run():
         print('Finetuning will be on aldeghi dataset...')
         # 40% unlabelled split, 40% labelled, 20% test split
         # of the labelled we are gonna use only aldeghiFTPercentage
+        # shuffle the dataset
+        aldeghi_dataset.shuffle()
         pre_data = aldeghi_dataset[:int(0.4*len(aldeghi_dataset))].copy()
         ft_data = aldeghi_dataset[int(0.4*len(aldeghi_dataset)):int(0.8*len(aldeghi_dataset))].copy()
         ft_data = ft_data[:int(cfg.pretrain.aldeghiFTPercentage*len(ft_data))]
-        pre_test_data = aldeghi_dataset[int(0.8*len(aldeghi_dataset)):].copy()
+        # for official result use 0.8 as test data, but to run experiments fast i can use 0.95
+        pre_test_data = aldeghi_dataset[int(0.95*len(aldeghi_dataset)):].copy()
         ft_test_data = pre_test_data
 
 
@@ -58,12 +61,12 @@ def run():
                 rw_dim=cfg.pos_enc.rw_dim,
                 pooling=cfg.model.pool,
                 mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
-                patch_rw_dim=cfg.pos_enc.patch_rw_dim,
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
                 regularization = cfg.pretrain.regularization,
                 n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0
+                shouldUse2dHyperbola=cfg.jepa.dist == 0,
+                shouldLayerNorm = cfg.model.layerNorm
             ).to(cfg.device)
 
         elif cfg.modelVersion == 'v2':
@@ -73,12 +76,12 @@ def run():
                 nhid=cfg.model.hidden_size,
                 rw_dim=cfg.pos_enc.rw_dim,
                 pooling=cfg.model.pool,
-                patch_rw_dim=cfg.pos_enc.patch_rw_dim,
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
                 regularization = cfg.pretrain.regularization,
                 n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0
+                shouldUse2dHyperbola=cfg.jepa.dist == 0,
+                shouldLayerNorm = cfg.model.layerNorm
             ).to(cfg.device)
 
         else:
@@ -87,11 +90,11 @@ def run():
 
         if cfg.shouldFinetuneOnPretrainedModel:
             if not model_name: # it means we are not pretraining in the current run
-                model_name = '2uR3dzxD'
+                model_name = 'tgMLerwT'
             # To print the model parameters after loading
             # params_before = {name: param.clone() for name, param in model.named_parameters()}
 
-            model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}.pt', map_location=cfg.device))
+            model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}/model.pt', map_location=cfg.device))
             # params_after = {name: param.clone() for name, param in model.named_parameters()}
 
             # Compare parameters

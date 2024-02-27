@@ -92,8 +92,7 @@ def create_data(cfg):
         subgraphing_type=cfg.subgraphing.type,
         num_targets=cfg.jepa.num_targets,
         n_patches=cfg.subgraphing.n_patches,
-        patch_num_diff=cfg.pos_enc.patch_num_diff,
-        drop_rate=cfg.metis.drop_rate
+        patch_num_diff=cfg.pos_enc.patch_num_diff
     )
     
     graphs = get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/aldeghi_graphs_list.pt', dataset='aldeghi')

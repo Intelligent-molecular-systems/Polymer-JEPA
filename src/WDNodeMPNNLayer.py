@@ -52,7 +52,6 @@ class WDNodeMPNNLayer(nn.Module):
             # min_index_value = torch.max(edge_index_reshaped)
             # print("maximum index value:", min_index_value.item())
             
-            # the issue might be related to the fact that the target indices in edge_index_reshaped are not within the valid range for incoming_edges_weighted_sum. The size of incoming_edges_weighted_sum is (765, 14), and the target indices in edge_index_reshaped should be within the range [0, 764] to access valid indices along dimension 0.
             # sum over the rows (edges), index is the target node (i want to sum all edges where the target node is the same), src = attributes weighted
             incoming_edges_weighted_sum.scatter_add_(0, edge_index_reshaped.expand_as(edge_attr), edge_weight.view(-1, 1) * edge_attr)
             concat_features = torch.cat([x, incoming_edges_weighted_sum], dim=1)
@@ -62,7 +61,6 @@ class WDNodeMPNNLayer(nn.Module):
             h = self.mp_layer(h0, edge_index, edge_weight, h0)
         else:
             h = self.mp_layer(x, edge_index, edge_weight, h0)
-            h0 = None
             
         # concatenate the node features with the embedding from the message passing layers
         # h = self.final_message_passing_layer(torch.cat([h, x], dim=1), edge_index, edge_weight, h0)

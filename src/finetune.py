@@ -1,3 +1,4 @@
+from contextlib import redirect_stdout
 import os
 import numpy as np
 import random
@@ -140,23 +141,25 @@ def finetune(ft_trn_data, ft_val_data, transform, model, model_name, cfg):
         if epoch % 20 == 0 or epoch == cfg.finetune.epochs - 1:
             print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.5f}' f' Val Loss:{val_loss:.5f}')
 
-            os.makedirs('Results/', exist_ok=True)
+            os.makedirs(f'Results/{model_name}', exist_ok=True)
 
+            if not cfg.shouldFinetuneOnPretrainedModel: # if we are finetuning on a model that was not pretrained, save hyperparameters
+                with open(f'Results/{model_name}/hyperparams.yml', 'w') as f:
+                    with redirect_stdout(f): print(cfg.dump())
+
+            percentage = cfg.pretrain.aldeghiFTPercentage if cfg.finetuneDataset == 'aldeghi' else cfg.pretrain.diblockFTPercentage
+            save_folder = f'Results/{model_name}/{cfg.finetuneDataset}_{cfg.modelVersion}_{percentage}'
             if cfg.finetuneDataset == 'aldeghi':
-                if cfg.finetune.property == 'ea':
-                    label = 'ea'
-                elif cfg.finetune.property == 'ip':
-                    label = 'ip'
-                else:
-                    raise ValueError('Invalid property type')
-
-                visualeEmbeddingSpace(all_embeddings, mon_A_type, stoichiometry, model_name, epoch, isFineTuning=True)
+                label = 'ea' if cfg.finetune.property == 'ea' else 'ip'
+                
+                if cfg.visualize.shouldEmbeddingSpace:
+                    visualeEmbeddingSpace(all_embeddings, mon_A_type, stoichiometry, model_name, epoch, isFineTuning=True)
 
                 visualize_aldeghi_results(
                     np.array(all_y_pred_val), 
                     np.array(all_true_val), 
                     label=label, 
-                    save_folder=f'Results/{model_name}_aldeghi',
+                    save_folder=save_folder,
                     epoch=epoch
                 )
                 
@@ -164,9 +167,8 @@ def finetune(ft_trn_data, ft_val_data, transform, model, model_name, cfg):
             elif cfg.finetuneDataset == 'diblock':
                 visualize_diblock_results(
                     np.array(all_y_pred_val), 
-                    np.array(all_true_val), 
-                    label='lamellar', 
-                    save_folder=f'Results/{model_name}_diblock',
+                    np.array(all_true_val),
+                    save_folder=save_folder,
                     epoch=epoch
                 )
             else:

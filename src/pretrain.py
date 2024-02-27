@@ -1,3 +1,4 @@
+from contextlib import redirect_stdout
 import os
 import random
 import string
@@ -38,12 +39,12 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
             rw_dim=cfg.pos_enc.rw_dim,
             pooling=cfg.model.pool,
             mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
-            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
             num_target_patches=cfg.jepa.num_targets,
             should_share_weights=cfg.pretrain.shouldShareWeights,
             regularization = cfg.pretrain.regularization,
             n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
-            shouldUse2dHyperbola=cfg.jepa.dist == 0
+            shouldUse2dHyperbola=cfg.jepa.dist == 0,
+            shouldLayerNorm = cfg.model.layerNorm
         ).to(cfg.device)
 
     elif cfg.modelVersion == 'v2':
@@ -53,12 +54,12 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
             nhid=cfg.model.hidden_size,
             rw_dim=cfg.pos_enc.rw_dim,
             pooling=cfg.model.pool,
-            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
             num_target_patches=cfg.jepa.num_targets,
             should_share_weights=cfg.pretrain.shouldShareWeights,
             regularization = cfg.pretrain.regularization,
             n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
-            shouldUse2dHyperbola=cfg.jepa.dist == 0
+            shouldUse2dHyperbola=cfg.jepa.dist == 0,
+            shouldLayerNorm = cfg.model.layerNorm
         ).to(cfg.device)
 
     else:
@@ -119,36 +120,37 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
         )
 
         # save model weights at each epoch
-        os.makedirs('Models/Pretrain', exist_ok=True)
-        torch.save(model.state_dict(), f'Models/Pretrain/{model_name}.pt')
+        save_path = f'Models/Pretrain/{model_name}'
+        os.makedirs(save_path, exist_ok=True)
+        torch.save(model.state_dict(), f'{save_path}/model.pt')
+        
+        with open(f'{save_path}/hyperparams.yml', 'w') as f:
+            with redirect_stdout(f): print(cfg.dump())
 
         scheduler.step(val_loss)
 
         print(f'Epoch: {epoch:03d}, Train Loss: {trn_loss:.5f}' f' Test Loss:{val_loss:.5f}')
 
         if epoch == 0 or epoch == cfg.pretrain.epochs - 1 or epoch % 5 == 0:
-            if cfg.finetuneDataset == 'aldeghi':
-                new_model_name = model_name + '_aldeghi'
-            elif cfg.finetuneDataset == 'diblock':
-                new_model_name = model_name + '_diblock'
-            else:  
-                raise ValueError('Invalid dataset name')
-                      
-            visualeEmbeddingSpace(
-                embeddings=embedding_data[0], 
-                mon_A_type=embedding_data[1], 
-                stoichiometry=embedding_data[2],
-                model_name=new_model_name, 
-                epoch=epoch
-            )
 
-            visualize_loss_space(
-                target_x=loss_data[0], 
-                target_y=loss_data[1],
-                model_name=model_name, 
-                epoch=epoch,
-                loss_type=cfg.jepa.dist,
-                hidden_size=cfg.model.hidden_size
-            )
+            if cfg.visualize.shouldEmbeddingSpace:
+                visualeEmbeddingSpace(
+                    embeddings=embedding_data[0], 
+                    mon_A_type=embedding_data[1], 
+                    stoichiometry=embedding_data[2],
+                    model_name=model_name, 
+                    epoch=epoch,
+                    should3DPlot=cfg.visualize.should3DPlot
+                )
+
+            if cfg.visualize.shouldLoss:
+                visualize_loss_space(
+                    target_x=loss_data[0], 
+                    target_y=loss_data[1],
+                    model_name=model_name, 
+                    epoch=epoch,
+                    loss_type=cfg.jepa.dist,
+                    hidden_size=cfg.model.hidden_size
+                )
     
     return model, model_name

@@ -67,9 +67,9 @@ def set_cfg(cfg):
     cfg.pretrain.var_weight = 25
     cfg.pretrain.cov_weight = 1
     # which percentage of the full dataset should be used to pretrain
-    # (0.1%, 0.2%, 0.4%, 0.6%, 0.8%, 1%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
-    # this value is relative to 40%: 0.01 -> 1 % 
-    cfg.pretrain.aldeghiFTPercentage = 0.01
+    # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
+    # this value is relative to 40%: 0.01 -> 1 % = 160 graphs
+    cfg.pretrain.aldeghiFTPercentage = 0.1
     cfg.pretrain.diblockFTPercentage = 0.2
 
     
@@ -137,6 +137,11 @@ def set_cfg(cfg):
 
     cfg.metis = CN()
     cfg.metis.drop_rate = 0.3
+
+    cfg.visualize = CN()
+    cfg.visualize.should3DPlot = False
+    cfg.visualize.shouldEmbeddingSpace = False
+    cfg.visualize.shouldLoss = False
 
     return cfg
 

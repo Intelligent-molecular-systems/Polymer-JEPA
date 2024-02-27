@@ -21,25 +21,22 @@ class PolymerJEPA(nn.Module):
                  rw_dim=0,
                  mlpmixer_dropout=0,
                  pooling='mean',
-                 patch_rw_dim=0,
                  num_target_patches=4,
                  should_share_weights=False,
                  regularization=False,
                  nlayer_gnn=2,
                  n_hid_wdmpnn=300,
-                 shouldUse2dHyperbola=False
+                 shouldUse2dHyperbola=False,
+                 shouldLayerNorm=False
         ):
 
         super().__init__()
         self.use_rw = rw_dim > 0
         self.pooling = pooling
-        self.patch_rw_dim = patch_rw_dim
         self.nhid = nhid
         self.num_target_patches=num_target_patches
         self.regularization=regularization
-
-        if self.use_rw:
-            self.rw_encoder = MLP(rw_dim, nhid, 1)
+        self.rw_encoder = MLP(rw_dim, nhid, 1)
 
         # Input Encoder
         # self.wdmpnn = WDNodeMPNN(nfeat_node, nfeat_edge)
@@ -58,7 +55,7 @@ class PolymerJEPA(nn.Module):
         self.context_encoder = getattr(gMHA_wrapper, 'Standard')(
             nhid=nhid, dropout=mlpmixer_dropout, nlayer=nlayer_mlpmixer)
         
-        if should_share_weights:
+        if regularization and should_share_weights:
             self.target_encoder = self.context_encoder
         else:
             self.target_encoder = getattr(gMHA_wrapper, gMHA_type)(
@@ -68,11 +65,12 @@ class PolymerJEPA(nn.Module):
         # self.target_predictor = nn.Linear(nhid, 2) # V2: Directly predict (depends on the definition of self.target_predictor)
         # Use this if you wish to do euclidean or poincaré embeddings in the latent space
         self.shouldUse2dHyperbola = shouldUse2dHyperbola
-        if self.shouldUse2dHyperbola:
-            # consider reshaping the input to batch_size*num_target_patches x nhid (while now is batch_size x num_target_patches x nhid) in order to use batch norm
-            self.target_predictor = MLP(nhid, 2, nlayer=3, with_final_activation=False, with_norm=False)
-        else:
-            self.target_predictor = MLP(nhid, nhid, nlayer=3, with_final_activation=False, with_norm=False)
+        self.target_predictor = nn.Sequential(
+            nn.Linear(nhid, nhid),
+            nn.LayerNorm(nhid) if shouldLayerNorm else nn.BatchNorm1d(nhid),
+            nn.ReLU(),
+            nn.Linear(nhid, 2 if self.shouldUse2dHyperbola else nhid)
+        )
 
         if self.regularization:
             self.expander_dim = 256
@@ -135,10 +133,6 @@ class PolymerJEPA(nn.Module):
                
         # this is the final operation (pooling) to obtain an embedding for each subgraph/patch from the subgraph nodes embeddings
         subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling)
-        
-        
-
-
 
         ######################## Graph-JEPA ########################
         # Create the correct indexer for each subgraph given the batching procedure
@@ -221,7 +215,6 @@ class PolymerJEPA(nn.Module):
                 target_x = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid)
 
         else:
-            mixer_x = subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1)
             # data.mask is sth like  tensor([[False, False, False, False, False, False,  True,  True,  True,  True, True,  True,  True,  True,  True]])
             # ~data.mask is the opposite bcs # key_padding_mask (ByteTensor, optional): mask to exclude keys that are pads, of shape `(batch, src_len)`, where padding elements are indicated by 1s.
             # Hence the first elements that are False in data.mask, they will be True (hence 1s) in ~data.mask and they will be seen as padding elements
@@ -249,10 +242,13 @@ class PolymerJEPA(nn.Module):
             y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
             target_x = torch.cat([x_coord, y_coord], dim=-1)
 
-
-        # Make predictions using the target predictor: for each target subgraph, we use the context + the target PE
-        target_prediction_embeddings = context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid)
+        target_prediction_embeddings = context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
+        target_prediction_embeddings = target_prediction_embeddings.reshape(-1, self.nhid)
         target_y = self.target_predictor(target_prediction_embeddings) # V1: Directly predict (depends on the definition of self.target_predictor)
+        # print('target_y:', target_y.shape)
+        out_dim = 2 if self.shouldUse2dHyperbola else self.nhid
+        target_y = target_y.reshape(-1, self.num_target_patches, out_dim)
+        # V1: Directly predict (depends on the definition of self.target_predictor)
         # return the predicted target (via context + PE) and the true target obtained via the target encoder.
         return target_x, target_y, expanded_context_embeddings, expanded_target_embeddings
     
@@ -301,8 +297,35 @@ class PolymerJEPA(nn.Module):
             None, 
             ~data.mask
         ) # Don't attend to empty patches when doing the final encoding
-        
+        # print(mixer_x * data.mask.unsqueeze(-1))
+        # print(mixer_x * data.mask.unsqueeze(-1).sum(1))
+        # print(data.mask.sum(1, keepdim=True))
+        # quit(0)
+        # TODO weight each subgraph based on how many nodes it has, context should be given more importance
         # Global Average Pooling
+
+        batch_indexer = torch.tensor(np.cumsum(data.call_n_patches))
+        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device)
+        context_subgraph_idx = data.context_subgraph_idx + batch_indexer
+        # all_possible_target_idxs = torch.vstack([torch.tensor(dt) for dt in data.all_possible_target_idxs]).to(data.y_EA.device)
+        # all_possible_target_idxs += batch_indexer.unsqueeze(1)
+
+        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
+        # print(n_context_nodes.shape)
+        # n_all_targets_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in all_possible_target_idxs for idx in idx_list]
+        # print(n_all_targets_nodes.shape)
+
+        # avg context size is 3/4 times bigger than targets: 10/15 nodes compared to 3/4 nodes, but it depends on which subgraphing
+        mixer_x = mixer_x.reshape(-1, self.nhid)
+        mixer_x[context_subgraph_idx] = mixer_x[context_subgraph_idx] * 3.5
+
+        # print(mixer_x[context_subgraph_idx].shape)
+        # print(mixer_x[all_possible_target_idxs.flatten()].shape)
+        # mixer_x[all_possible_target_idxs.flatten()] = mixer_x[all_possible_target_idxs.flatten()] * n_all_targets_nodes
+
+
+        # reshape mixer_x to batch_size x call_patches x hidden size
+        mixer_x = mixer_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1)
         embeddings = (mixer_x * data.mask.unsqueeze(-1)).sum(1) / data.mask.sum(1, keepdim=True)
         return embeddings
 

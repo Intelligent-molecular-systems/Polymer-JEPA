@@ -37,14 +37,14 @@ def visualize_aldeghi_results(store_pred: List, store_true: List, label: str, sa
     plt.text(min(store_true), max(store_pred), f'R2 = {R2:.3f}', fontsize=10)
     plt.text(min(store_true), max(store_pred) - 0.3, f'RMSE = {RMSE:.3f}', fontsize=10)
 
-
+    # v1 or v2 diblock or aldeghi FT percentage
     if save_folder:
         os.makedirs(save_folder, exist_ok=True)
         plt.savefig(f"{save_folder}/{'EA' if label == 'ea' else 'IP'}_{epoch}.png")
     plt.close(fig)
 
 
-def visualize_diblock_results(store_pred: List, store_true: List, label: str, save_folder: str = None, epoch: int = 999):
+def visualize_diblock_results(store_pred: List, store_true: List, save_folder: str = None, epoch: int = 999):
     # Convert lists to numpy arrays if they aren't already
     store_pred = np.array(store_pred)
     store_true = np.array(store_true)
@@ -89,7 +89,7 @@ def visualize_diblock_results(store_pred: List, store_true: List, label: str, sa
     # Ensure save_folder exists
     if save_folder:
         os.makedirs(save_folder, exist_ok=True)
-        plt.savefig(os.path.join(save_folder, f"{label}_average_auprc_epoch_{epoch}.png"))
+        plt.savefig(os.path.join(save_folder, f"average_auprc_epoch_{epoch}.png"))
     plt.close()
 
 
@@ -129,13 +129,13 @@ def visualize_loss_space(target_x, target_y, model_name='', epoch=999, loss_type
 
     # Show plot
     plt.tight_layout()
-    save_folder = f'Results/{model_name}'
+    save_folder = f'Results/{model_name}/PretrainingLossSpace'
     os.makedirs(save_folder, exist_ok=True)
-    plt.savefig(os.path.join(save_folder, f"hyperbolic_space_{epoch}.png"))
+    plt.savefig(os.path.join(save_folder, f"{epoch}.png"))
     plt.close(fig)
 
 
-def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999, isFineTuning=False): 
+def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999, isFineTuning=False, should3DPlot=False): 
     mon_A_type = mon_A_type.cpu().numpy()
     stoichiometry = np.array(stoichiometry)
     # print(len(stoichiometry))
@@ -163,10 +163,11 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     tsne_results_2d = tsne_2d.fit_transform(embeddings)
 
     # Perform t-SNE for 3D visualization
-    tsne_3d = TSNE(n_components=3, perplexity=40, n_iter=300)
-    tsne_results_3d = tsne_3d.fit_transform(embeddings)
-
-    save_folder = f'Results/{model_name}'
+    if should3DPlot:
+        tsne_3d = TSNE(n_components=3, perplexity=40, n_iter=300)
+        tsne_results_3d = tsne_3d.fit_transform(embeddings)
+    
+    save_folder = f'Results/{model_name}/PretrainingEmbeddingSpace' if not isFineTuning else f'Results/{model_name}/FineTuningEmbeddingSpace'
     os.makedirs(save_folder, exist_ok=True)
 
     # Define color maps for Matplotlib
@@ -206,24 +207,25 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
         plotly_colors = ['rgb' + str((int(color[0]*255), int(color[1]*255), int(color[2]*255))) for color in colors]
         return plotly_colors
 
-    # 3D Visualization for Monomer A Type with Plotly
-    monA_colors_plotly = mpl_to_plotly_cmap(plt.cm.tab10, num_classes)
-    fig = px.scatter_3d(
-        x=tsne_results_3d[:, 0], y=tsne_results_3d[:, 1], z=tsne_results_3d[:, 2],
-        color=mon_A_type.astype(str),  # Ensure discrete coloring
-        color_discrete_sequence=monA_colors_plotly,
-        title=f'3D t-SNE Visualization Colored by Monomer A Type - Epoch: {epoch}',
-        labels={'color': 'Monomer A Type'}
-    )
-    fig.write_html(os.path.join(save_folder, f"3D_tsne_mon_A_type_{epoch}{'_FT' if isFineTuning else ''}.html"))
+    if should3DPlot:
+        # 3D Visualization for Monomer A Type with Plotly
+        monA_colors_plotly = mpl_to_plotly_cmap(plt.cm.tab10, num_classes)
+        fig = px.scatter_3d(
+            x=tsne_results_3d[:, 0], y=tsne_results_3d[:, 1], z=tsne_results_3d[:, 2],
+            color=mon_A_type.astype(str),  # Ensure discrete coloring
+            color_discrete_sequence=monA_colors_plotly,
+            title=f'3D t-SNE Visualization Colored by Monomer A Type - Epoch: {epoch}',
+            labels={'color': 'Monomer A Type'}
+        )
+        fig.write_html(os.path.join(save_folder, f"3D_tsne_mon_A_type_{epoch}{'_FT' if isFineTuning else ''}.html"))
 
-    # 3D Visualization for Stoichiometry with Plotly
-    stoich_colors_plotly = mpl_to_plotly_cmap(plt.cm.viridis, len(stoichiometries))
-    fig = px.scatter_3d(
-        x=tsne_results_3d[:, 0], y=tsne_results_3d[:, 1], z=tsne_results_3d[:, 2],
-        color=stoichiometry,  # Ensure discrete coloring
-        color_discrete_sequence=stoich_colors_plotly,
-        title=f'3D t-SNE Visualization Colored by Stoichiometry - Epoch: {epoch}',
-        labels={'color': 'Stoichiometry'}
-    )
-    fig.write_html(os.path.join(save_folder, f"3D_tsne_stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.html"))
+        # 3D Visualization for Stoichiometry with Plotly
+        stoich_colors_plotly = mpl_to_plotly_cmap(plt.cm.viridis, len(stoichiometries))
+        fig = px.scatter_3d(
+            x=tsne_results_3d[:, 0], y=tsne_results_3d[:, 1], z=tsne_results_3d[:, 2],
+            color=stoichiometry,  # Ensure discrete coloring
+            color_discrete_sequence=stoich_colors_plotly,
+            title=f'3D t-SNE Visualization Colored by Stoichiometry - Epoch: {epoch}',
+            labels={'color': 'Stoichiometry'}
+        )
+        fig.write_html(os.path.join(save_folder, f"3D_tsne_stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.html"))

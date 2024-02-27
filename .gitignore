@@ -17,3 +17,6 @@ runs
 *.ipynb
 *.html
 .DS_Store
+
+Models/
+Results/

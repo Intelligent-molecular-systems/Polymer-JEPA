@@ -78,6 +78,7 @@ class SubgraphsData(Data):
     def __inc__(self, key, value, *args, **kwargs):
         num_nodes = self.num_nodes
         num_edges = self.edge_index.size(-1)
+        # https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.Data.html
         if bool(re.search('(combined_subgraphs)', key)):
             return getattr(self, key[:-len('combined_subgraphs')]+'subgraphs_nodes_mapper').size(0)
         elif bool(re.search('(subgraphs_batch)', key)):
@@ -118,13 +119,11 @@ class GraphJEPAPartitionTransform(object):
         ):
         super().__init__()
         self.subgraphing_type = subgraphing_type
-        # [TODO]: How to handle cases where num_targets is less than the set one?
         self.num_targets = num_targets
         self.n_patches = n_patches # [RISK]: I dont have a n_patches attribute, no fixed n of subgraphs for all graphs, i dont know if this flexibility is allowed
         self.patch_num_diff = patch_num_diff
         
     def _diffuse(self, A):
-            # !!! since patch_num_diff is always 0, by default we are using always the regular adjacency matrix !!!
             if self.patch_num_diff == 0:
                 return A
             Dinv = A.sum(dim=-1).clamp(min=1).pow(-1).unsqueeze(-1)  # D^-1
@@ -189,9 +188,14 @@ class GraphJEPAPartitionTransform(object):
         subgraphs = subgraphs_nodes[0].unique()
         context_subgraph_idx = subgraphs[0]
         # print('context_subgraph_idx, ', context_subgraph_idx)
-        rand_choice = np.random.choice(subgraphs[1:], self.num_targets, replace=False)
+        # rand_choice = np.random.choice(subgraphs[1:], self.num_targets, replace=False)
         # target_subgraph_idxs = subgraphs[1:] # torch.tensor(rand_choice) RISK Variable number of targets per graph, if it works i shuld at least normalize the error based on the number of targets
-        target_subgraph_idxs = torch.tensor(rand_choice)
+        # target_subgraph_idxs = subgraphs[1:].clone()
+        # target_subgraph_idxs will be the the numbers between 15-n_targets and 15-n_targets+3 both included
+        target_subgraph_idxs = [i for i in range((self.n_patches - len(subgraphs))+1, (self.n_patches - len(subgraphs))+1+self.num_targets)]
+        target_subgraph_idxs = torch.tensor(target_subgraph_idxs)
+        # print('context_subgraph_idx, ', context_subgraph_idx)
+        # print('target_subgraph_idxs, ', target_subgraph_idxs)
         # print('target_subgraph_idxs, ', target_subgraph_idxs)
         data.context_edges_mask = subgraphs_edges[0] == context_subgraph_idx # if context subgraph idx is 0, and subgraphs_edges[0] = [0, 0, 1, 1, 2] then [True, True, False, False, False]
         data.target_edges_mask = torch.isin(subgraphs_edges[0], target_subgraph_idxs) # if target subgraph idxs are [1, 2] then [False, False, True, True, True]
@@ -200,8 +204,9 @@ class GraphJEPAPartitionTransform(object):
         data.context_nodes_subgraph = subgraphs_nodes[0, subgraphs_nodes[0] == context_subgraph_idx] # if context subgraph idx is 0, and subgraphs_nodes[0] (subgraphs indexes) =[0 ,0, 1, 1, 2] then [0, 0]
         data.target_nodes_subgraph = subgraphs_nodes[0, torch.isin(subgraphs_nodes[0], target_subgraph_idxs)] # if target subgraph idxs are [1, 2] then [1, 1, 2]
         data.context_subgraph_idx = context_subgraph_idx.tolist() # if context subgraph idx is 0, then[0]
-        data.target_subgraph_idxs = target_subgraph_idxs.tolist() # if target subgraph idxs are [1, 2] then [1, 2]
-        data.call_n_patches = [self.n_patches] # [RISK] 
+        data.target_subgraph_idxs = sorted(target_subgraph_idxs.tolist()) # if target subgraph idxs are [1, 2] then [1, 2]
+        # data.all_possible_target_idxs = [i for i in range((self.n_patches - len(subgraphs))+1, self.n_patches)]
+        data.call_n_patches = [self.n_patches]  # if target subgraph idxs are [1, 2] then [1, 2]
         data.__num_nodes__ = data.num_nodes  # set number of nodes of the current graph
 
         # plot_from_transform_attributes(data)

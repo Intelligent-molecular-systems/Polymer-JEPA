@@ -101,16 +101,23 @@ class PolymerJEPA(nn.Module):
         # if x has shape N X F, and data.subgraphs_nodes_mapper is shape M (all subgraphs), then x[data.subgraphs_nodes_mapper] has shape M X F
         # If a node index appears more than once in data.subgraphs_nodes_mapper, its feature vector is duplicated in the resulting tensor. If a node index does not appear in data.subgraphs_nodes_mapper, its feature vector is excluded from the result. (Never happens in our case, but it's good to know)
         x = data.x[data.subgraphs_nodes_mapper]
+        #x = torch.rand(x.shape)
         node_weights = data.node_weight[data.subgraphs_nodes_mapper]
+        # node_weights = torch.rand(node_weights.shape)
+
         # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices
         edge_index = data.combined_subgraphs        
         # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
         edge_attr = data.edge_attr[data.subgraphs_edges_mapper]
+        #edge_attr = torch.rand(edge_attr.shape)
         edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
+        #edge_weights = torch.rand(edge_weights.shape)
+
         batch_x = data.subgraphs_batch # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1, ...]
         # Positional encodings (data.rw_pos_enc) are used to enhance the node features by providing spatial information. These are aggregated per subgraph (patch_pes) using a scatter operation with a 'max' reduction to capture the most significant positional signal
         # pes contains the positional encodings for each node in the graph, again using mapper has the same effect as for x (few lines above)
         pes = data.rw_pos_enc[data.subgraphs_nodes_mapper]
+        #pes = torch.rand(pes.shape)
         # knowing which nodes belong to which subgraph (batch_x), and the pos encoding for each node (pes), we can aggregate the pes for each subgraph:
         # the pos encoding for each patch, is the max between each patch node PE
         patch_pes = scatter(pes, batch_x, dim=0, reduce='max') 
@@ -178,7 +185,7 @@ class PolymerJEPA(nn.Module):
         context_subgraphs += self.rw_encoder(context_pe)
         
         # Prepare inputs for MHA
-        context_x = context_subgraphs.unsqueeze(1)
+        context_embedding = context_subgraphs.unsqueeze(1)
 
 
         # Given that there's only one element the attention operation "won't do anything"
@@ -190,8 +197,8 @@ class PolymerJEPA(nn.Module):
         #         padding elements are indicated by 1s.
 
         # pass context subgraph through context encoder
-        context_x = self.context_encoder(
-            context_x, 
+        context_embedding = self.context_encoder(
+            context_embedding, 
             None, 
             ~context_mask
         )
@@ -212,7 +219,7 @@ class PolymerJEPA(nn.Module):
                 ) # Don't attend to empty patches when doing the final encoding
                 mixer_x = mixer_x.reshape(-1, self.nhid)
                 target_subgraphs = mixer_x[target_subgraphs_idx.flatten()] 
-                target_x = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid)
+                target_embeddings = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid)
 
         else:
             # data.mask is sth like  tensor([[False, False, False, False, False, False,  True,  True,  True,  True, True,  True,  True,  True,  True]])
@@ -225,42 +232,52 @@ class PolymerJEPA(nn.Module):
             ) # Don't attend to empty patches when doing the final encoding
             mixer_x = mixer_x.reshape(-1, self.nhid)
             target_subgraphs = mixer_x[target_subgraphs_idx.flatten()] 
-            target_x = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid)
+            target_embeddings = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid)
             
-            input_context_x = context_x.reshape(-1, self.nhid)
-            expanded_context_embeddings = self.context_expander(input_context_x)#.reshape(-1, self.expander_dim)
+            input_context_embedding = context_embedding.reshape(-1, self.nhid)
+            expanded_context_embeddings = self.context_expander(input_context_embedding)#.reshape(-1, self.expander_dim)
             # expanded_target_x = self.target_expander(target_x)
-            input_target_x = target_x.reshape(-1, self.nhid)
-            expanded_target_embeddings = self.target_expander(input_target_x)
+            input_target_embedding = target_embeddings.reshape(-1, self.nhid)
+            expanded_target_embeddings = self.target_expander(input_target_embedding)
             
         target_pes = patch_pes[target_subgraphs_idx.flatten()]
         encoded_tpatch_pes = self.rw_encoder(target_pes)
 
         if self.shouldUse2dHyperbola:
             # Predict the coordinates of the patches in the Q1 hyperbola
-            x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
-            y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
-            target_x = torch.cat([x_coord, y_coord], dim=-1)
+            x_coord = torch.cosh(target_embeddings.mean(-1).unsqueeze(-1))
+            y_coord = torch.sinh(target_embeddings.mean(-1).unsqueeze(-1))
+            target_embeddings = torch.cat([x_coord, y_coord], dim=-1)
 
-        target_prediction_embeddings = context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
+        target_prediction_embeddings = context_embedding + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
         target_prediction_embeddings = target_prediction_embeddings.reshape(-1, self.nhid)
-        target_y = self.target_predictor(target_prediction_embeddings) # V1: Directly predict (depends on the definition of self.target_predictor)
+        predicted_target_embeddings = self.target_predictor(target_prediction_embeddings) # V1: Directly predict (depends on the definition of self.target_predictor)
         # print('target_y:', target_y.shape)
         out_dim = 2 if self.shouldUse2dHyperbola else self.nhid
-        target_y = target_y.reshape(-1, self.num_target_patches, out_dim)
+        predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, out_dim)
+
+        # print("target_x", target_x.requires_grad)
+        # print(target_y.requires_grad)
+
         # V1: Directly predict (depends on the definition of self.target_predictor)
         # return the predicted target (via context + PE) and the true target obtained via the target encoder.
-        return target_x, target_y, expanded_context_embeddings, expanded_target_embeddings
+        return target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings
     
-
     def encode(self, data):
         x = data.x[data.subgraphs_nodes_mapper]
+        #x = torch.rand(x.shape)
         node_weights = data.node_weight[data.subgraphs_nodes_mapper]
+        #node_weights = torch.rand(node_weights.shape)
         edge_index = data.combined_subgraphs
         edge_attr = data.edge_attr[data.subgraphs_edges_mapper]
+        #edge_attr = torch.rand(edge_attr.shape)
         edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
+        #edge_weights = torch.rand(edge_weights.shape)
+
         batch_x = data.subgraphs_batch
         pes = data.rw_pos_enc[data.subgraphs_nodes_mapper]
+        #pes = torch.rand(pes.shape)
+
         patch_pes = scatter(pes, batch_x, dim=0, reduce='mean')
 
         for i, wdmpnn in enumerate(self.wdmpnns):
@@ -303,7 +320,7 @@ class PolymerJEPA(nn.Module):
         # quit(0)
         # TODO weight each subgraph based on how many nodes it has, context should be given more importance
         # Global Average Pooling
-
+        # print("mixer_x", mixer_x.requires_grad)
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches))
         batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device)
         context_subgraph_idx = data.context_subgraph_idx + batch_indexer

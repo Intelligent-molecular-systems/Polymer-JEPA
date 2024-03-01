@@ -77,17 +77,30 @@ class PolymerJEPAv2(nn.Module):
         
 
     def forward(self, data):
-        # print('x:', data.x.shape)
         x = data.x[data.subgraphs_nodes_mapper]
-        # print('x:', x.shape)
-        # quit()
+        # x = torch.rand(x.shape)
         node_weights = data.node_weight[data.subgraphs_nodes_mapper]
+        # node_weights = torch.rand(node_weights.shape)
 
         # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices
         edge_index = data.combined_subgraphs        
         # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
         edge_attr = data.edge_attr[data.subgraphs_edges_mapper]
+        # edge_attr = torch.rand(edge_attr.shape)
         edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
+        # edge_weights = torch.rand(edge_weights.shape)
+
+        # print('x:', data.x.shape)
+        # x = data.x[data.subgraphs_nodes_mapper]
+        # # print('x:', x.shape)
+        # # quit()
+        # node_weights = data.node_weight[data.subgraphs_nodes_mapper]
+
+        # # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices
+        # edge_index = data.combined_subgraphs        
+        # # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
+        # edge_attr = data.edge_attr[data.subgraphs_edges_mapper]
+        # edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
         batch_x = data.subgraphs_batch # this is the batch of subgraphs, i.e. the subgraph idxs [0, 0, 1, 1, ...]
         pes = data.rw_pos_enc[data.subgraphs_nodes_mapper]
         patch_pes = scatter(pes, batch_x, dim=0, reduce='max') 
@@ -104,7 +117,7 @@ class PolymerJEPAv2(nn.Module):
         context_subgraphs_x = subgraph_x[context_subgraph_idx]
         context_pe = patch_pes[context_subgraph_idx] 
         context_subgraphs_x += self.rw_encoder(context_pe)
-        context_x = context_subgraphs_x.unsqueeze(1)  # batch_size x 1 x nhid
+        context_embedding = context_subgraphs_x.unsqueeze(1)  # batch_size x 1 x nhid
         # print('context_x:', context_x.shape)
 
         # full graph nodes embedding (original full graph)
@@ -136,41 +149,48 @@ class PolymerJEPAv2(nn.Module):
         target_subgraphs = subgraphs_x_from_full[target_subgraphs_idx.flatten()] 
         target_pes = patch_pes[target_subgraphs_idx.flatten()]
         encoded_tpatch_pes = self.rw_encoder(target_pes)
-        target_x = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
+        target_embeddings = target_subgraphs.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
         
         expanded_context_embeddings = torch.tensor([]) # save the embeddings for regularization
         expanded_target_embeddings = torch.tensor([])
         if self.regularization: 
-            input_context_x = context_x.reshape(-1, self.nhid)
+            input_context_x = context_embedding.reshape(-1, self.nhid)
             expanded_context_embeddings = self.context_expander(input_context_x)#.reshape(-1, self.expander_dim)
             # expanded_target_x = self.target_expander(target_x)
-            input_target_x = target_x.reshape(-1, self.nhid)
+            input_target_x = target_embeddings.reshape(-1, self.nhid)
             expanded_target_embeddings = self.target_expander(input_target_x)#.reshape(-1, self.expander_dim)
             # expanded_context_embeddings = torch.vstack([expanded_context_x.reshape(-1, self.expander_dim), expanded_target_x.reshape(-1, self.expander_dim)])
 
         if self.shouldUse2dHyperbola:
-            x_coord = torch.cosh(target_x.mean(-1).unsqueeze(-1))
-            y_coord = torch.sinh(target_x.mean(-1).unsqueeze(-1))
-            target_x = torch.cat([x_coord, y_coord], dim=-1) # target_x shape: batch_size x num_target_patches x 2
+            x_coord = torch.cosh(target_embeddings.mean(-1).unsqueeze(-1))
+            y_coord = torch.sinh(target_embeddings.mean(-1).unsqueeze(-1))
+            target_embeddings = torch.cat([x_coord, y_coord], dim=-1) # target_x shape: batch_size x num_target_patches x 2
+        
 
         # Make predictions using the target predictor: for each target subgraph, we use the context + the target PE
-        target_prediction_embeddings = context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
+        target_prediction_embeddings = context_embedding + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
         # print('target_x:', target_x.shape)
         # print('context_x:', context_x.shape)
         # print('encoded_tpatch_pes:', encoded_tpatch_pes.shape)
         # print('target_prediction_embeddings:', target_prediction_embeddings.shape)
         target_prediction_embeddings = target_prediction_embeddings.reshape(-1, self.nhid)
 
-        target_y = self.target_predictor(target_prediction_embeddings) # V1: Directly predict (depends on the definition of self.target_predictor)
+        predicted_target_embeddings = self.target_predictor(target_prediction_embeddings) # V1: Directly predict (depends on the definition of self.target_predictor)
         out_dim = 2 if self.shouldUse2dHyperbola else self.nhid
-        target_y = target_y.reshape(-1, self.num_target_patches, out_dim)
+        predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, out_dim)
+        # print(target_x.requires_grad)
+        # print(target_y.requires_grad)
         # target_y shape: batch_size x num_target_patches x 2
         # return the predicted target (via context + PE) and the true target obtained via the target encoder.
-        return target_x, target_y, expanded_context_embeddings, expanded_target_embeddings
+        return target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings
 
 
     def encode(self, data):
         # pass data through the target encoder that already acts on the full graph
+        # x = torch.rand(data.x.shape)
+        # edge_attr = torch.rand(data.edge_attr.shape) 
+        # edge_weight = torch.rand(data.edge_weight.shape)
+        # node_weight = torch.rand(data.node_weight.shape)
         node_embeddings = self.target_encoder(
             data.x, 
             data.edge_index, 

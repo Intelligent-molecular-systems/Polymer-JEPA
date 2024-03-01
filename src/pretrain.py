@@ -41,7 +41,7 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
             mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
             num_target_patches=cfg.jepa.num_targets,
             should_share_weights=cfg.pretrain.shouldShareWeights,
-            regularization = cfg.pretrain.regularization,
+            regularization=cfg.pretrain.regularization,
             n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
             shouldUse2dHyperbola=cfg.jepa.dist == 0,
             shouldLayerNorm = cfg.model.layerNorm
@@ -56,7 +56,7 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
             pooling=cfg.model.pool,
             num_target_patches=cfg.jepa.num_targets,
             should_share_weights=cfg.pretrain.shouldShareWeights,
-            regularization = cfg.pretrain.regularization,
+            regularization=cfg.pretrain.regularization,
             n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
             shouldUse2dHyperbola=cfg.jepa.dist == 0,
             shouldLayerNorm = cfg.model.layerNorm
@@ -64,6 +64,9 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
 
     else:
         raise ValueError('Invalid model version')
+
+    print('model', model)
+
 
     optimizer = torch.optim.Adam(
         model.parameters(), 
@@ -145,8 +148,8 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
 
             if cfg.visualize.shouldLoss:
                 visualize_loss_space(
-                    target_x=loss_data[0], 
-                    target_y=loss_data[1],
+                    target_embeddings=loss_data[0], 
+                    predicted_target_embeddings=loss_data[1],
                     model_name=model_name, 
                     epoch=epoch,
                     loss_type=cfg.jepa.dist,

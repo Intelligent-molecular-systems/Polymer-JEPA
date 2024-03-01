@@ -20,6 +20,7 @@ def run():
     # which would require different subgraphing techniques
 
     if cfg.finetuneDataset == 'aldeghi':
+        print(aldeghi_dataset.data_list[0].num_edge_features)
         print('Finetuning will be on aldeghi dataset...')
         # 40% unlabelled split, 40% labelled, 20% test split
         # of the labelled we are gonna use only aldeghiFTPercentage
@@ -30,7 +31,7 @@ def run():
         ft_data = ft_data[:int(cfg.pretrain.aldeghiFTPercentage*len(ft_data))]
         # for official result use 0.8 as test data, but to run experiments fast i can use 0.95
         pre_test_data = aldeghi_dataset[int(0.95*len(aldeghi_dataset)):].copy()
-        ft_test_data = pre_test_data
+        ft_test_data = aldeghi_dataset[int(0.95*len(aldeghi_dataset)):].copy()
 
 
     elif cfg.finetuneDataset == 'diblock':
@@ -63,10 +64,10 @@ def run():
                 mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
-                regularization = cfg.pretrain.regularization,
+                regularization=cfg.pretrain.regularization,
                 n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
-                shouldLayerNorm = cfg.model.layerNorm
+                shouldLayerNorm=cfg.model.layerNorm
             ).to(cfg.device)
 
         elif cfg.modelVersion == 'v2':
@@ -78,10 +79,10 @@ def run():
                 pooling=cfg.model.pool,
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
-                regularization = cfg.pretrain.regularization,
+                regularization=cfg.pretrain.regularization,
                 n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
-                shouldLayerNorm = cfg.model.layerNorm
+                shouldLayerNorm=cfg.model.layerNorm
             ).to(cfg.device)
 
         else:
@@ -90,7 +91,7 @@ def run():
 
         if cfg.shouldFinetuneOnPretrainedModel:
             if not model_name: # it means we are not pretraining in the current run
-                model_name = 'tgMLerwT'
+                model_name = '6Jh6iD0e'
             # To print the model parameters after loading
             # params_before = {name: param.clone() for name, param in model.named_parameters()}
 
@@ -123,11 +124,6 @@ def run():
             model_name += '_NotPretrained'
             finetune(ft_data, ft_test_data, transform, model, model_name, cfg)
 
-        
-    
-
-
-        
 if __name__ == '__main__':
     run()
 

@@ -74,9 +74,9 @@ class Kernel(nn.Module):
         self.transformer_encoder = nn.ModuleList([GTEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
 
-    def forward(self, x, coarsen_adj_dense, mask):
+    def forward(self, x, coarsen_adj, mask):
         for layer in self.transformer_encoder:
-            x = layer(x, A=coarsen_adj_dense, src_key_padding_mask=mask)
+            x = layer(x, A=coarsen_adj, src_key_padding_mask=mask)
         return x
 
 
@@ -87,7 +87,7 @@ class Addictive(nn.Module):
         self.transformer_encoder = nn.ModuleList([GraphormerEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
 
-    def forward(self, x, coarsen_adj_dense, mask):
+    def forward(self, x, coarsen_adj, mask):
         for layer in self.transformer_encoder:
-            x = layer(x, A=coarsen_adj_dense, src_key_padding_mask=mask)
+            x = layer(x, A=coarsen_adj, src_key_padding_mask=mask)
         return x

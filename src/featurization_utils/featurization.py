@@ -267,7 +267,9 @@ def poly_smiles_to_graph(poly_strings, isAldeghiDataset=True, **label_dicts):
     # alternating if edge_weights are 1s or if they are between different monomers and they are 0.5
     # random if edge_weights are 0.5 and are between same monomer
     # block if edge weights are either big or small like 0.8 and 0.2 or 0.9 and 0.1 or bigger
-
+    # make i_feat same n of rows as X, and repeat the i_feat val, only one column
+    # i_feat = torch.full((X.shape[0], 1), i_feat)
+        
     graph_data_kwargs = {
         "x": X, 
         "edge_index": edge_index, 
@@ -276,7 +278,8 @@ def poly_smiles_to_graph(poly_strings, isAldeghiDataset=True, **label_dicts):
         "edge_weight": edge_weights, 
         "intermonomers_bonds": intermonomers_bonds, 
         "motifs": (cliques, clique_edges),
-        "monomer_mask": monomer_mask,
+        "monomer_mask": monomer_mask
+        #"i_feat": i_feat
     }
 
     if isAldeghiDataset:

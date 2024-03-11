@@ -24,6 +24,9 @@ class MyDataset(InMemoryDataset):
 
     # Processes the dataset to the self.processed_dir folder.
     def process(self):
+        if self.pre_filter is not None:
+            data_list = [data for data in data_list if self.pre_filter(data)]
+
         if self.pre_transform is not None:
             self.data_list = [self.pre_transform(data) for data in self.data_list]
         # self.save(self.data_list, self.processed_paths[0])
@@ -31,8 +34,51 @@ class MyDataset(InMemoryDataset):
         torch.save(self.collate(self.data_list), self.processed_paths[0])
 
 
-def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/aldeghi_graphs_list.pt', dataset='aldeghi'):
-    graphs = []
+def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/train_aldeghi_graphs_list.pt', dataset='aldeghi'):
+    train_graphs = []
+    test_graphs = []
+    
+    # 35 monomer B excluded from training set, its a bit more than 2000 graphs
+    test_monomers = {
+        '[*:3]c1c(O)cc(O)c([*:4])c1O', 
+        '[*:3]c1cc(C(F)(F)F)nc([*:4])c1N', 
+        '[*:3]c1cc([*:4])cc(OC)c1', 
+        '[*:3]c1cc([*:4])cc(C(=O)Cl)c1',  
+        '[*:3]c1cc([*:4])c2ccc3cc(C(C)(C)C)cc4ccc1c2c43', 
+        '[*:3]c1cccc([*:4])c1[N+](=O)[O-]', 
+        '[*:3]c1[nH]nc2c([*:4])cncc12', 
+        '[*:3]c1cc([*:4])c(N)c(OC(F)(F)F)c1', 
+        '[*:3]c1cc([*:4])c(Cl)c(C#N)c1N', 
+        '[*:3]c1cc([*:4])c(F)cc1F', 
+        '[*:3]c1cc([*:4])c(N)cc1OC', 
+        '[*:3]c1cc(C=CC(=O)O)cc([*:4])c1OCC', 
+        '[*:3]c1c(Cl)cc([*:4])c(C)c1Cl', 
+        '[*:3]c1cc([*:4])c(OC(C)C)c(C=O)c1', 
+        '[*:3]c1ccc2c(c1)c1cc([*:4])ccc1n2CC1CO1', 
+        '[*:3]c1c(C)c([N+](=O)[O-])cc([*:4])c1OC', 
+        '[*:3]c1nc([*:4])cnc1C(=O)OC', 
+        '[*:3]c1cc(CN)cc([*:4])c1OC', 
+        '[*:3]c1cc([*:4])cc(C)c1N', 
+        '[*:3]c1nc([*:4])nn1COC', 
+        '[*:3]c1cc(F)c(C)c([*:4])c1N',
+        '[*:3]c1ccc2c(c1)C(=O)c1cc([*:4])ccc1-2',
+        '[*:3]c1cc(C=O)cc([*:4])c1OC',
+        '[*:3]c1cc(C(=O)O)c([*:4])cc1C(=O)O',
+        '[*:3]c1sc([*:4])nc1C',
+        '[*:3]c1c(N)c(Cl)cc([*:4])c1OC',
+        '[*:3]c1cc(C(=O)NN)cc([*:4])c1O'
+        '[*:3]c1cc(C=O)c([*:4])cn1',
+        '[*:3]c1cn(C)c([*:4])n1',
+        '[*:3]c1cc([*:4])c(Cl)[nH]c1=O',
+        '[*:3]c1c(C)ncc([*:4])c1C',
+        '[*:3]c1cc([*:4])cc([N+](=O)[O-])c1C',
+        '[*:3]c1cc(C)cc([*:4])c1NCC(=O)NN'
+        '[*:3]c1ccc2c(c1)C1(CCOCC1)c1cc([*:4])ccc1-2',
+        '[*:3]c1cc([*:4])c2nc(-c3ccccc3O)ccc2c1',
+        '[*:3]c1cc([*:4])cnc1CC',
+        '[*:3]c1cc(N)cc([*:4])c1C' 
+    }
+    
     # check if graphs_list.pt exists
     if not os.path.isfile(file_graphs_list):
         print('Creating graphs pt file...')
@@ -50,8 +96,16 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
                     y_EA=ea_values, 
                     y_IP=ip_values
                 ) 
+                polymer_monomers = set(poly_strings.split('|')[0].split('.'))
+                
+                if polymer_monomers.isdisjoint(test_monomers):
+                    train_graphs.append(graph)
+                else:
+                    test_graphs.append(graph)
+        
+            print('Number of training graphs:', len(train_graphs))
+            print('Number of test graphs:', len(test_graphs))
 
-                graphs.append(graph)
         elif dataset == 'diblock':
             for i in tqdm.tqdm(range(len(df.loc[:, 'poly_chemprop_input']))):
                 poly_strings = df.loc[i, 'poly_chemprop_input']
@@ -70,45 +124,83 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
                     y_gyroid=gyroid_values,
                     y_disordered=disordered_values
                 ) 
-                graphs.append(graph)
+                train_graphs.append(graph)
         else:
             raise ValueError('Invalid dataset name')
-            
-        torch.save(graphs, file_graphs_list)
-        print('Graphs pt file saved')
+        
+        if dataset == 'aldeghi':
+            train_file_graphs_list = 'Data/train_aldeghi_graphs_list.pt'
+            test_file_graphs_list = 'Data/test_aldeghi_graphs_list.pt'
+            torch.save(train_graphs, train_file_graphs_list)
+            torch.save(test_graphs, test_file_graphs_list)
+            print('Graphs pt file saved')
+        else:
+            torch.save(train_graphs, file_graphs_list)
+            print('Graphs pt file saved')
     else:
         print('Loading graphs pt file...')
-        graphs = torch.load(file_graphs_list)
+        if dataset == 'aldeghi':
+            train_graphs = torch.load('Data/train_aldeghi_graphs_list.pt')
+            test_graphs = torch.load('Data/test_aldeghi_graphs_list.pt')
+        else:
+            train_graphs = torch.load(file_graphs_list)
 
+    # monomer split, uncomment to shuffle the graphs
     random.seed(12345)
-    graphs = random.sample(graphs, len(graphs))
-    return graphs
+    train_graphs = random.sample(train_graphs, len(train_graphs))
+    test_graphs = random.sample(test_graphs, len(test_graphs))
+    return train_graphs, test_graphs
 
 
 def create_data(cfg):
     pre_transform = PositionalEncodingTransform(rw_dim=cfg.pos_enc.rw_dim)
     
-    transform = GraphJEPAPartitionTransform(
-        subgraphing_type=cfg.subgraphing.type,
+    transform_train = GraphJEPAPartitionTransform(
+        context_subgraphing_type=cfg.subgraphing.contextType,
+        target_subgraphing_type=cfg.subgraphing.targetType,
         num_targets=cfg.jepa.num_targets,
         n_patches=cfg.subgraphing.n_patches,
-        patch_num_diff=cfg.pos_enc.patch_num_diff
+        patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+        patch_num_diff=cfg.pos_enc.patch_num_diff,
+        drop_rate=cfg.subgraphing.drop_rate,
+        context_size=cfg.subgraphing.context_size
+    )
+
+    transform_val = GraphJEPAPartitionTransform(
+        context_subgraphing_type=cfg.subgraphing.contextType,
+        target_subgraphing_type=cfg.subgraphing.targetType,
+        num_targets=cfg.jepa.num_targets,
+        n_patches=cfg.subgraphing.n_patches,
+        patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+        patch_num_diff=cfg.pos_enc.patch_num_diff,
+        drop_rate=0.0,
+        context_size=cfg.subgraphing.context_size
     )
     
-    graphs = get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/aldeghi_graphs_list.pt', dataset='aldeghi')
-    dataset = MyDataset(root='Data/aldeghi', data_list=graphs, pre_transform=pre_transform)
-    # graphs = get_graphs(file_csv='Data/diblock_copolymer_dataset.csv', file_graphs_list='Data/diblock_graphs_list.pt', dataset='diblock')
-    # dataset = MyDataset(root='Data/diblock', data_list=graphs, pre_transform=pre_transform)
+    
+    train_graphs, test_graphs = get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/train_aldeghi_graphs_list.pt', dataset='aldeghi')
+    pretrn_graphs = train_graphs[:int(0.5*len(train_graphs))]
+    ft_graphs = train_graphs[int(0.5*len(train_graphs)):]
 
-    return dataset, transform
+    pretrn_dataset = MyDataset(root='Data/aldeghi/pretrain', data_list=pretrn_graphs, pre_transform=pre_transform, transform=transform_train)
+    ft_dataset = MyDataset(root='Data/aldeghi/finetune', data_list=ft_graphs, pre_transform=pre_transform, transform=transform_val)
+    val_dataset = MyDataset(root='Data/aldeghi/val', data_list=test_graphs, pre_transform=pre_transform, transform=transform_val)
+    val_dataset = [x for x in val_dataset] # keep same transform subgraphs throughout epochs
 
-# TODO create a function to create the pt files even for the diblock dataset
-# if cfg.finetuneDataset == 'aldeghi':
-    #     data_path = 'Data/aldeghi_coley_ea_ip_dataset.csv'
-    #     graphs_list = 'Data/aldeghi_graphs_list.pt'
-        
-    # elif cfg.finetuneDataset == 'diblock':
-    #     data_path = 'Data/diblock_copolymer_dataset.csv'
-    #     graphs_list = 'Data/diblock_graphs_list.pt'
-    # else:
-    #     raise ValueError('Invalid dataset')
+    return pretrn_dataset, ft_dataset, val_dataset
+
+
+
+def printStats(graphs):
+    avg_num_nodes = sum([g.num_nodes for g in graphs]) / len(graphs)
+    avg_num_edges = sum([g.num_edges for g in graphs]) / len(graphs)
+    print(f'Average number of nodes: {avg_num_nodes}')
+    print(f'Average number of edges: {avg_num_edges}')
+
+    # print n of graphs with more than 25 nodes
+    print(f'Number of graphs with more than 25 nodes: {len([g for g in graphs if g.num_nodes > 25])}')
+    print(f'Number of graphs with more than 30 nodes: {len([g for g in graphs if g.num_nodes > 30])}')
+
+    # print max number of nodes
+    print(f'Max number of nodes: {max([g.num_nodes for g in graphs])}')
+    print(f'min number of nodes: {min([g.num_nodes for g in graphs])}')

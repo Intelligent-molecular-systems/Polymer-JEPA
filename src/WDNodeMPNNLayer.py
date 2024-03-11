@@ -14,6 +14,7 @@ class WDNodeMPNNLayer(nn.Module):
             hidden_dim=300,
             isFirstLayer=False,
             isLastLayer=False,
+            shouldUseNodeWeights=False
         ):
 
         super().__init__()
@@ -21,6 +22,8 @@ class WDNodeMPNNLayer(nn.Module):
         self.edge_attr_dim = edge_attr_dim
         self.isFirstLayer = isFirstLayer
         self.isLastLayer = isLastLayer
+        self.shouldUseNodeWeights = shouldUseNodeWeights
+
         if isFirstLayer:
             self.lin0 = nn.Linear(node_attr_dim + edge_attr_dim, hidden_dim)
 
@@ -38,19 +41,9 @@ class WDNodeMPNNLayer(nn.Module):
         # )   
 
     def forward(self, x, edge_index, edge_attr, edge_weight, node_weight, h0=None):
-        # x, edge_index, edge_attr, edge_weight, node_weight = data.x, data.edge_index, data.edge_attr, data.edge_weight, data.node_weight    
-        # print('x:', x.shape)
-        # print('edge_index:', edge_index.shape)
-        # print('edge_attr:', edge_attr.shape)
-        # print('edge_weight:', edge_weight.shape)
-        # print('node_weight:', node_weight.shape)
         if self.isFirstLayer:
             incoming_edges_weighted_sum = torch.zeros(x.size()[0], edge_attr.size()[1])
-            # print('incoming_edges_weighted_sum:', incoming_edges_weighted_sum.shape)
-            edge_index_reshaped = edge_index[1].view(-1, 1)
-            # print('edge_index_reshaped:', edge_index_reshaped.shape)
-            # min_index_value = torch.max(edge_index_reshaped)
-            # print("maximum index value:", min_index_value.item())
+            edge_index_reshaped = edge_index[1].view(-1, 1)            
             
             # sum over the rows (edges), index is the target node (i want to sum all edges where the target node is the same), src = attributes weighted
             incoming_edges_weighted_sum.scatter_add_(0, edge_index_reshaped.expand_as(edge_attr), edge_weight.view(-1, 1) * edge_attr)
@@ -66,8 +59,10 @@ class WDNodeMPNNLayer(nn.Module):
         # h = self.final_message_passing_layer(torch.cat([h, x], dim=1), edge_index, edge_weight, h0)
 
         # multiply the node features by the node weights
-        if self.isLastLayer:
+        # if self.isLastLayer:
+        if self.shouldUseNodeWeights:
             h = h * node_weight.view(-1, 1)
+        #     h = h * node_weight.view(-1, 1)
         # h is be the (weighted) embeddings of each node of the graph
         return h, h0
     

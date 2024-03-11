@@ -12,16 +12,12 @@ import torch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-def pretrain(pre_trn_data, pre_val_data, transform, cfg):
+def pretrain(pre_trn_data, pre_val_data, cfg):
     # 70-20-10 split for pretraining - validation - test data
     print(f'Pretraining training on: {len(pre_trn_data)} graphs')
     print(f'Pretraining validation on: {len(pre_val_data)} graphs')
 
-
-    pre_trn_data.transform = transform
     # pre_trn_data = [x for x in pre_trn_data] # this way we can use the same transform for the validation data all the times
-    pre_val_data.transform = transform
-    pre_val_data = [x for x in pre_val_data] # this way we can use the same transform for the validation data all the times
 
     pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.pretrain.batch_size, shuffle=True)
     pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.pretrain.batch_size, shuffle=False)
@@ -34,17 +30,19 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
             nfeat_node=num_node_features,
             nfeat_edge=num_edge_features,
             nhid=cfg.model.hidden_size,
+            nlayer_gnn=cfg.model.nlayer_gnn,
             nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
             gMHA_type=cfg.model.gMHA_type,
             rw_dim=cfg.pos_enc.rw_dim,
+            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
             pooling=cfg.model.pool,
+            n_patches=cfg.subgraphing.n_patches,
             mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
             num_target_patches=cfg.jepa.num_targets,
             should_share_weights=cfg.pretrain.shouldShareWeights,
             regularization=cfg.pretrain.regularization,
-            n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
             shouldUse2dHyperbola=cfg.jepa.dist == 0,
-            shouldLayerNorm = cfg.model.layerNorm
+            shouldUseNodeWeights=cfg.model.shouldUseNodeWeights,
         ).to(cfg.device)
 
     elif cfg.modelVersion == 'v2':
@@ -52,20 +50,22 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
             nfeat_node=num_node_features,
             nfeat_edge=num_edge_features,
             nhid=cfg.model.hidden_size,
+            nlayer_gnn=cfg.model.nlayer_gnn,
             rw_dim=cfg.pos_enc.rw_dim,
+            patch_rw_dim=cfg.pos_enc.patch_rw_dim,
             pooling=cfg.model.pool,
             num_target_patches=cfg.jepa.num_targets,
             should_share_weights=cfg.pretrain.shouldShareWeights,
             regularization=cfg.pretrain.regularization,
-            n_hid_wdmpnn=cfg.model.wdmpnn_hid_dim,
             shouldUse2dHyperbola=cfg.jepa.dist == 0,
-            shouldLayerNorm = cfg.model.layerNorm
+            shouldUseNodeWeights=cfg.model.shouldUseNodeWeights,
         ).to(cfg.device)
 
     else:
         raise ValueError('Invalid model version')
 
     print('model', model)
+    print(f"\nNumber of parameters: {count_parameters(model)}")
 
 
     optimizer = torch.optim.Adam(
@@ -106,7 +106,8 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
             regularization=cfg.pretrain.regularization,
             inv_weight=cfg.pretrain.inv_weight, 
             var_weight=cfg.pretrain.var_weight, 
-            cov_weight=cfg.pretrain.cov_weight
+            cov_weight=cfg.pretrain.cov_weight,
+            epoch=epoch
         )
 
         model.eval()
@@ -127,8 +128,9 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
         os.makedirs(save_path, exist_ok=True)
         torch.save(model.state_dict(), f'{save_path}/model.pt')
         
-        with open(f'{save_path}/hyperparams.yml', 'w') as f:
-            with redirect_stdout(f): print(cfg.dump())
+        if epoch == 0:
+            with open(f'{save_path}/hyperparams.yml', 'w') as f:
+                with redirect_stdout(f): print(cfg.dump())
 
         scheduler.step(val_loss)
 
@@ -137,13 +139,48 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
         if epoch == 0 or epoch == cfg.pretrain.epochs - 1 or epoch % 5 == 0:
 
             if cfg.visualize.shouldEmbeddingSpace:
+                # visualize initial embeddings (wdmpnn output)
+                # visualeEmbeddingSpace(
+                #     embeddings=embedding_data[0], 
+                #     mon_A_type=embedding_data[-2], 
+                #     stoichiometry=embedding_data[-1],
+                #     model_name=model_name, 
+                #     epoch=epoch,
+                #     should3DPlot=cfg.visualize.should3DPlot,
+                #     type="wdmpnn_output"
+                # )
+                
+                # visualize target embeddings (output of the target encoder for the full graph)
                 visualeEmbeddingSpace(
-                    embeddings=embedding_data[0], 
-                    mon_A_type=embedding_data[1], 
-                    stoichiometry=embedding_data[2],
+                    embeddings=embedding_data[1], 
+                    mon_A_type=embedding_data[-2], 
+                    stoichiometry=embedding_data[-1],
                     model_name=model_name, 
                     epoch=epoch,
-                    should3DPlot=cfg.visualize.should3DPlot
+                    should3DPlot=cfg.visualize.should3DPlot,
+                    type="target_encoder_output"
+                )  
+                
+                # visualize graph embeddings (output of the target encoder for the full graph)
+                visualeEmbeddingSpace(
+                    embeddings=embedding_data[2], 
+                    mon_A_type=embedding_data[-2], 
+                    stoichiometry=embedding_data[-1],
+                    model_name=model_name, 
+                    epoch=epoch,
+                    should3DPlot=cfg.visualize.should3DPlot,
+                    type="target_encoder_full_graph_output"
+                ) 
+
+                # visualize context encoder embeddings
+                visualeEmbeddingSpace(
+                    embeddings=embedding_data[3], 
+                    mon_A_type=embedding_data[-2], 
+                    stoichiometry=embedding_data[-1],
+                    model_name=model_name, 
+                    epoch=epoch,
+                    should3DPlot=cfg.visualize.should3DPlot,
+                    type="context_encoder_output"
                 )
 
             if cfg.visualize.shouldLoss:
@@ -157,3 +194,8 @@ def pretrain(pre_trn_data, pre_val_data, transform, cfg):
                 )
     
     return model, model_name
+
+
+def count_parameters(model):
+    # For counting number of parameteres: need to remove unnecessary DiscreteEncoder, and other additional unused params
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)

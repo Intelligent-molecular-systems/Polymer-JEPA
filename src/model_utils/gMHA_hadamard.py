@@ -111,6 +111,7 @@ class MultiheadAttention(nn.Module):
         if need_head_weights:
             need_weights = True
 
+      
         is_batched = query.dim() == 3
         if self.batch_first and is_batched:
             query, key, value = [x.transpose(1, 0)
@@ -203,6 +204,7 @@ class MultiheadAttention(nn.Module):
         attn_probs = self.dropout_module(attn_weights)
 
         assert v is not None
+        # output of the attention layer is obtained multipliyng the attention weight matrix with the values matrix
         attn = torch.bmm(attn_probs, v)
         assert list(attn.size()) == [
             bsz * self.num_heads, tgt_len, self.head_dim]

@@ -3,10 +3,11 @@ import numpy as np
 import os
 from src.model_utils.hyperbolic_dist import hyperbolic_dist
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 
-def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1):
+def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0):
     # check target and context parameters are the same (weight sharing)
     # for param_q, param_k in zip(model.context_encoder.parameters(), model.target_encoder.parameters()):
     #     if not torch.equal(param_q, param_k):
@@ -15,7 +16,10 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     #         print(f"context == target !!")
 
     total_loss = 0
-    all_graph_mbeddings = torch.tensor([], requires_grad=False, device=device)
+    all_graph_embeddings = torch.tensor([], requires_grad=False, device=device)
+    all_initial_embeddings = torch.tensor([], requires_grad=False, device=device)
+    all_target_encoder_embeddings = torch.tensor([], requires_grad=False, device=device)
+    all_context_embeddings = torch.tensor([], requires_grad=False, device=device)
     mon_A_type = torch.tensor([], requires_grad=False, device=device)
     stoichiometry = []
     inv_losses = []
@@ -26,8 +30,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     for i, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        # target x sono i true values, target y sono i predicted values
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings = model(data)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_embeddings, target_encoder_embeddings,  context_embeddings = model(data, epoch)
         if i == 0: # save the first target_x and target_y for visualization of hyperbolic space
             target_embeddings_saved = target_embeddings
             predicted_target_embeddings_saved = predicted_target_embeddings
@@ -37,7 +40,10 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
                 graph_embeddings = model.encode(data).detach()
             model.train()
             mon_A_type = torch.cat((mon_A_type, data.mon_A_type.detach().clone()), dim=0)
-            all_graph_mbeddings = torch.cat((all_graph_mbeddings, graph_embeddings), dim=0)
+            all_graph_embeddings = torch.cat((all_graph_embeddings, graph_embeddings), dim=0)
+            # all_initial_embeddings = torch.cat((all_initial_embeddings, initial_embeddings.detach().clone()), dim=0)
+            all_target_encoder_embeddings = torch.cat((all_target_encoder_embeddings, target_encoder_embeddings.detach().clone()), dim=0)
+            all_context_embeddings = torch.cat((all_context_embeddings, context_embeddings.detach().clone()), dim=0)
             stoichiometry.extend(data.stoichiometry)
         # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
         if criterion_type == 0:
@@ -85,7 +91,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         print(f'\ninv_loss: {avg_inv_loss:.5f}, cov_loss: {avg_cov_loss:.5f}, var_loss: {avg_var_loss:.5f}')        
         print(f'Weighted values: inv_loss: {inv_weight*avg_inv_loss:.5f}, cov_loss: {cov_weight*avg_cov_loss:.5f}, var_loss: {var_weight*avg_var_loss:.5f}\n')
 
-    embeddings_data = (all_graph_mbeddings, mon_A_type, stoichiometry)
+    embeddings_data = ([], all_target_encoder_embeddings, all_graph_embeddings, all_context_embeddings, mon_A_type, stoichiometry)
     loss_data = (target_embeddings_saved, predicted_target_embeddings_saved)
     
     return avg_trn_loss, embeddings_data, loss_data
@@ -97,7 +103,7 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
     for data in loader:
         data = data.to(device)
         model.eval()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings = model(data)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, _, _, _ = model(data)
 
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings)
@@ -153,6 +159,23 @@ def vcReg(embeddings):
     
     return cov_loss, std_loss
 
+
+def reset_parameters(module):
+    def reset_module_parameters(module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.xavier_uniform_(module.weight)
+            module.bias.data.fill_(0)  # Initialize bias to zero
+            
+    if hasattr(module, 'reset_parameters'):
+        module.reset_parameters()
+    else: # Fallback for modules without a `reset_parameters` method
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                module.bias.data.fill_(0.0)
+    for child in module.children():
+        reset_module_parameters(child)
+
 # import networkx as nx
         # graph = data[0]
 
@@ -163,3 +186,4 @@ def vcReg(embeddings):
         # nx.draw(G_context, with_labels=True, node_color='skyblue')
         # import matplotlib.pyplot as plt
         # plt.show()
+

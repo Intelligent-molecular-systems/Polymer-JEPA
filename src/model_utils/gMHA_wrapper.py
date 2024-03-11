@@ -30,7 +30,7 @@ class MLPMixer(nn.Module):
 
 class Hadamard(nn.Module):
     # Hadamard attention (default): (A ⊙ softmax(QK^T/sqrt(d)))V
-    def __init__(self, nhid, dropout, nlayer,n_patches, nhead=8, batch_first=True):
+    def __init__(self, nhid, dropout, nlayer, nhead=8, batch_first=True):
         super().__init__()
         self.transformer_encoder = nn.ModuleList([HadamardEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
@@ -43,7 +43,7 @@ class Hadamard(nn.Module):
 
 class Standard(nn.Module):
     # standard (full) attention: softmax(QK^T/sqrt(d))V
-    def __init__(self, nhid, dropout, nlayer, n_patches, nhead=8, batch_first=True):
+    def __init__(self, nhid, dropout, nlayer, nhead=8, batch_first=True):
         super().__init__()
         self.transformer_encoder = nn.ModuleList([GTEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
@@ -74,9 +74,9 @@ class Kernel(nn.Module):
         self.transformer_encoder = nn.ModuleList([GTEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
 
-    def forward(self, x, coarsen_adj_dense, mask):
+    def forward(self, x, coarsen_adj, mask):
         for layer in self.transformer_encoder:
-            x = layer(x, A=coarsen_adj_dense, src_key_padding_mask=mask)
+            x = layer(x, A=coarsen_adj, src_key_padding_mask=mask)
         return x
 
 
@@ -87,7 +87,7 @@ class Addictive(nn.Module):
         self.transformer_encoder = nn.ModuleList([GraphormerEncoderLayer(
             d_model=nhid, dim_feedforward=nhid*2, nhead=nhead, batch_first=batch_first, dropout=dropout)for _ in range(nlayer)])
 
-    def forward(self, x, coarsen_adj_dense, mask):
+    def forward(self, x, coarsen_adj, mask):
         for layer in self.transformer_encoder:
-            x = layer(x, A=coarsen_adj_dense, src_key_padding_mask=mask)
+            x = layer(x, A=coarsen_adj, src_key_padding_mask=mask)
         return x

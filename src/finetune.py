@@ -10,18 +10,17 @@ from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
 
-def finetune(ft_trn_data, ft_val_data, transform, model, model_name, cfg):
+def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
 
     # print(len(ft_val_data))
     # ft_tst_data = ft_data[int(0.9*len(ft_data)):].copy()
     print(f'Finetuning training on: {len(ft_trn_data)} graphs')
     print(f'Finetuning validating on: {len(ft_val_data)} graphs')
     
-    if cfg.modelVersion == 'v1': # only model v1 requires the transforms, since finetuning on v2 inputs directly the full graph, no subgraphs
-        ft_trn_data.transform = transform
+    if cfg.modelVersion == 'v2':
+        # no need to use transform at every data access
         ft_trn_data = [x for x in ft_trn_data]
-        ft_val_data.transform = transform
-        ft_val_data = [x for x in ft_val_data]
+        
 
     ft_trn_loader = DataLoader(dataset=ft_trn_data, batch_size=cfg.finetune.batch_size, shuffle=True)
     ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False)
@@ -40,9 +39,11 @@ def finetune(ft_trn_data, ft_val_data, transform, model, model_name, cfg):
     
     # this is the predictor head, that takes the graph embeddings and predicts the property
     predictor = nn.Sequential(
-        nn.Linear(cfg.model.hidden_size, cfg.model.wdmpnn_hid_dim),
+        nn.Linear(cfg.model.hidden_size, 300),
         nn.ReLU(),
-        nn.Linear(cfg.model.wdmpnn_hid_dim, out_dim)
+        nn.Linear(300, 300),
+        nn.ReLU(),
+        nn.Linear(300, out_dim)
     ).to(cfg.device)
     
     if cfg.frozenWeights:
@@ -55,7 +56,6 @@ def finetune(ft_trn_data, ft_val_data, transform, model, model_name, cfg):
 
 
     for epoch in tqdm(range(cfg.finetune.epochs), desc='Finetuning Epochs'):
-
         if cfg.frozenWeights:
             model.eval()
         else:
@@ -157,8 +157,8 @@ def finetune(ft_trn_data, ft_val_data, transform, model, model_name, cfg):
             if cfg.finetuneDataset == 'aldeghi':
                 label = 'ea' if cfg.finetune.property == 'ea' else 'ip'
                 
-                if cfg.visualize.shouldEmbeddingSpace:
-                    visualeEmbeddingSpace(all_embeddings, mon_A_type, stoichiometry, model_name, epoch, isFineTuning=True)
+                # if cfg.visualize.shouldEmbeddingSpace:
+                #     visualeEmbeddingSpace(all_embeddings, mon_A_type, stoichiometry, model_name, epoch, isFineTuning=True)
 
                 visualize_aldeghi_results(
                     np.array(all_y_pred_val), 

@@ -1,5 +1,6 @@
 import math
 from matplotlib import pyplot as plt
+import networkx as nx
 import numpy as np
 import os
 import pandas as pd
@@ -9,6 +10,7 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.metrics import r2_score, mean_squared_error, roc_auc_score, average_precision_score
+from torch_geometric.utils.convert import to_networkx
 from typing import List
 from umap import UMAP
 import warnings
@@ -272,3 +274,64 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     #         labels={'color': 'Stoichiometry'}
     #     )
     #     fig.write_html(os.path.join(save_folder, f"3D_tsne_stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.html"))
+
+
+def plot_subgraphs(G, subgraphs):
+    # Calculate the number of rows needed to display all subgraphs with up to 3 per row
+    num_rows = math.ceil(len(subgraphs) / 3)
+    fig, axes = plt.subplots(num_rows, min(3, len(subgraphs)), figsize=(10, 3 * num_rows))  # Adjust size as needed
+
+    # Flatten the axes array for easy iteration in case of a single row
+    if num_rows == 1:
+        axes = np.array([axes]).flatten()
+    else:
+        axes = axes.flatten()
+
+    for ax, subgraph in zip(axes, subgraphs):
+        color_map = ['orange' if node in subgraph else 'lightgrey' for node in G.nodes()]
+        pos = nx.spring_layout(G, seed=42)  # Fixed seed for consistent layouts across subplots
+        nx.draw(G, pos=pos, ax=ax, with_labels=True, node_color=color_map, font_weight='bold')
+        ax.set_title(f'Subgraph')
+
+    # If there are more axes than subgraphs, hide the extra axes
+    for i in range(len(subgraphs), len(axes)):
+        axes[i].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_from_transform_attributes(data):
+    # Generate the full graph and subgraphs from the transformed data
+    G_full = to_networkx(data, to_undirected=True)
+    G_context = G_full.subgraph(data.context_nodes_mapper.numpy())
+    G_targets = [G_full.subgraph(data.target_nodes_mapper[data.target_nodes_subgraph == target_idx].numpy()) 
+                for target_idx in data.target_subgraph_idxs]
+
+    # Prepare subgraphs list including context and target subgraphs for plotting
+    subgraphs = [G_context] + G_targets
+    subgraph_titles = ['Context Subgraph'] + [f'Target Subgraph {i+1}' for i in range(len(G_targets))]
+
+    # Calculate the number of subplots needed
+    num_subgraphs = len(subgraphs)
+    num_rows = math.ceil(num_subgraphs / 3)
+    fig, axes = plt.subplots(num_rows, max(1, min(3, num_subgraphs)), figsize=(12, 4 * num_rows))
+    axes = np.array(axes).flatten() if num_subgraphs > 1 else np.array([axes])
+
+    # Generate positions for all nodes in the full graph for consistent layout
+    pos = nx.spring_layout(G_full, seed=42)
+
+    for ax, (subgraph, title) in zip(axes, zip(subgraphs, subgraph_titles)):
+        # Draw the full graph in light gray as the background
+        nx.draw(G_full, pos=pos, ax=ax, node_color='lightgray', edge_color='gray', alpha=0.3, with_labels=True)
+
+        # Highlight the current subgraph
+        nx.draw(subgraph, pos=pos, ax=ax, with_labels=True, node_color='orange', edge_color='black', alpha=0.7)
+        ax.set_title(title)
+
+    # Hide any unused axes
+    for i in range(num_subgraphs, len(axes)):
+        axes[i].axis('off')
+
+    plt.tight_layout()
+    plt.show()

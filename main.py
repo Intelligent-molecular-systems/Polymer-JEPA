@@ -15,7 +15,7 @@ import torch
 def run():
     pretrn_dataset, ft_dataset, val_dataset = create_data(cfg)
     pretrn_dataset.shuffle()
-    ft_dataset.shuffle()
+    # ft_dataset.shuffle()
     # pretraning always done on the aldeghi dataset since its bigger dataset and no issues with homopolymer or tri, penta...blocks polymers
     # which would require different subgraphing techniques
 
@@ -86,7 +86,7 @@ def run():
 
         if cfg.shouldFinetuneOnPretrainedModel:
             if not model_name: # it means we are not pretraining in the current run
-                model_name = 'F6CBtbyn'
+                model_name = 'wqtEG48z'
 
             model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}/model.pt', map_location=cfg.device))
         

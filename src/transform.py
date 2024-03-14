@@ -1,16 +1,11 @@
-import math
-import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
 import re
-import random
-from scipy import sparse as sp
-from src.subgraphing_utils.context_subgraph_extractor import metisContext, rwContext, motifContext # motifs2subgraphs, randomWalks2subgraphs, newImprovedSubgraphing, 
-from src.subgraphing_utils.target_subgraph_extractor import metisTargets, rwTargets, motifTargets
+from src.subgraphing_utils.context_subgraph_extractor import rwContext, motifContext, metis2subgraphs
+from src.subgraphing_utils.target_subgraph_extractor import rwTargets, motifTargets
+from src.visualize import plot_from_transform_attributes
 import torch
 import torch_geometric
 from torch_geometric.data import Data
-from torch_geometric.utils.convert import to_networkx
 
 def cal_coarsen_adj(subgraphs_nodes_mask):
     #a coarse patch adjacency matrix A′ = B*B^T ∈ Rp×p, where each A′ ij contains the node overlap between pi and pj.
@@ -114,8 +109,7 @@ class PositionalEncodingTransform(object):
 class GraphJEPAPartitionTransform(object):
     def __init__(
             self, 
-            context_subgraphing_type=0,
-            target_subgraphing_type=0,
+            subgraphing_type=0,
             num_targets=4,
             n_patches=20,
             patch_rw_dim=0,
@@ -125,8 +119,7 @@ class GraphJEPAPartitionTransform(object):
         ):
 
         super().__init__()
-        self.context_subgraphing_type = context_subgraphing_type
-        self.target_subgraphing_type = target_subgraphing_type
+        self.subgraphing_type = subgraphing_type
         self.num_targets = num_targets
         self.n_patches = n_patches
         self.patch_rw_dim = patch_rw_dim
@@ -150,27 +143,26 @@ class GraphJEPAPartitionTransform(object):
         data = SubgraphsData(**{k: v for k, v in data})
 
         # find the context using one of the 3 options
-        if self.context_subgraphing_type == 0:
-            context_node_masks, context_edge_masks, cliques_used = motifContext(data, sizeContext=self.context_size)
-        # elif self.context_subgraphing_type == 1:
-        #     context_node_masks, context_edge_masks = metisContext(data, sizeContext=self.context_size)
-        # elif self.context_subgraphing_type == 2:
-        #     context_node_masks, context_edge_masks = rwContext(data, sizeContext=self.context_size)
-        # else:
-        #     raise ValueError('Invalid subgraphing type')
+        if self.subgraphing_type == 0:
+            context_node_masks, context_edge_masks, context_subgraphs_used = motifContext(data, sizeContext=self.context_size)
+            node_masks, edge_masks = motifTargets(data, n_targets=self.num_targets, n_patches=self.n_patches-1, cliques_used=context_subgraphs_used)
+            node_masks = torch.cat([context_node_masks, node_masks], dim=0)
+            edge_masks = torch.cat([context_edge_masks, edge_masks], dim=0)
+        elif self.subgraphing_type == 1:
+            # context_node_masks, context_edge_masks = metisContext(data, sizeContext=self.context_size)
+            # node_masks, edge_masks = metisTargets(data, n_patches=self.n_patches-1, drop_rate=self.drop_rate, num_hops=1, is_directed=False)
+            node_masks, edge_masks, context_subgraphs_used = metis2subgraphs(data, sizeContext=self.context_size, n_patches=self.n_patches, min_targets=self.num_targets)
         
-
-        if self.target_subgraphing_type == 0:
-            node_masks, edge_masks = motifTargets(data, n_targets=self.num_targets, n_patches=self.n_patches-1, cliques_used=cliques_used)
-        # elif self.target_subgraphing_type == 1:
-        #     node_masks, edge_masks = metisTargets(data, n_patches=self.n_patches-1, drop_rate=self.drop_rate, num_hops=1, is_directed=False)
-        # elif self.target_subgraphing_type == 2:
-        #     node_masks, edge_masks = rwTargets(data, n_patches=self.n_patches-1, n_targets=self.num_targets)
-        # else:
-        #     raise ValueError('Invalid subgraphing type')
+        elif self.subgraphing_type == 2:
+            context_node_masks, context_edge_masks, rw1, rw2 = rwContext(data, sizeContext=self.context_size)
+            node_masks, edge_masks = rwTargets(data, n_patches=self.n_patches-1, n_targets=self.num_targets, rw1=rw1, rw2=rw2)
+            node_masks = torch.cat([context_node_masks, node_masks], dim=0)
+            edge_masks = torch.cat([context_edge_masks, edge_masks], dim=0)
+            context_subgraphs_used = [rw1, rw2]
+        else:
+            raise ValueError('Invalid subgraphing type')        
      
-        node_masks = torch.cat([context_node_masks, node_masks], dim=0)
-        edge_masks = torch.cat([context_edge_masks, edge_masks], dim=0)
+        
 
         subgraphs_nodes, subgraphs_edges = to_sparse(node_masks, edge_masks) 
         
@@ -194,7 +186,7 @@ class GraphJEPAPartitionTransform(object):
 
         mask = torch.zeros(self.n_patches).bool() # if say we have two patches then [False, False]
         mask[subgraphs_batch] = True # if subgraphs_batch = [0, 0, 1, 1] then [True, True]
-        mask[0] = False # dont use the context subgraph, so we set it to False since it s always the first, this way the transformer wont attend to it
+        mask[0] = False # dont use the context subgraph, so we set it to False since it s always the first, this way the transformer wont pay attention to it
      
         # basically mask has the first 20-n elements as False and the remaining n elements as True, n is the number of subgraphs in the graph
         # print(mask) # [RISK]: Check if this is the same in the original code 
@@ -211,7 +203,8 @@ class GraphJEPAPartitionTransform(object):
         # target_subgraph_idxs will be the the numbers between 15-n_targets and 15-n_targets+3 both included
         # target_subgraph_idxs = [i for i in range((self.n_patches - len(subgraphs))+1, (self.n_patches - len(subgraphs))+1+self.num_targets)]
         # target_subgraph_idxs = torch.tensor(target_subgraph_idxs)
-        rand_choice = np.random.choice(subgraphs[1+len(cliques_used):], self.num_targets, replace=False)
+        # 1+len(context_subgraphs_used) make sure that that the selected targets are not subgraphs that were used for the context subgraph, to minimize overlap and make task less trivial
+        rand_choice = np.random.choice(subgraphs[1+len(context_subgraphs_used):], self.num_targets, replace=False)
         target_subgraph_idxs = torch.tensor(rand_choice)
        
         data.context_subgraph_idx = context_subgraph_idx.tolist() # if context subgraph idx is 0, then[0]
@@ -225,40 +218,4 @@ class GraphJEPAPartitionTransform(object):
         data.context_nodes_subgraph = subgraphs_nodes[0, subgraphs_nodes[0] == context_subgraph_idx]
         data.target_nodes_subgraph = subgraphs_nodes[0, torch.isin(subgraphs_nodes[0], target_subgraph_idxs)]
         # plot_from_transform_attributes(data)
-        return data    
-    
-
-def plot_from_transform_attributes(data):
-    # Generate the full graph and subgraphs from the transformed data
-    G_full = to_networkx(data, to_undirected=True)
-    G_context = G_full.subgraph(data.context_nodes_mapper.numpy())
-    G_targets = [G_full.subgraph(data.target_nodes_mapper[data.target_nodes_subgraph == target_idx].numpy()) 
-                for target_idx in data.target_subgraph_idxs]
-
-    # Prepare subgraphs list including context and target subgraphs for plotting
-    subgraphs = [G_context] + G_targets
-    subgraph_titles = ['Context Subgraph'] + [f'Target Subgraph {i+1}' for i in range(len(G_targets))]
-
-    # Calculate the number of subplots needed
-    num_subgraphs = len(subgraphs)
-    num_rows = math.ceil(num_subgraphs / 3)
-    fig, axes = plt.subplots(num_rows, max(1, min(3, num_subgraphs)), figsize=(12, 4 * num_rows))
-    axes = np.array(axes).flatten() if num_subgraphs > 1 else np.array([axes])
-
-    # Generate positions for all nodes in the full graph for consistent layout
-    pos = nx.spring_layout(G_full, seed=42)
-
-    for ax, (subgraph, title) in zip(axes, zip(subgraphs, subgraph_titles)):
-        # Draw the full graph in light gray as the background
-        nx.draw(G_full, pos=pos, ax=ax, node_color='lightgray', edge_color='gray', alpha=0.3, with_labels=True)
-
-        # Highlight the current subgraph
-        nx.draw(subgraph, pos=pos, ax=ax, with_labels=True, node_color='orange', edge_color='black', alpha=0.7)
-        ax.set_title(title)
-
-    # Hide any unused axes
-    for i in range(num_subgraphs, len(axes)):
-        axes[i].axis('off')
-
-    plt.tight_layout()
-    plt.show()
+        return data

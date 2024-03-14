@@ -3,7 +3,7 @@ import numpy as np
 from src.model_utils.elements import MLP
 import src.model_utils.gMHA_wrapper as gMHA_wrapper
 from src.model_utils.gnn import GNN
-from src.transform import plot_from_transform_attributes
+from src.visualize import plot_from_transform_attributes
 from src.WDNodeMPNNLayer import WDNodeMPNNLayer
 import torch
 import torch.nn as nn

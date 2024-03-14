@@ -39,11 +39,11 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     
     # this is the predictor head, that takes the graph embeddings and predicts the property
     predictor = nn.Sequential(
-        nn.Linear(cfg.model.hidden_size, 300),
+        nn.Linear(cfg.model.hidden_size, 50),
         nn.ReLU(),
-        nn.Linear(300, 300),
+        nn.Linear(50, 50),
         nn.ReLU(),
-        nn.Linear(300, out_dim)
+        nn.Linear(50, out_dim)
     ).to(cfg.device)
     
     if cfg.frozenWeights:
@@ -107,44 +107,44 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
 
         total_train_loss /= len(ft_trn_loader)
 
+        if epoch == cfg.finetune.epochs - 1:
+            model.eval()
+            predictor.eval()
+            with torch.no_grad():
+                val_loss = 0
+                all_y_pred_val = []
+                all_true_val = []
 
-        model.eval()
-        predictor.eval()
-        with torch.no_grad():
-            val_loss = 0
-            all_y_pred_val = []
-            all_true_val = []
+                for data in ft_val_loader:
+                    data = data.to(cfg.device)
+                    graph_embeddings = model.encode(data)
+                    y_pred_val = predictor(graph_embeddings).squeeze()
 
-            for data in ft_val_loader:
-                data = data.to(cfg.device)
-                graph_embeddings = model.encode(data)
-                y_pred_val = predictor(graph_embeddings).squeeze()
+                    if cfg.finetuneDataset == 'aldeghi':
+                        val_loss += criterion(y_pred_val, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
+                        all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
+                        all_true_val.extend(data.y_EA.detach().cpu().numpy() if cfg.finetune.property == 'ea' else data.y_IP.detach().cpu().numpy())
 
-                if cfg.finetuneDataset == 'aldeghi':
-                    val_loss += criterion(y_pred_val, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
-                    all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
-                    all_true_val.extend(data.y_EA.detach().cpu().numpy() if cfg.finetune.property == 'ea' else data.y_IP.detach().cpu().numpy())
+                    elif cfg.finetuneDataset == 'diblock':
+                        y_lamellar = torch.tensor(data.y_lamellar, dtype=torch.float32, device=cfg.device)
+                        y_cylinder = torch.tensor(data.y_cylinder, dtype=torch.float32, device=cfg.device)
+                        y_sphere = torch.tensor(data.y_sphere, dtype=torch.float32, device=cfg.device)
+                        y_gyroid = torch.tensor(data.y_gyroid, dtype=torch.float32, device=cfg.device)
+                        y_disordered = torch.tensor(data.y_disordered, dtype=torch.float32, device=cfg.device)
 
-                elif cfg.finetuneDataset == 'diblock':
-                    y_lamellar = torch.tensor(data.y_lamellar, dtype=torch.float32, device=cfg.device)
-                    y_cylinder = torch.tensor(data.y_cylinder, dtype=torch.float32, device=cfg.device)
-                    y_sphere = torch.tensor(data.y_sphere, dtype=torch.float32, device=cfg.device)
-                    y_gyroid = torch.tensor(data.y_gyroid, dtype=torch.float32, device=cfg.device)
-                    y_disordered = torch.tensor(data.y_disordered, dtype=torch.float32, device=cfg.device)
+                        true_labels = torch.stack([y_lamellar, y_cylinder, y_sphere, y_gyroid, y_disordered], dim=1)
 
-                    true_labels = torch.stack([y_lamellar, y_cylinder, y_sphere, y_gyroid, y_disordered], dim=1)
+                        # i need to stack the 5 properties in a tensor and use them as the true values
+                        val_loss += criterion(y_pred_val, true_labels)
+                        all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
+                        all_true_val.extend(true_labels.detach().cpu().numpy())
+                    else:
+                        raise ValueError('Invalid dataset name')
+                    
+            val_loss /= len(ft_val_loader)
 
-                    # i need to stack the 5 properties in a tensor and use them as the true values
-                    val_loss += criterion(y_pred_val, true_labels)
-                    all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
-                    all_true_val.extend(true_labels.detach().cpu().numpy())
-                else:
-                    raise ValueError('Invalid dataset name')
-                
-        val_loss /= len(ft_val_loader)
-
-        if epoch % 20 == 0 or epoch == cfg.finetune.epochs - 1:
-            print(f'Epoch: {epoch:03d}, Train Loss: {train_loss:.5f}' f' Val Loss:{val_loss:.5f}')
+            
+            print(f'Epoch: {epoch+1:03d}, Train Loss: {train_loss:.5f}' f' Val Loss:{val_loss:.5f}')
 
             os.makedirs(f'Results/{model_name}', exist_ok=True)
 
@@ -165,7 +165,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                     np.array(all_true_val), 
                     label=label, 
                     save_folder=save_folder,
-                    epoch=epoch
+                    epoch=epoch+1
                 )
                 
 
@@ -174,7 +174,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                     np.array(all_y_pred_val), 
                     np.array(all_true_val),
                     save_folder=save_folder,
-                    epoch=epoch
+                    epoch=epoch+1
                 )
             else:
                 raise ValueError('Invalid dataset name')

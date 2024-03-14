@@ -9,72 +9,10 @@ import torch
 from torch_geometric.utils import to_networkx
 from torch_sparse import SparseTensor  # for propagation
 from src.subgraphing_utils.context_subgraph_extractor import expand_one_hop
-
+from src.visualize import plot_subgraphs
 ### Extracting target subgraph ###
 
-# metis based subgraphing
-def metisTargets(g, n_patches, drop_rate=0.0, num_hops=1, is_directed=False):
-    def k_hop_subgraph(edge_index, num_nodes, num_hops, is_directed=False):
-        # return k-hop subgraphs for all nodes in the graph
-        if is_directed:
-            row, col = edge_index
-            birow, bicol = torch.cat([row, col]), torch.cat([col, row])
-            edge_index = torch.stack([birow, bicol])
-        else:
-            row, col = edge_index
-        sparse_adj = SparseTensor(
-            row=row, col=col, sparse_sizes=(num_nodes, num_nodes))
-        # each one contains <= i hop masks
-        hop_masks = [torch.eye(num_nodes, dtype=torch.bool,
-                            device=edge_index.device)]
-        hop_indicator = row.new_full((num_nodes, num_nodes), -1)
-        hop_indicator[hop_masks[0]] = 0
-        for i in range(num_hops):
-            next_mask = sparse_adj.matmul(hop_masks[i].float()) > 0
-            hop_masks.append(next_mask)
-            hop_indicator[(hop_indicator == -1) & next_mask] = i+1
-        hop_indicator = hop_indicator.T  # N x N
-        node_mask = (hop_indicator >= 0)  # N x N dense mask matrix
-        return node_mask
-    
-    if is_directed:
-        if g.num_nodes < n_patches:
-            membership = torch.arange(g.num_nodes)
-        else:
-            G = to_networkx(g, to_undirected="lower")
-            cuts, membership = metis.part_graph(G, n_patches, recursive=True)
-    else:
-        if g.num_nodes < n_patches:
-            membership = torch.randperm(n_patches)
-        else:
-            # data augmentation
-            adjlist = g.edge_index.t()
-            arr = torch.rand(len(adjlist))
-            selected = arr > drop_rate
-            G = nx.Graph()
-            G.add_nodes_from(np.arange(g.num_nodes))
-            G.add_edges_from(adjlist[selected].tolist())
-            # metis partition
-            cuts, membership = metis.part_graph(G, n_patches, recursive=True)
-
-    assert len(membership) >= g.num_nodes
-    membership = torch.tensor(np.array(membership[:g.num_nodes]))
-    max_patch_id = torch.max(membership)+1
-    membership = membership+(n_patches-max_patch_id)
-    node_mask = torch.stack([membership == i for i in range(n_patches)])
-
-    if num_hops > 0:
-        subgraphs_batch, subgraphs_node_mapper = node_mask.nonzero().T
-        k_hop_node_mask = k_hop_subgraph(
-            g.edge_index, g.num_nodes, num_hops, is_directed)
-        node_mask.index_add_(0, subgraphs_batch,
-                             k_hop_node_mask[subgraphs_node_mapper])
-
-    edge_mask = node_mask[:, g.edge_index[0]] & node_mask[:, g.edge_index[1]]
-    return node_mask, edge_mask
-
-
-# motif based subgraphing
+# motif-based target subgraphing
 def motifTargets(graph, n_targets, n_patches, cliques_used, drop_rate=0.0):
     cliques = {tuple(clique) for clique in graph.motifs[0]}
     cliques_used_set = {tuple(clique) for clique in cliques_used}
@@ -84,7 +22,7 @@ def motifTargets(graph, n_targets, n_patches, cliques_used, drop_rate=0.0):
     # do a 1-hop expansion for each clique with less than 3 nodes
     for i, clique in enumerate(cliques):
         if len(clique) < 3:
-            cliques[i] = expand_one_hop(to_networkx(graph, to_undirected=True), set(clique))
+            cliques[i] = list(expand_one_hop(to_networkx(graph, to_undirected=True), set(clique)))
         
 
     g = to_networkx(graph)
@@ -95,9 +33,6 @@ def motifTargets(graph, n_targets, n_patches, cliques_used, drop_rate=0.0):
         subgraph = expand_one_hop(to_networkx(graph, to_undirected=True), subgraph)
         if len(subgraph) >= 3:
             cliques.append(list(subgraph))
-    
-    
-
 
     # create node and edge mask, each clique is a subgraph
     node_mask = torch.zeros((n_patches, graph.num_nodes), dtype=torch.bool)
@@ -127,8 +62,8 @@ def motifTargets(graph, n_targets, n_patches, cliques_used, drop_rate=0.0):
     return node_mask, edge_mask 
 
 
-# random walk based subgraphing
-def rwTargets(graph, n_targets, n_patches, drop_rate=0.0):
+# random-walk-based target subgraphing
+def rwTargets(graph, n_targets, n_patches, rw1, rw2):
     def random_walk_step(fullGraph, current_node, exclude_nodes):
         neighbors = list(set(fullGraph.neighbors(current_node)) - exclude_nodes)
         return random.choice(neighbors) if neighbors else None
@@ -144,8 +79,12 @@ def rwTargets(graph, n_targets, n_patches, drop_rate=0.0):
         return walk
     
     visited_nodes = set()
+    visited_nodes.update(rw1)
+    visited_nodes.update(rw2)
+
     rw_walks = []
 
+    # does not guarantee 100% to avoid edge loss, but its unlikely that it will happen, and at each epoch the subgraphs are different so it should be fine, its also a form of data augmentation
     while len(visited_nodes) < graph.num_nodes:
         # pick a random node from the remaining nodes
         remaining_nodes = list(set(range(graph.num_nodes)) - visited_nodes)
@@ -155,7 +94,7 @@ def rwTargets(graph, n_targets, n_patches, drop_rate=0.0):
         visited_nodes.update(rw_expanded)
         rw_walks.append(rw_expanded)
 
-    if len(rw_walks) < n_targets:
+    while len(rw_walks) < n_targets:
         # create a subgraph from a random node and 1-hop expansion
         random_node = random.choice(list(visited_nodes))
         subgraph = set([random_node])
@@ -165,6 +104,11 @@ def rwTargets(graph, n_targets, n_patches, drop_rate=0.0):
 
     node_mask = torch.zeros((n_patches, graph.num_nodes), dtype=torch.bool)
     edge_mask = torch.zeros((n_patches, graph.num_edges), dtype=torch.bool)
+
+    rw_walks.insert(0, rw1)
+    rw_walks.insert(0, rw2)
+
+    # plot_subgraphs(to_networkx(graph, to_undirected=True), rw_walks)
 
     idx = n_patches - len(rw_walks)
     for target_subgraph in rw_walks:
@@ -179,26 +123,63 @@ def rwTargets(graph, n_targets, n_patches, drop_rate=0.0):
 
 
 
-def plot_subgraphs(G, subgraphs):
-    # Calculate the number of rows needed to display all subgraphs with up to 3 per row
-    num_rows = math.ceil(len(subgraphs) / 3)
-    fig, axes = plt.subplots(num_rows, min(3, len(subgraphs)), figsize=(10, 3 * num_rows))  # Adjust size as needed
+# # metis based subgraphing
+# def metisTargets(g, n_patches, drop_rate=0.0, num_hops=1, is_directed=False):
+#     def k_hop_subgraph(edge_index, num_nodes, num_hops, is_directed=False):
+#         # return k-hop subgraphs for all nodes in the graph
+#         if is_directed:
+#             row, col = edge_index
+#             birow, bicol = torch.cat([row, col]), torch.cat([col, row])
+#             edge_index = torch.stack([birow, bicol])
+#         else:
+#             row, col = edge_index
+#         sparse_adj = SparseTensor(
+#             row=row, col=col, sparse_sizes=(num_nodes, num_nodes))
+#         # each one contains <= i hop masks
+#         hop_masks = [torch.eye(num_nodes, dtype=torch.bool,
+#                             device=edge_index.device)]
+#         hop_indicator = row.new_full((num_nodes, num_nodes), -1)
+#         hop_indicator[hop_masks[0]] = 0
+#         for i in range(num_hops):
+#             next_mask = sparse_adj.matmul(hop_masks[i].float()) > 0
+#             hop_masks.append(next_mask)
+#             hop_indicator[(hop_indicator == -1) & next_mask] = i+1
+#         hop_indicator = hop_indicator.T  # N x N
+#         node_mask = (hop_indicator >= 0)  # N x N dense mask matrix
+#         return node_mask
+    
+#     if is_directed:
+#         if g.num_nodes < n_patches:
+#             membership = torch.arange(g.num_nodes)
+#         else:
+#             G = to_networkx(g, to_undirected="lower")
+#             cuts, membership = metis.part_graph(G, n_patches, recursive=True)
+#     else:
+#         if g.num_nodes < n_patches:
+#             membership = torch.randperm(n_patches)
+#         else:
+#             # data augmentation
+#             adjlist = g.edge_index.t()
+#             arr = torch.rand(len(adjlist))
+#             selected = arr > drop_rate
+#             G = nx.Graph()
+#             G.add_nodes_from(np.arange(g.num_nodes))
+#             G.add_edges_from(adjlist[selected].tolist())
+#             # metis partition
+#             cuts, membership = metis.part_graph(G, n_patches, recursive=True)
 
-    # Flatten the axes array for easy iteration in case of a single row
-    if num_rows == 1:
-        axes = np.array([axes]).flatten()
-    else:
-        axes = axes.flatten()
+#     assert len(membership) >= g.num_nodes
+#     membership = torch.tensor(np.array(membership[:g.num_nodes]))
+#     max_patch_id = torch.max(membership)+1
+#     membership = membership+(n_patches-max_patch_id)
+#     node_mask = torch.stack([membership == i for i in range(n_patches)])
 
-    for ax, subgraph in zip(axes, subgraphs):
-        color_map = ['orange' if node in subgraph else 'lightgrey' for node in G.nodes()]
-        pos = nx.spring_layout(G, seed=42)  # Fixed seed for consistent layouts across subplots
-        nx.draw(G, pos=pos, ax=ax, with_labels=True, node_color=color_map, font_weight='bold')
-        ax.set_title(f'Subgraph')
+#     if num_hops > 0:
+#         subgraphs_batch, subgraphs_node_mapper = node_mask.nonzero().T
+#         k_hop_node_mask = k_hop_subgraph(
+#             g.edge_index, g.num_nodes, num_hops, is_directed)
+#         node_mask.index_add_(0, subgraphs_batch,
+#                              k_hop_node_mask[subgraphs_node_mapper])
 
-    # If there are more axes than subgraphs, hide the extra axes
-    for i in range(len(subgraphs), len(axes)):
-        axes[i].axis('off')
-
-    plt.tight_layout()
-    plt.show()
+#     edge_mask = node_mask[:, g.edge_index[0]] & node_mask[:, g.edge_index[1]]
+#     return node_mask, edge_mask

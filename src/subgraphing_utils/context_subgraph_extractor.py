@@ -10,9 +10,7 @@ from torch_geometric.utils import to_networkx
 from torch_sparse import SparseTensor  # for propagation
 
 
-### Extracting context subgraph ###
-
-# random walks based subgraphing
+# random walk based context subgraphing
 def rwContext(graph, sizeContext=0.85): 
     if sizeContext == 1:
         # return all nodes and edges
@@ -23,11 +21,17 @@ def rwContext(graph, sizeContext=0.85):
         neighbors = list(set(fullGraph.neighbors(current_node)) - exclude_nodes)
         return random.choice(neighbors) if neighbors else None
     
+    rw1 = set()
+    rw2 = set()
     # randomly pick one intermonomer bond
     intermonomer_bond = random.choice(graph.intermonomers_bonds)
     monomer1root, monomer2root = intermonomer_bond
     # rw includes the two nodes from the different monomers
     context_rw_walk = {monomer1root, monomer2root}
+    rw1.add(monomer1root)
+    rw1.add(monomer2root)
+    rw2.add(monomer2root)
+    rw2.add(monomer1root)
     total_nodes = len(graph.monomer_mask)
     # consider the two monomers alone
     monomer1nodes = [node for node, monomer in enumerate(graph.monomer_mask) if monomer == 0]
@@ -39,6 +43,8 @@ def rwContext(graph, sizeContext=0.85):
     # do a random walk in each monomer starting from the root node
     lastM1Node = monomer1root
     lastM2Node = monomer2root
+    
+
     while len(context_rw_walk)/total_nodes <= sizeContext:
         if len(context_rw_walk) % 2 == 0:  # Even steps, expand from monomer1
             next_node = random_walk_step(fullGraph=monomer1G, current_node=lastM1Node, exclude_nodes=context_rw_walk)
@@ -48,8 +54,11 @@ def rwContext(graph, sizeContext=0.85):
         if next_node:
             if len(context_rw_walk) % 2 == 0:
                 lastM1Node = next_node
+                rw1.add(next_node)
             else:
                 lastM2Node = next_node
+                rw2.add(next_node)
+                
             context_rw_walk.add(next_node)
         else:
             break
@@ -64,6 +73,12 @@ def rwContext(graph, sizeContext=0.85):
         if next_node is not None:
             counter = 0
             context_rw_walk.add(next_node)
+            if next_node in monomer1nodes:
+                rw1.add(next_node)
+            elif next_node in monomer2nodes:
+                rw2.add(next_node)
+            else:
+                print("Error: Random walk node not in monomer")
         else:
             counter += 1
             if counter > 30:
@@ -73,10 +88,10 @@ def rwContext(graph, sizeContext=0.85):
     node_mask = torch.zeros((1, total_nodes), dtype=torch.bool)
     node_mask[0, list(context_rw_walk)] = True
     edge_mask = node_mask[:, graph.edge_index[0]] & node_mask[:, graph.edge_index[1]]
-    return node_mask, edge_mask
+    return node_mask, edge_mask, rw1, rw2
 
 
-
+# motif-based context subgraphing
 def motifContext(graph, sizeContext=0.7):
     if sizeContext == 1:
         # return all nodes and edges
@@ -134,47 +149,109 @@ def motifContext(graph, sizeContext=0.7):
     return node_mask, edge_mask, cliques_used
 
 
-
-def metisContext(graph, sizeContext=0.7):
-
-    if sizeContext == 1:
-        # return all nodes and edges
-        return torch.ones((1, graph.num_nodes), dtype=torch.bool), torch.ones((1, graph.num_edges), dtype=torch.bool)
-    
+# metis-based context and target subgraphing
+def metis2subgraphs(graph, n_patches, sizeContext, min_targets):
     G = to_networkx(graph, to_undirected=True)
-    nparts = 7 # arbitrary choice, 6 seems a good number for the dataset considered
-    parts = metis.part_graph(G, nparts=nparts, contig=True)[1]
-
-    subgraphs = [set(node for node, part in enumerate(parts) if part == i) for i in range(nparts)]    
-    expanded_subgraphs = [expand_one_hop(G, subgraph) for subgraph in subgraphs if len(subgraph) > 0]
+    # apply metis algorithm to the graph
+    # idea divide each monomer in two partitions, join two partitions from different monomers and use as a context subgraph
+    # otherwise checkout these algorithms: https://cdlib.readthedocs.io/en/latest/reference/cd_algorithms/node_clustering.html#overlapping-communities
+    # DOC: https://metis.readthedocs.io/en/latest/
+    # contig=True ensures that the partitions are connected
+    nparts = graph.num_nodes // 2 # arbitrary choice, this should make subgraphs of roughly size of 2/3 nodes 
+    # if graph.num_nodes < nparts:
+    #     parts = torch.randperm(n_patches)
+    #     parts = parts[:graph.num_nodes-1]
+    # else:
+    parts = metis.part_graph(G, nparts=nparts)[1] #, contig=True
+    
+    # perform a one-hop expansion of each partition to avoid edge loss
+    # Create a subgraph for each partition
+    # Create subgraphs for each partition
+    subgraphs = [set(node for node, part in enumerate(parts) if part == i) for i in range(nparts)]
+    # Perform one-hop neighbor expansion for each partition
+    # the one-hop expansion on such small and connected subgraphs cause a lot of overlap between at least some partitions
+    # this could be non optimal for the prediction task, if the context and target share many nodes, its easy to predict..
+    # but usually there are at 2/3 partitions with a small overlap so it should be good
+    # alternatives are: 
+    # 1. not to expand the subgraphs, 
+    # 2. expand in a more sophisticated way (checking only the edges lost and including them in a single subgraph)
+    # 3. use a different algorithm to partition the graph that already gives an overlap by default
+    subgraphs = [expand_one_hop(G, subgraph) for subgraph in subgraphs if len(subgraph) > 0]
 
     # Ensure all subgraphs are connected components
-    subgraphs = [sg for sg in expanded_subgraphs if nx.is_connected(G.subgraph(sg))]
+    # subgraphs = [sg for sg in expanded_subgraphs if nx.is_connected(G.subgraph(sg))]
     
     context_subgraph = set()
     monomer_mask = graph.monomer_mask
     monomer1_nodes = set([node for node, monomer in enumerate(monomer_mask) if monomer == 0])
     monomer2_nodes = set([node for node, monomer in enumerate(monomer_mask) if monomer == 1])
-  
+    # join two partitions from different monomers to form the context subgraph
+    # reqs: 
+    # 1. process is stochastic (random)
+    # 2. the joined subgraphs should be neighboring (i.e share some nodes or be connected by inter subgraph edges)
+    # 3. the joined subgraphs should have at least one node from each monomer
+    context_subgraphs_used = []
     while not context_subgraph:
-        subgraph1 = random.choice(subgraphs)
-        subgraph2 = random.choice(subgraphs)
+        picked_subgraphs = random.sample(subgraphs, 2)
+        subgraph1 = picked_subgraphs[0]
+        subgraph2 = picked_subgraphs[1]
+
         if (subgraph1.intersection(monomer1_nodes) and subgraph2.intersection(monomer2_nodes)) or (subgraph1.intersection(monomer2_nodes) and subgraph2.intersection(monomer1_nodes)):
             if subgraph1.intersection(subgraph2) or any(G.has_edge(node1, node2) for node1 in subgraph1 for node2 in subgraph2):
                 context_subgraph = subgraph1.union(subgraph2)
+                context_subgraphs_used.append(subgraph1)
+                context_subgraphs_used.append(subgraph2)
+                subgraphs.remove(subgraph1)
+                subgraphs.remove(subgraph2)
                 break
     
-    # add a metis subgraph until desired size, if any subgraph is available
     while len(context_subgraph) / len(monomer_mask) < sizeContext and subgraphs:
         random_subgraph = random.choice(subgraphs)
         context_subgraph = context_subgraph.union(random_subgraph)
+        context_subgraphs_used.append(random_subgraph)
         subgraphs.remove(random_subgraph)
         
+    
+    # use the remaining subgraphs as target subgraphs
+    target_subgraphs = subgraphs
+    # print(context_subgraphs_used)
+    # print(target_subgraphs)
 
-    node_mask = torch.zeros((1, len(monomer_mask)), dtype=torch.bool)
-    node_mask[0, list(context_subgraph)] = True
-    edge_mask = node_mask[:, graph.edge_index[0]] & node_mask[:, graph.edge_index[1]]
-    return node_mask, edge_mask
+    # if target subgraphs is smaller than min_targets, add random subgraphs to reach the minimum
+    # take a non context node, and do a 1-hop expansion
+    # this happens in many instances
+
+    if len(target_subgraphs) < min_targets:
+        #print("tooLittleTargets")
+        set_target_subgraphs = set(frozenset(subgraph) for subgraph in target_subgraphs)
+        list_possible_nodes = list(monomer1_nodes.union(monomer2_nodes) - context_subgraph) 
+
+        if not list_possible_nodes: 
+            list_possible_nodes = list(monomer1_nodes.union(monomer2_nodes))
+            #print("fullContexts")
+            
+        while len(target_subgraphs) < min_targets:
+            # pick a random non context node if possible
+            random_node = random.choice(list_possible_nodes)
+            # expand the node by one hop
+            new_subgraph = expand_one_hop(G, {random_node})
+            # check if subgraph is not already in the target subgraphs
+            if frozenset(new_subgraph) not in set_target_subgraphs:
+                target_subgraphs.append(new_subgraph)
+
+    context_subgraph = list(context_subgraph)
+    target_subgraphs = [list(subgraph) for subgraph in target_subgraphs]
+    # append the context subgraphs to the target subgraphs at the beginning
+    for subgraph in context_subgraphs_used:
+        target_subgraphs.insert(0, list(subgraph))
+
+
+    # Plotting
+    # all_subgraphs = [context_subgraph] + target_subgraphs
+    # plot_subgraphs(G, all_subgraphs)
+
+    node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, graph.num_nodes, n_patches)
+    return node_mask, edge_mask, context_subgraphs_used
 
 
 def create_masks(graph, context_subgraph, target_subgraphs, n_of_nodes, n_patches):#
@@ -202,33 +279,6 @@ def create_masks(graph, context_subgraph, target_subgraphs, n_of_nodes, n_patche
     return node_mask, edge_mask
 
 
-
-def plot_subgraphs(G, subgraphs):
-    
-    # Calculate the number of rows needed to display all subgraphs with up to 3 per row
-    num_rows = math.ceil(len(subgraphs) / 3)
-    fig, axes = plt.subplots(num_rows, min(3, len(subgraphs)), figsize=(10, 3 * num_rows))  # Adjust size as needed
-
-    # Flatten the axes array for easy iteration in case of a single row
-    if num_rows == 1:
-        axes = np.array([axes]).flatten()
-    else:
-        axes = axes.flatten()
-
-    for ax, subgraph in zip(axes, subgraphs):
-        color_map = ['orange' if node in subgraph else 'lightgrey' for node in G.nodes()]
-        pos = nx.spring_layout(G, seed=42)  # Fixed seed for consistent layouts across subplots
-        nx.draw(G, pos=pos, ax=ax, with_labels=True, node_color=color_map, font_weight='bold')
-        ax.set_title(f'Subgraph')
-
-    # If there are more axes than subgraphs, hide the extra axes
-    for i in range(len(subgraphs), len(axes)):
-        axes[i].axis('off')
-
-    plt.tight_layout()
-    plt.show()
-
-
 # Expand the given set of nodes with their one-hop neighbors
 def expand_one_hop(fullG, subgraph_nodes):
     expanded_nodes = set(subgraph_nodes)
@@ -238,16 +288,45 @@ def expand_one_hop(fullG, subgraph_nodes):
 
 
 
+# def metisContext(graph, sizeContext=0.7):
+#     if sizeContext == 1:
+#         # return all nodes and edges
+#         return torch.ones((1, graph.num_nodes), dtype=torch.bool), torch.ones((1, graph.num_edges), dtype=torch.bool)
+    
+#     G = to_networkx(graph, to_undirected=True)
+#     nparts = 7 # arbitrary choice, 6 seems a good number for the dataset considered
+#     parts = metis.part_graph(G, nparts=nparts, contig=True)[1]
 
+#     subgraphs = [set(node for node, part in enumerate(parts) if part == i) for i in range(nparts)]    
+#     expanded_subgraphs = [expand_one_hop(G, subgraph) for subgraph in subgraphs if len(subgraph) > 0]
 
+#     # Ensure all subgraphs are connected components
+#     subgraphs = [sg for sg in expanded_subgraphs if nx.is_connected(G.subgraph(sg))]
+    
+#     context_subgraph = set()
+#     monomer_mask = graph.monomer_mask
+#     monomer1_nodes = set([node for node, monomer in enumerate(monomer_mask) if monomer == 0])
+#     monomer2_nodes = set([node for node, monomer in enumerate(monomer_mask) if monomer == 1])
+  
+#     while not context_subgraph:
+#         subgraph1 = random.choice(subgraphs)
+#         subgraph2 = random.choice(subgraphs)
+#         if (subgraph1.intersection(monomer1_nodes) and subgraph2.intersection(monomer2_nodes)) or (subgraph1.intersection(monomer2_nodes) and subgraph2.intersection(monomer1_nodes)):
+#             if subgraph1.intersection(subgraph2) or any(G.has_edge(node1, node2) for node1 in subgraph1 for node2 in subgraph2):
+#                 context_subgraph = subgraph1.union(subgraph2)
+#                 break
+    
+#     # add a metis subgraph until desired size, if any subgraph is available
+#     while len(context_subgraph) / len(monomer_mask) < sizeContext and subgraphs:
+#         random_subgraph = random.choice(subgraphs)
+#         context_subgraph = context_subgraph.union(random_subgraph)
+#         subgraphs.remove(random_subgraph)
+        
 
-
-
-
-
-
-
-
+#     node_mask = torch.zeros((1, len(monomer_mask)), dtype=torch.bool)
+#     node_mask[0, list(context_subgraph)] = True
+#     edge_mask = node_mask[:, graph.edge_index[0]] & node_mask[:, graph.edge_index[1]]
+#     return node_mask, edge_mask
 
 
 # def motifs2subgraphs(graph, n_patches, min_targets):
@@ -301,85 +380,6 @@ def expand_one_hop(fullG, subgraph_nodes):
 
 #     return node_mask, edge_mask
 
-# def metis2subgraphs(graph, n_patches, min_targets):
-#     G = to_networkx(graph, to_undirected=True)
-#     # apply metis algorithm to the graph
-#     # idea divide each monomer in two partitions, join two partitions from different monomers and use as a context subgraph
-#     # otherwise checkout these algorithms: https://cdlib.readthedocs.io/en/latest/reference/cd_algorithms/node_clustering.html#overlapping-communities
-#     # DOC: https://metis.readthedocs.io/en/latest/
-#     # contig=True ensures that the partitions are connected
-#     nparts = 6 # arbitrary choice, 6 seems a good number for the dataset considered
-#     parts = metis.part_graph(G, nparts=nparts, contig=True)[1]
-    
-#     # perform a one-hop expansion of each partition to avoid edge loss
-#     # Create a subgraph for each partition
-#     # Create subgraphs for each partition
-#     subgraphs = [set(node for node, part in enumerate(parts) if part == i) for i in range(nparts)]
-    
-#     # Perform one-hop neighbor expansion for each partition
-#     # the one-hop expansion on such small and connected subgraphs cause a lot of overlap between at least some partitions
-#     # this could be non optimal for the prediction task, if the context and target share many nodes, its easy to predict..
-#     # but usually there are at 2/3 partitions with a small overlap so it should be good
-#     # alternatives are: 
-#     # 1. not to expand the subgraphs, 
-#     # 2. expand in a more sophisticated way (checking only the edges lost and including them in a single subgraph)
-#     # 3. use a different algorithm to partition the graph that already gives an overlap by default
-#     expanded_subgraphs = [expand_one_hop(G, subgraph) for subgraph in subgraphs if len(subgraph) > 0]
-
-#     # Ensure all subgraphs are connected components
-#     subgraphs = [sg for sg in expanded_subgraphs if nx.is_connected(G.subgraph(sg))]
-    
-#     context_subgraph = set()
-#     monomer_mask = graph.monomer_mask
-#     monomer1_nodes = set([node for node, monomer in enumerate(monomer_mask) if monomer == 0])
-#     monomer2_nodes = set([node for node, monomer in enumerate(monomer_mask) if monomer == 1])
-#     # join two partitions from different monomers to form the context subgraph
-#     # reqs: 
-#     # 1. process is stochastic (random)
-#     # 2. the joined subgraphs should be neighboring (i.e share some nodes or be connected by inter subgraph edges)
-#     # 3. the joined subgraphs should have at least one node from each monomer
-#     while not context_subgraph:
-#         subgraph1 = random.choice(subgraphs)
-#         subgraph2 = random.choice(subgraphs)
-#         if (subgraph1.intersection(monomer1_nodes) and subgraph2.intersection(monomer2_nodes)) or (subgraph1.intersection(monomer2_nodes) and subgraph2.intersection(monomer1_nodes)):
-#             if subgraph1.intersection(subgraph2) or any(G.has_edge(node1, node2) for node1 in subgraph1 for node2 in subgraph2):
-#                 context_subgraph = subgraph1.union(subgraph2)
-#                 break
-    
-#     # use the remaining subgraphs as target subgraphs
-#     target_subgraphs = [subgraph for subgraph in subgraphs if subgraph not in [subgraph1, subgraph2]]
-
-#     # if target subgraphs is smaller than min_targets, add random subgraphs to reach the minimum
-#     # take a non context node, and do a 1-hop expansion
-#     # this happens in many instances
-#     # [TODO]: Keep track of how many times this happens, and if it happens too often, consider a different approach
-#     if len(target_subgraphs) < min_targets:
-#         #print("tooLittleTargets")
-#         set_target_subgraphs = set(frozenset(subgraph) for subgraph in target_subgraphs)
-#         list_possible_nodes = list(monomer1_nodes.union(monomer2_nodes) - context_subgraph) 
-
-#         if not list_possible_nodes: 
-#             list_possible_nodes = list(monomer1_nodes.union(monomer2_nodes))
-#             #print("fullContexts")
-            
-#         while len(target_subgraphs) < min_targets:
-#             # pick a random non context node
-#             random_node = random.choice(list_possible_nodes)
-#             # expand the node by one hop
-#             new_subgraph = expand_one_hop(G, {random_node})
-#             # check if subgraph is not already in the target subgraphs
-#             if frozenset(new_subgraph) not in set_target_subgraphs:
-#                 target_subgraphs.append(new_subgraph)
-
-#     context_subgraph = list(context_subgraph)
-#     target_subgraphs = [list(subgraph) for subgraph in target_subgraphs]
-
-#     # Plotting
-#     # all_subgraphs = [context_subgraph] + target_subgraphs
-#     # plot_subgraphs(G, all_subgraphs)
-
-#     node_mask, edge_mask = create_masks(graph, context_subgraph, target_subgraphs, len(parts), n_patches)
-#     return node_mask, edge_mask
 
 
 # def randomWalks2subgraphs(graph, n_patches, min_targets): 

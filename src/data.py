@@ -39,45 +39,45 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
     test_graphs = []
     
     # 35 monomer B excluded from training set, its a bit more than 2000 graphs
-    test_monomers = {
-        '[*:3]c1c(O)cc(O)c([*:4])c1O', 
-        '[*:3]c1cc(C(F)(F)F)nc([*:4])c1N', 
-        '[*:3]c1cc([*:4])cc(OC)c1', 
-        '[*:3]c1cc([*:4])cc(C(=O)Cl)c1',  
-        '[*:3]c1cc([*:4])c2ccc3cc(C(C)(C)C)cc4ccc1c2c43', 
-        '[*:3]c1cccc([*:4])c1[N+](=O)[O-]', 
-        '[*:3]c1[nH]nc2c([*:4])cncc12', 
-        '[*:3]c1cc([*:4])c(N)c(OC(F)(F)F)c1', 
-        '[*:3]c1cc([*:4])c(Cl)c(C#N)c1N', 
-        '[*:3]c1cc([*:4])c(F)cc1F', 
-        '[*:3]c1cc([*:4])c(N)cc1OC', 
-        '[*:3]c1cc(C=CC(=O)O)cc([*:4])c1OCC', 
-        '[*:3]c1c(Cl)cc([*:4])c(C)c1Cl', 
-        '[*:3]c1cc([*:4])c(OC(C)C)c(C=O)c1', 
-        '[*:3]c1ccc2c(c1)c1cc([*:4])ccc1n2CC1CO1', 
-        '[*:3]c1c(C)c([N+](=O)[O-])cc([*:4])c1OC', 
-        '[*:3]c1nc([*:4])cnc1C(=O)OC', 
-        '[*:3]c1cc(CN)cc([*:4])c1OC', 
-        '[*:3]c1cc([*:4])cc(C)c1N', 
-        '[*:3]c1nc([*:4])nn1COC', 
-        '[*:3]c1cc(F)c(C)c([*:4])c1N',
-        '[*:3]c1ccc2c(c1)C(=O)c1cc([*:4])ccc1-2',
-        '[*:3]c1cc(C=O)cc([*:4])c1OC',
-        '[*:3]c1cc(C(=O)O)c([*:4])cc1C(=O)O',
-        '[*:3]c1sc([*:4])nc1C',
-        '[*:3]c1c(N)c(Cl)cc([*:4])c1OC',
-        '[*:3]c1cc(C(=O)NN)cc([*:4])c1O'
-        '[*:3]c1cc(C=O)c([*:4])cn1',
-        '[*:3]c1cn(C)c([*:4])n1',
-        '[*:3]c1cc([*:4])c(Cl)[nH]c1=O',
-        '[*:3]c1c(C)ncc([*:4])c1C',
-        '[*:3]c1cc([*:4])cc([N+](=O)[O-])c1C',
-        '[*:3]c1cc(C)cc([*:4])c1NCC(=O)NN'
-        '[*:3]c1ccc2c(c1)C1(CCOCC1)c1cc([*:4])ccc1-2',
-        '[*:3]c1cc([*:4])c2nc(-c3ccccc3O)ccc2c1',
-        '[*:3]c1cc([*:4])cnc1CC',
-        '[*:3]c1cc(N)cc([*:4])c1C' 
-    }
+    # test_monomers = {
+    #     '[*:3]c1c(O)cc(O)c([*:4])c1O', 
+    #     '[*:3]c1cc(C(F)(F)F)nc([*:4])c1N', 
+    #     '[*:3]c1cc([*:4])cc(OC)c1', 
+    #     '[*:3]c1cc([*:4])cc(C(=O)Cl)c1',  
+    #     '[*:3]c1cc([*:4])c2ccc3cc(C(C)(C)C)cc4ccc1c2c43', 
+    #     '[*:3]c1cccc([*:4])c1[N+](=O)[O-]', 
+    #     '[*:3]c1[nH]nc2c([*:4])cncc12', 
+    #     '[*:3]c1cc([*:4])c(N)c(OC(F)(F)F)c1', 
+    #     '[*:3]c1cc([*:4])c(Cl)c(C#N)c1N', 
+    #     '[*:3]c1cc([*:4])c(F)cc1F', 
+    #     '[*:3]c1cc([*:4])c(N)cc1OC', 
+    #     '[*:3]c1cc(C=CC(=O)O)cc([*:4])c1OCC', 
+    #     '[*:3]c1c(Cl)cc([*:4])c(C)c1Cl', 
+    #     '[*:3]c1cc([*:4])c(OC(C)C)c(C=O)c1', 
+    #     '[*:3]c1ccc2c(c1)c1cc([*:4])ccc1n2CC1CO1', 
+    #     '[*:3]c1c(C)c([N+](=O)[O-])cc([*:4])c1OC', 
+    #     '[*:3]c1nc([*:4])cnc1C(=O)OC', 
+    #     '[*:3]c1cc(CN)cc([*:4])c1OC', 
+    #     '[*:3]c1cc([*:4])cc(C)c1N', 
+    #     '[*:3]c1nc([*:4])nn1COC', 
+    #     '[*:3]c1cc(F)c(C)c([*:4])c1N',
+    #     '[*:3]c1ccc2c(c1)C(=O)c1cc([*:4])ccc1-2',
+    #     '[*:3]c1cc(C=O)cc([*:4])c1OC',
+    #     '[*:3]c1cc(C(=O)O)c([*:4])cc1C(=O)O',
+    #     '[*:3]c1sc([*:4])nc1C',
+    #     '[*:3]c1c(N)c(Cl)cc([*:4])c1OC',
+    #     '[*:3]c1cc(C(=O)NN)cc([*:4])c1O'
+    #     '[*:3]c1cc(C=O)c([*:4])cn1',
+    #     '[*:3]c1cn(C)c([*:4])n1',
+    #     '[*:3]c1cc([*:4])c(Cl)[nH]c1=O',
+    #     '[*:3]c1c(C)ncc([*:4])c1C',
+    #     '[*:3]c1cc([*:4])cc([N+](=O)[O-])c1C',
+    #     '[*:3]c1cc(C)cc([*:4])c1NCC(=O)NN'
+    #     '[*:3]c1ccc2c(c1)C1(CCOCC1)c1cc([*:4])ccc1-2',
+    #     '[*:3]c1cc([*:4])c2nc(-c3ccccc3O)ccc2c1',
+    #     '[*:3]c1cc([*:4])cnc1CC',
+    #     '[*:3]c1cc(N)cc([*:4])c1C' 
+    # }
     
     # check if graphs_list.pt exists
     if not os.path.isfile(file_graphs_list):
@@ -98,10 +98,10 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
                 ) 
                 polymer_monomers = set(poly_strings.split('|')[0].split('.'))
                 
-                if polymer_monomers.isdisjoint(test_monomers):
-                    train_graphs.append(graph)
-                else:
-                    test_graphs.append(graph)
+                # if polymer_monomers.isdisjoint(test_monomers):
+                train_graphs.append(graph)
+                # else:
+                #     test_graphs.append(graph)
         
             print('Number of training graphs:', len(train_graphs))
             print('Number of test graphs:', len(test_graphs))
@@ -128,6 +128,10 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
         else:
             raise ValueError('Invalid dataset name')
         
+        random.seed(12345)
+        train_graphs = random.sample(train_graphs, len(train_graphs))
+        train_graphs = train_graphs[:int(0.8*len(train_graphs))]
+        test_graphs = train_graphs[int(0.8*len(train_graphs)):]
         if dataset == 'aldeghi':
             train_file_graphs_list = 'Data/train_aldeghi_graphs_list.pt'
             test_file_graphs_list = 'Data/test_aldeghi_graphs_list.pt'
@@ -146,9 +150,8 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
             train_graphs = torch.load(file_graphs_list)
 
     # monomer split, uncomment to shuffle the graphs
-    random.seed(12345)
-    train_graphs = random.sample(train_graphs, len(train_graphs))
-    test_graphs = random.sample(test_graphs, len(test_graphs))
+    # train_graphs = random.sample(train_graphs, len(train_graphs))
+    # test_graphs = random.sample(test_graphs, len(test_graphs))
     return train_graphs, test_graphs
 
 
@@ -156,8 +159,7 @@ def create_data(cfg):
     pre_transform = PositionalEncodingTransform(rw_dim=cfg.pos_enc.rw_dim)
     
     transform_train = GraphJEPAPartitionTransform(
-        context_subgraphing_type=cfg.subgraphing.contextType,
-        target_subgraphing_type=cfg.subgraphing.targetType,
+        subgraphing_type=cfg.subgraphing.type,
         num_targets=cfg.jepa.num_targets,
         n_patches=cfg.subgraphing.n_patches,
         patch_rw_dim=cfg.pos_enc.patch_rw_dim,
@@ -167,8 +169,7 @@ def create_data(cfg):
     )
 
     transform_val = GraphJEPAPartitionTransform(
-        context_subgraphing_type=cfg.subgraphing.contextType,
-        target_subgraphing_type=cfg.subgraphing.targetType,
+        subgraphing_type=cfg.subgraphing.type,
         num_targets=cfg.jepa.num_targets,
         n_patches=cfg.subgraphing.n_patches,
         patch_rw_dim=cfg.pos_enc.patch_rw_dim,

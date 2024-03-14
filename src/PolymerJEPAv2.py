@@ -1,7 +1,7 @@
 import numpy as np
 from src.model_utils.elements import MLP  
 from src.WDNodeMPNN import WDNodeMPNN
-from src.transform import plot_from_transform_attributes
+from src.visualize import plot_from_transform_attributes
 import torch
 import torch.nn as nn
 from torch_geometric.nn import global_mean_pool

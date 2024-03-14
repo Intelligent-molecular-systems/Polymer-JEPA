@@ -13,11 +13,14 @@ from src.visualize import plot_subgraphs
 ### Extracting target subgraph ###
 
 # motif-based target subgraphing
-def motifTargets(graph, n_targets, n_patches, cliques_used, drop_rate=0.0):
+
+# motif based subgraphing
+def motifTargets(graph, n_targets, n_patches, drop_rate=0.0, cliques_used=[]):
+    # consider only the cliques that are not used (for the context)
     cliques = {tuple(clique) for clique in graph.motifs[0]}
     cliques_used_set = {tuple(clique) for clique in cliques_used}
     cliques = cliques - cliques_used_set
-    cliques = [list(clique) for clique in cliques]
+    cliques = [sorted(clique) for clique in cliques]
 
     # do a 1-hop expansion for each clique with less than 3 nodes
     for i, clique in enumerate(cliques):
@@ -26,13 +29,30 @@ def motifTargets(graph, n_targets, n_patches, cliques_used, drop_rate=0.0):
         
 
     g = to_networkx(graph)
+    # print(cliques)
+    # expand cliques of size 2
+    i = 0
+    while i < len(cliques):
+        if len(cliques[i]) == 2:
+            expanded_clique = sorted(expand_one_hop(g, set(cliques[i])))
+            if expanded_clique not in cliques:
+                cliques[i] = expanded_clique
+            else:
+                del cliques[i]
+                continue 
+        i += 1
+
+    # print(cliques)
+    # add random cliques if not enough cliques are found as possible targets
     while len(cliques) < n_targets:
         # create a subgraph from a random node and 1-hop expansion
         random_node = random.choice(list(g.nodes))
         subgraph = set([random_node])
-        subgraph = expand_one_hop(to_networkx(graph, to_undirected=True), subgraph)
-        if len(subgraph) >= 3:
-            cliques.append(list(subgraph))
+        subgraph = sorted(expand_one_hop(to_networkx(graph, to_undirected=True), subgraph))
+        if subgraph not in cliques and len(subgraph) > 2:
+            cliques.append((subgraph))
+    # print(cliques)
+
 
     # create node and edge mask, each clique is a subgraph
     node_mask = torch.zeros((n_patches, graph.num_nodes), dtype=torch.bool)
@@ -46,20 +66,24 @@ def motifTargets(graph, n_targets, n_patches, cliques_used, drop_rate=0.0):
                 clique.append(bond[0])
             else:
                 continue
+
         cliques.insert(0, clique)
 
     idx = n_patches - len(cliques)
+
     for target_subgraph in cliques:
         target_mask = torch.zeros(node_mask.shape[1], dtype=torch.bool)
         target_mask[target_subgraph] = True
         node_mask[idx] = target_mask
         idx += 1
 
+    # print(len(cliques_used))
+    # print(len(cliques))
     # plot_subgraphs(g, cliques)
 
     edge_mask = node_mask[:, graph.edge_index[0]] & node_mask[:, graph.edge_index[1]]
 
-    return node_mask, edge_mask 
+    return node_mask, edge_mask
 
 
 # random-walk-based target subgraphing

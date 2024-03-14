@@ -122,9 +122,7 @@ def set_cfg(cfg):
     # The number of partitions we want (upper bound) some subgraphs could be empty
     cfg.subgraphing.n_patches = 32
     # 0 = motif, 1 = metis, 2 = random walk
-    cfg.subgraphing.contextType = 0
-    # 0 = motif, 1 = metis, 2 = random walk
-    cfg.subgraphing.targetType = 0
+    cfg.subgraphing.type = 0
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph
@@ -136,10 +134,8 @@ def set_cfg(cfg):
     # ------------------------------------------------------------------------ #
     cfg.jepa = CN()
     # Use Graph-JEPA
-    # Number of patches to use as context
-    cfg.jepa.num_context = 1
     # Number of patches to use as targets
-    cfg.jepa.num_targets = 2
+    cfg.jepa.num_targets = 3
     # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 1
 

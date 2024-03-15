@@ -37,7 +37,7 @@ def set_cfg(cfg):
     # Total graph mini-batch size
     cfg.pretrain.batch_size = 128
     # Maximal number of epochs
-    cfg.pretrain.epochs = 15
+    cfg.pretrain.epochs = 10
     # Number of runs with random init
     cfg.pretrain.runs = 4
     # Base learning rate
@@ -71,7 +71,7 @@ def set_cfg(cfg):
     # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
     # this value is relative to 40%: 0.01 -> 1 % = 160 graphs 0.2 * 40
     cfg.pretrain.aldeghiFTPercentage = 0.01
-    cfg.pretrain.diblockFTPercentage = 0.05
+    cfg.pretrain.diblockFTPercentage = 0.03
 
     
     cfg.finetune = CN()
@@ -93,10 +93,10 @@ def set_cfg(cfg):
     cfg.model.shouldUseNodeWeights = True
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
     cfg.model.gMHA_type = 'Hadamard' # Hadamard is the default one for all datasets (yaml files) in original code
-    # Hidden size of the model
-    cfg.model.hidden_size = 96 # make it a power of 2 if using the default model with transformer attention heads
+    # Hidden size of the model, I should use 300 for v2, 128 for v1
+    cfg.model.hidden_size = 128 # make it a power of 2 if using the default model with transformer attention heads
     # Number of GNN layers
-    cfg.model.nlayer_gnn = 2
+    cfg.model.nlayer_gnn = 3
     # Number of mlp mixer layers
     cfg.model.nlayer_mlpmixer = 2
     # Pooling type for generaating graph/subgraph embedding from node embeddings
@@ -122,13 +122,11 @@ def set_cfg(cfg):
     # The number of partitions we want (upper bound) some subgraphs could be empty
     cfg.subgraphing.n_patches = 32
     # 0 = motif, 1 = metis, 2 = random walk
-    cfg.subgraphing.contextType = 0
-    # 0 = motif, 1 = metis, 2 = random walk
-    cfg.subgraphing.targetType = 0
+    cfg.subgraphing.type = 0
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph
-    cfg.subgraphing.context_size=0.7
+    cfg.subgraphing.context_size=0.5
 
 
     # ------------------------------------------------------------------------ #
@@ -139,7 +137,7 @@ def set_cfg(cfg):
     # Number of patches to use as context
     cfg.jepa.num_context = 1
     # Number of patches to use as targets
-    cfg.jepa.num_targets = 2
+    cfg.jepa.num_targets = 3
     # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 1
 

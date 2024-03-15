@@ -142,7 +142,7 @@ def visualize_loss_space(target_embeddings, predicted_target_embeddings, model_n
 
 
 def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999, isFineTuning=False, should3DPlot=False, type="FT"): 
-    mon_A_type = mon_A_type.cpu().numpy()
+    mon_A_type = np.array(mon_A_type)
     stoichiometry = np.array(stoichiometry)
 
     if isFineTuning:
@@ -166,7 +166,7 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
         mon_A_type = mon_A_type[indices]
         stoichiometry = stoichiometry[indices]
     
-    mon_A_type = mon_A_type + 1  # Shift to 1-indexing for better visualization
+    # mon_A_type = mon_A_type + 1  # Shift to 1-indexing for better visualization
 
     # UMAP for 2D visualization with deterministic results
     # why to use UMAP: https://stats.stackexchange.com/questions/402668/intuitive-explanation-of-how-umap-works-compared-to-t-sne
@@ -199,16 +199,30 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     # plt.savefig(os.path.join(save_folder, f"2D_UMAP_mon_A_{epoch}{'_FT' if isFineTuning else ''}.png"))
     # plt.close(fig)
     df_embeddings_2d = pd.DataFrame(embeddings_2d, columns=['Dimension 1', 'Dimension 2'])
-    df_embeddings_2d['Monomer A Type'] = pd.Categorical(mon_A_type) 
+    df_embeddings_2d['Monomer A Type'] = mon_A_type
     df_embeddings_2d['Stoichiometry'] = stoichiometry
-    mon_A_types_sorted = sorted(df_embeddings_2d['Monomer A Type'].unique())
+    # mon_A_types_sorted = sorted(df_embeddings_2d['Monomer A Type'].unique())
 
     fig_2d_monA = px.scatter(df_embeddings_2d, x='Dimension 1', y='Dimension 2', color='Monomer A Type',
                     color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'],
                     labels={'Monomer A Type': 'Monomer A Type'},
                     title=f'2D UMAP Visualization by Monomer A Type - Epoch: {epoch}',
-                    category_orders={'Monomer A Type': mon_A_types_sorted},
+                    category_orders={'Monomer A Type': ['[*:1]c1cc(F)c([*:2])cc1F', '[*:1]c1cc2ccc3cc([*:2])cc4ccc(c1)c2c34', '[*:1]c1ccc(-c2ccc([*:2])s2)s1', '[*:1]c1ccc([*:2])cc1', '[*:1]c1ccc2c(c1)[nH]c1cc([*:2])ccc12', '[*:1]c1ccc([*:2])c2nsnc12', '[*:1]c1ccc2c(c1)C(C)(C)c1cc([*:2])ccc1-2', '[*:1]c1cc2cc3sc([*:2])cc3cc2s1', '[*:1]c1ccc2c(c1)S(=O)(=O)c1cc([*:2])ccc1-2']},
                     opacity=0.85)
+    
+    # Update figure size
+    fig_2d_monA.update_layout(width=800, height=600)  # Adjust the size as needed
+
+    # Update label and axis font sizes
+    fig_2d_monA.update_layout(
+        title_font_size=20,
+        legend_title_font_size=12,
+        legend_font_size=10,
+        xaxis_title_font_size=14,
+        yaxis_title_font_size=14,
+        xaxis_tickfont_size=10,
+        yaxis_tickfont_size=10
+    )
 
     # Adjust the path to save the figure
     save_folder = f'Results/{model_name}/{"FineTuningEmbeddingSpace/" if isFineTuning else "PretrainingEmbeddingSpace"}/{type}'

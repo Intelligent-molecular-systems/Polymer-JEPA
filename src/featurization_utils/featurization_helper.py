@@ -310,22 +310,31 @@ def check_bonds_included_more_than_once(cliques_edges_list):
 
 def get_mon_A_type(s):
     if s == '[*:1]c1cc(F)c([*:2])cc1F':
-        return 0
+        return '[*:1]c1cc(F)c([*:2])cc1F'
+    
     elif s == '[*:1]c1cc2ccc3cc([*:2])cc4ccc(c1)c2c34':
-        return 1
+        return '[*:1]c1cc2ccc3cc([*:2])cc4ccc(c1)c2c34'
+    
     elif s == '[*:1]c1ccc(-c2ccc([*:2])s2)s1':
-        return 2
+        return '[*:1]c1ccc(-c2ccc([*:2])s2)s1'
+    
     elif s == '[*:1]c1ccc([*:2])cc1':
-        return 3
+        return '[*:1]c1ccc([*:2])cc1'
+    
     elif s == '[*:1]c1ccc2c(c1)[nH]c1cc([*:2])ccc12':
-        return 4
+        return '[*:1]c1ccc2c(c1)[nH]c1cc([*:2])ccc12'
+    
     elif s == '[*:1]c1ccc([*:2])c2nsnc12':
-        return 5
+        return '[*:1]c1ccc([*:2])c2nsnc12'
+    
     elif s == '[*:1]c1ccc2c(c1)C(C)(C)c1cc([*:2])ccc1-2':
-        return 6
+        return '[*:1]c1ccc2c(c1)C(C)(C)c1cc([*:2])ccc1-2'
+    
     elif s == '[*:1]c1cc2cc3sc([*:2])cc3cc2s1':
-        return 7
+        return '[*:1]c1cc2cc3sc([*:2])cc3cc2s1'
+    
     elif s == '[*:1]c1ccc2c(c1)S(=O)(=O)c1cc([*:2])ccc1-2':
-        return 8
+        return '[*:1]c1ccc2c(c1)S(=O)(=O)c1cc([*:2])ccc1-2'
+    
     else:
         raise ValueError(f'unknown monomer type {s}')

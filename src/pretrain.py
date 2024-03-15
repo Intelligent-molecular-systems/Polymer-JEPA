@@ -139,20 +139,33 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
         if epoch == 0 or epoch == cfg.pretrain.epochs - 1 or epoch % 5 == 0:
 
             if cfg.visualize.shouldEmbeddingSpace:
-                # visualize initial embeddings (wdmpnn output)
-                # visualeEmbeddingSpace(
-                #     embeddings=embedding_data[0], 
-                #     mon_A_type=embedding_data[-2], 
-                #     stoichiometry=embedding_data[-1],
-                #     model_name=model_name, 
-                #     epoch=epoch,
-                #     should3DPlot=cfg.visualize.should3DPlot,
-                #     type="wdmpnn_output"
-                # )
+                # model v2 does not have initial context and target embeddings, since there is no initial encoder
+                if cfg.modelVersion == 'v1':
+                    # visualize initial context embeddings (wdmpnn output)
+                    visualeEmbeddingSpace(
+                        embeddings=embedding_data[0], 
+                        mon_A_type=embedding_data[-2], 
+                        stoichiometry=embedding_data[-1],
+                        model_name=model_name, 
+                        epoch=epoch,
+                        should3DPlot=cfg.visualize.should3DPlot,
+                        type="context_wdmpnn_output"
+                    )
+
+                    # visualize initial target embeddings (wdmpnn output)
+                    visualeEmbeddingSpace(
+                        embeddings=embedding_data[1], 
+                        mon_A_type=embedding_data[-2], 
+                        stoichiometry=embedding_data[-1],
+                        model_name=model_name, 
+                        epoch=epoch,
+                        should3DPlot=cfg.visualize.should3DPlot,
+                        type="target_wdmpnn_output"
+                    )
                 
                 # visualize target embeddings (output of the target encoder for the full graph)
                 visualeEmbeddingSpace(
-                    embeddings=embedding_data[1], 
+                    embeddings=embedding_data[2], 
                     mon_A_type=embedding_data[-2], 
                     stoichiometry=embedding_data[-1],
                     model_name=model_name, 
@@ -163,7 +176,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
                 
                 # visualize graph embeddings (output of the target encoder for the full graph)
                 visualeEmbeddingSpace(
-                    embeddings=embedding_data[2], 
+                    embeddings=embedding_data[3], 
                     mon_A_type=embedding_data[-2], 
                     stoichiometry=embedding_data[-1],
                     model_name=model_name, 
@@ -174,7 +187,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
 
                 # visualize context encoder embeddings
                 visualeEmbeddingSpace(
-                    embeddings=embedding_data[3], 
+                    embeddings=embedding_data[4], 
                     mon_A_type=embedding_data[-2], 
                     stoichiometry=embedding_data[-1],
                     model_name=model_name, 

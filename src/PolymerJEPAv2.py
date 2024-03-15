@@ -99,7 +99,7 @@ class PolymerJEPAv2(nn.Module):
         # Add its patch positional encoding
         # context_pe = data.patch_pe[context_subgraph_idx]
         # embedded_context_x += self.patch_rw_encoder(context_pe) #  modifying embedded_context_x after it is created from embedded_subgraph_x does not modify embedded_subgraph_x, because they do not share storage for their data.     
-        context_embedding = embedded_context_x.detach().clone() # for visualization
+        vis_context_embedding = embedded_context_x.detach().clone() # for visualization
         embedded_context_x = embedded_context_x.unsqueeze(1)
 
         ### JEPA - Target Encoder ###
@@ -127,6 +127,9 @@ class PolymerJEPAv2(nn.Module):
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
 
+        with torch.no_grad():
+            vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
+
         # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
         # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
 
@@ -142,7 +145,7 @@ class PolymerJEPAv2(nn.Module):
         embedded_target_x = subgraphs_x_from_full[target_subgraphs_idx.flatten()]
 
         embedded_target_x = embedded_target_x.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
-        initial_target_embeddings = embedded_target_x[:, 0, :].detach().clone()
+        vis_target_embeddings = embedded_target_x[:, 0, :].detach().clone()
 
         expanded_context_embeddings = torch.tensor([]) # save the embeddings for regularization
         expanded_target_embeddings = torch.tensor([])
@@ -163,7 +166,7 @@ class PolymerJEPAv2(nn.Module):
 
         embedded_context_x_pe_conditioned = embedded_context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # B n_targets d
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
-        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, context_embedding, initial_target_embeddings, context_embedding
+        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, torch.tensor([]), torch.tensor([]), vis_context_embedding, vis_target_embeddings, vis_graph_embedding
 
 
     def encode(self, data):

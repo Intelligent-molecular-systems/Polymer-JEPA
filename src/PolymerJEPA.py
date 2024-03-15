@@ -128,6 +128,11 @@ class PolymerJEPA(nn.Module):
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
         batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device)
        
+        # Find correct idxs for target subgraphs
+        target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
+        target_subgraphs_idx += batch_indexer.unsqueeze(1) # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
+        vis_initial_target_embedding = embedded_subgraph_x[target_subgraphs_idx.flatten()].reshape(-1, self.num_target_patches, self.nhid)[:, 0, :].detach().clone()
+
         # Find correct idxs for context subgraph
         context_subgraph_idx = data.context_subgraph_idx + batch_indexer # Get idx of context and target subgraphs according to masks, adjusts the context subgraph indices based on their position in the batch, ensuring each index points to the correct subgraph within the batched data structure.
         embedded_context_x = embedded_subgraph_x[context_subgraph_idx].clone() # Extract context subgraph embedding
@@ -135,7 +140,7 @@ class PolymerJEPA(nn.Module):
         # Add its patch positional encoding
         # context_pe = data.patch_pe[context_subgraph_idx]
         # embedded_context_x += self.patch_rw_encoder(context_pe) #  modifying embedded_context_x after it is created from embedded_subgraph_x does not modify embedded_subgraph_x, because they do not share storage for their data.     
-        initial_context_embeddings = embedded_context_x.detach().clone() # for visualization
+        vis_initial_context_embeddings = embedded_context_x.detach().clone() # for visualization
         embedded_context_x = embedded_context_x.unsqueeze(1) # # 'B d ->  B 1 d'
 
         # in case we use reg and we dont share weights, we dont need an additional context encoder, we already have the initial gnn.
@@ -144,7 +149,7 @@ class PolymerJEPA(nn.Module):
             context_mask = data.mask.flatten()[context_subgraph_idx].reshape(-1, 1) # USELESS IN THEORY SINCE INPUT OF ENCODER IS A SINGLE ELEMENT Given that there's only one element the attention operation "won't do anything", This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
             embedded_context_x = self.context_encoder(embedded_context_x, coarsen_adj=None, mask=context_mask)
         
-        context_embedding = embedded_context_x.squeeze() # for visualization
+        vis_context_embedding = embedded_context_x.squeeze().detach().clone() # for visualization
 
         ### JEPA - Target Encoder ###
         mixer_x = embedded_subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1) # (B * p) d ->  B p d Prepare input (all subgraphs) for target encoder (transformer)
@@ -156,14 +161,13 @@ class PolymerJEPA(nn.Module):
         else:
             mixer_x = self.target_encoder(mixer_x, coarsen_adj=data.coarsen_adj, mask=~data.mask)
 
-        # Find correct idxs for target subgraphs
-        target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
-        target_subgraphs_idx += batch_indexer.unsqueeze(1) # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
-          
+        with torch.no_grad():
+            vis_graph_embedding = (mixer_x * data.mask.unsqueeze(-1)).sum(1) / data.mask.sum(1, keepdim=True) # for visualization
+      
         mixer_x = mixer_x.reshape(-1, self.nhid) # B p d -> (B * p) d
         embedded_target_x = mixer_x[target_subgraphs_idx.flatten()] # (B * n_targets) d
         embedded_target_x = embedded_target_x.reshape(-1, self.num_target_patches, self.nhid) # (B * n_targets) d ->  B n_targets d
-        initial_target_embeddings = embedded_target_x[:, 0, :].detach().clone()  # take a single target for each graph for visualization, so element [0] at position 1 (n_targets)
+        vis_target_embeddings = embedded_target_x[:, 0, :].detach().clone()  # take a single target for each graph for visualization, so element [0] at position 1 (n_targets)
 
         expanded_context_embeddings = torch.tensor([]) # save the embeddings for regularization
         expanded_target_embeddings = torch.tensor([])
@@ -186,7 +190,7 @@ class PolymerJEPA(nn.Module):
         embedded_context_x_pe_conditioned = embedded_context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # B n_targets d
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
 
-        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings, context_embedding
+        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, vis_initial_context_embeddings, vis_initial_target_embedding, vis_context_embedding, vis_target_embeddings, vis_graph_embedding
     
 
     def encode(self, data):

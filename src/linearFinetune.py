@@ -10,7 +10,6 @@ from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 from sklearn.linear_model import Ridge, LogisticRegression
 from sklearn.multioutput import MultiOutputClassifier
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, mean_absolute_error
 
 def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
@@ -19,6 +18,10 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     print(f'Finetuning training on: {len(ft_trn_data)} graphs')
     print(f'Finetuning validating on: {len(ft_val_data)} graphs')
     
+    if cfg.modelVersion == 'v2':
+        # no need to use transform at every data access
+        ft_trn_data = [x for x in ft_trn_data]
+
     ft_trn_loader = DataLoader(dataset=ft_trn_data, batch_size=cfg.finetune.batch_size, shuffle=True)
     ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False)
 
@@ -31,7 +34,6 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     else:
         raise ValueError('Invalid dataset name')
 
-    scaler = StandardScaler() # Use a scaler for Ridge Regression and Logistic Regression
 
     X_train, y_train = [], []
 
@@ -54,7 +56,6 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
             raise ValueError('Invalid dataset name')
 
     # Scale features
-    X_train = scaler.fit_transform(np.array(X_train))
     y_train = np.array(y_train)
 
     # Fit the model
@@ -78,7 +79,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
         else:
             raise ValueError('Invalid dataset name')
 
-    X_val = scaler.transform(np.array(X_val))
+    X_val = np.array(X_val)
     y_val = np.array(y_val)
 
     # Predict and evaluate
@@ -86,6 +87,6 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
 
     lin_mae = mean_absolute_error(y_val, y_pred_val)
     print(f'Train R2.: {predictor.score(X_train, y_train)}')
-    print(f'MAE.: {lin_mae}')
+    print(f'Val MAE.: {lin_mae}')
 
     return model

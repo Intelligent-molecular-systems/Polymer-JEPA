@@ -68,7 +68,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
         total_train_loss = 0
 
         all_embeddings = torch.tensor([], requires_grad=False, device=cfg.device)
-        mon_A_type = torch.tensor([], requires_grad=False, device=cfg.device)
+        mon_A_type = []
         stoichiometry = []
 
         for data in ft_trn_loader:
@@ -82,9 +82,9 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                 graph_embeddings = model.encode(data)
 
             if cfg.finetuneDataset == 'aldeghi':
-                mon_A_type = torch.cat((mon_A_type, data.mon_A_type), dim=0)
                 all_embeddings = torch.cat((all_embeddings, graph_embeddings), dim=0)
                 stoichiometry.extend(data.stoichiometry)
+                mon_A_type.extend(data.mon_A_type)
 
             y_pred_trn = predictor(graph_embeddings).squeeze()
 

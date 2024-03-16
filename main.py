@@ -119,12 +119,12 @@ def run():
 
         if cfg.shouldFinetuneOnPretrainedModel:
             if not model_name: # it means we are not pretraining in the current run
-                model_name = 'g7iyDmuX'
+                model_name = '232lmXan'
 
             model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}/model.pt', map_location=cfg.device))
 
             if cfg.finetune.isLinear:
-                linearFinetune(pretrn_dataset, ft_test_data, model, model_name, cfg)
+                linearFinetune(ft_data, ft_test_data, model, model_name, cfg)
             else:
                 finetune(ft_data, ft_test_data, model, model_name, cfg)
         
@@ -136,7 +136,7 @@ def run():
             model_name += '_NotPretrained'
 
             if cfg.finetune.isLinear:
-                linearFinetune(pretrn_dataset, ft_test_data, model, model_name, cfg)
+                linearFinetune(ft_data, ft_test_data, model, model_name, cfg)
             else:
                 finetune(ft_data, ft_test_data, model, model_name, cfg)
 if __name__ == '__main__':

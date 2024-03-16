@@ -16,6 +16,7 @@ def get_motifs(m):
     # motif-based ... paper:
     # Cliques are sets of atoms that form connected substructures, and edges represent connections between cliques.
     cliques, cliques_edges = get_motifs_helper(m)
+    # plot_motifs(m, cliques)
     # do a one-hop expansion of the cliques that contain only one atom
     # this prevents single atoms subgraphs, and in this dataset, it avoids the loss of edges, each edge of each monomer is included
     # this is not guaranteed to work for all molecules, but it works for this dataset

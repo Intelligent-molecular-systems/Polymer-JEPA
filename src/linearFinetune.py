@@ -18,9 +18,10 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     print(f'Finetuning training on: {len(ft_trn_data)} graphs')
     print(f'Finetuning validating on: {len(ft_val_data)} graphs')
     
-    if cfg.modelVersion == 'v2':
-        # no need to use transform at every data access
-        ft_trn_data = [x for x in ft_trn_data]
+    
+    # no need to use transform at every data access
+    ft_trn_data = [x for x in ft_trn_data]
+    ft_val_data = [x for x in ft_val_data]
 
     ft_trn_loader = DataLoader(dataset=ft_trn_data, batch_size=cfg.finetune.batch_size, shuffle=True)
     ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False)
@@ -34,7 +35,8 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     else:
         raise ValueError('Invalid dataset name')
 
-
+    model.eval()
+    
     X_train, y_train = [], []
 
     # Collect training data
@@ -56,6 +58,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
             raise ValueError('Invalid dataset name')
 
     # Scale features
+    X_train = np.array(X_train)
     y_train = np.array(y_train)
 
     # Fit the model
@@ -81,6 +84,8 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
 
     X_val = np.array(X_val)
     y_val = np.array(y_val)
+
+    print("Data shapes:", X_train.shape, y_train.shape, X_val.shape, y_val.shape)
 
     # Predict and evaluate
     y_pred_val = predictor.predict(X_val)

@@ -2,9 +2,11 @@ import random
 from src.config import cfg
 from src.data import create_data
 from src.finetune import finetune
+from src.linearFinetune import finetune as linearFinetune
 # from PolymerJEPA_old import PolymerJEPA
 from src.PolymerJEPAv2 import PolymerJEPAv2
 from src.PolymerJEPA import PolymerJEPA
+from src.GeneralJEPA import GeneralJEPAv1
 from src.pretrain import pretrain
 from src.training import reset_parameters
 import string
@@ -36,6 +38,13 @@ def run():
         graphs = random.sample(graphs, len(graphs))
         ft_data = graphs[:int(cfg.pretrain.diblockFTPercentage*len(graphs))]
         ft_test_data = graphs[int(cfg.pretrain.diblockFTPercentage*len(graphs)):]
+
+    elif cfg.finetuneDataset == 'zinc':
+        print('Loading zinc dataset for finetuning...')
+        ft_data = ft_dataset
+        pre_test_data = val_dataset
+        ft_test_data = val_dataset
+
     else:
         raise ValueError('Invalid dataset name')
 
@@ -45,52 +54,79 @@ def run():
         model, model_name = pretrain(pretrn_dataset, pre_test_data, cfg)
 
     if cfg.shouldFinetune:
-        if cfg.modelVersion == 'v1':
-            model = PolymerJEPA(
-                nfeat_node=pretrn_dataset.data_list[0].num_node_features,
-                nfeat_edge=pretrn_dataset.data_list[0].num_edge_features,
-                nhid=cfg.model.hidden_size,
-                nlayer_gnn=cfg.model.nlayer_gnn,
-                nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
-                gMHA_type=cfg.model.gMHA_type,
-                rw_dim=cfg.pos_enc.rw_dim,
-                patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-                pooling=cfg.model.pool,
-                n_patches=cfg.subgraphing.n_patches,
-                mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
-                num_target_patches=cfg.jepa.num_targets,
-                should_share_weights=cfg.pretrain.shouldShareWeights,
-                regularization=cfg.pretrain.regularization,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0,
-                shouldUseNodeWeights=True
-            ).to(cfg.device)
+        if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
+            if cfg.modelVersion == 'v1':
+                model = PolymerJEPA(
+                    nfeat_node=133,
+                    nfeat_edge=14,
+                    nhid=cfg.model.hidden_size,
+                    nlayer_gnn=cfg.model.nlayer_gnn,
+                    nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
+                    gMHA_type=cfg.model.gMHA_type,
+                    rw_dim=cfg.pos_enc.rw_dim,
+                    patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+                    pooling=cfg.model.pool,
+                    n_patches=cfg.subgraphing.n_patches,
+                    mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
+                    num_target_patches=cfg.jepa.num_targets,
+                    should_share_weights=cfg.pretrain.shouldShareWeights,
+                    regularization=cfg.pretrain.regularization,
+                    shouldUse2dHyperbola=cfg.jepa.dist == 0,
+                    shouldUseNodeWeights=True
+                ).to(cfg.device)
 
-        elif cfg.modelVersion == 'v2':
-            model = PolymerJEPAv2(
-                nfeat_node=pretrn_dataset.data_list[0].num_node_features,
-                nfeat_edge=pretrn_dataset.data_list[0].num_edge_features,
-                nhid=cfg.model.hidden_size,
-                nlayer_gnn=cfg.model.nlayer_gnn,
-                rw_dim=cfg.pos_enc.rw_dim,
-                patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-                pooling=cfg.model.pool,
-                num_target_patches=cfg.jepa.num_targets,
-                should_share_weights=cfg.pretrain.shouldShareWeights,
-                regularization=cfg.pretrain.regularization,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0,
-                shouldUseNodeWeights=True
-            ).to(cfg.device)
+            elif cfg.modelVersion == 'v2':
+                model = PolymerJEPAv2(
+                    nfeat_node=133,
+                    nfeat_edge=14,
+                    nhid=cfg.model.hidden_size,
+                    nlayer_gnn=cfg.model.nlayer_gnn,
+                    rw_dim=cfg.pos_enc.rw_dim,
+                    patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+                    pooling=cfg.model.pool,
+                    num_target_patches=cfg.jepa.num_targets,
+                    should_share_weights=cfg.pretrain.shouldShareWeights,
+                    regularization=cfg.pretrain.regularization,
+                    shouldUse2dHyperbola=cfg.jepa.dist == 0,
+                    shouldUseNodeWeights=True
+                ).to(cfg.device)
 
-        else:
-            raise ValueError('Invalid model version')
+            else:
+                raise ValueError('Invalid model version')
+
+        if cfg.finetuneDataset == 'zinc':
+            if cfg.modelVersion == 'v1':
+                model = GeneralJEPAv1(
+                    nfeat_node=28,
+                    nfeat_edge=4,
+                    nhid=cfg.model.hidden_size,
+                    nlayer_gnn=cfg.model.nlayer_gnn,
+                    nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
+                    gMHA_type=cfg.model.gMHA_type,
+                    rw_dim=cfg.pos_enc.rw_dim,
+                    patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+                    pooling=cfg.model.pool,
+                    n_patches=cfg.subgraphing.n_patches,
+                    mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
+                    num_target_patches=cfg.jepa.num_targets,
+                    should_share_weights=cfg.pretrain.shouldShareWeights,
+                    regularization=cfg.pretrain.regularization,
+                    shouldUse2dHyperbola=cfg.jepa.dist == 0,
+                    shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
+                ).to(cfg.device)
+            else:
+                raise ValueError('Invalid model version')
 
         if cfg.shouldFinetuneOnPretrainedModel:
             if not model_name: # it means we are not pretraining in the current run
-                model_name = 'wqtEG48z'
+                model_name = 'g7iyDmuX'
 
             model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}/model.pt', map_location=cfg.device))
-        
-            finetune(ft_data, ft_test_data, model, model_name, cfg)
+
+            if cfg.finetune.isLinear:
+                linearFinetune(pretrn_dataset, ft_test_data, model, model_name, cfg)
+            else:
+                finetune(ft_data, ft_test_data, model, model_name, cfg)
         
         else:
             reset_parameters(model)
@@ -98,8 +134,11 @@ def run():
             random.seed(time.time())
             model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
             model_name += '_NotPretrained'
-            finetune(ft_data, ft_test_data, model, model_name, cfg)
 
+            if cfg.finetune.isLinear:
+                linearFinetune(pretrn_dataset, ft_test_data, model, model_name, cfg)
+            else:
+                finetune(ft_data, ft_test_data, model, model_name, cfg)
 if __name__ == '__main__':
     run()
 

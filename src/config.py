@@ -84,6 +84,7 @@ def set_cfg(cfg):
     cfg.finetune.wd = 0.
     # Total graph mini-batch size
     cfg.finetune.batch_size = 64
+    cfg.finetune.isLinear = True
 
     # ------------------------------------------------------------------------ #
     # Model options

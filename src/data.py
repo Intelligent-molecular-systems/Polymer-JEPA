@@ -5,6 +5,7 @@ from src.featurization_utils.featurization import poly_smiles_to_graph
 from src.transform import PositionalEncodingTransform, GraphJEPAPartitionTransform
 import torch
 from torch_geometric.data import InMemoryDataset
+from torch_geometric.datasets import ZINC
 import tqdm
 
 
@@ -34,7 +35,7 @@ class MyDataset(InMemoryDataset):
         torch.save(self.collate(self.data_list), self.processed_paths[0])
 
 
-def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/train_aldeghi_graphs_list.pt', dataset='aldeghi'):
+def get_graphs(dataset='aldeghi'):
     train_graphs = []
     test_graphs = []
     
@@ -79,6 +80,9 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
     #     '[*:3]c1cc(N)cc([*:4])c1C' 
     # }
     
+    file_csv='Data/aldeghi_coley_ea_ip_dataset.csv' if dataset == 'aldeghi' else 'Data/diblock_copolymer_dataset.csv'
+    file_graphs_list='Data/train_aldeghi_graphs_list.pt' if dataset == 'aldeghi' else 'Data/diblock_graphs_list.pt'
+
     # check if graphs_list.pt exists
     if not os.path.isfile(file_graphs_list):
         print('Creating graphs pt file...')
@@ -96,7 +100,7 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
                     y_EA=ea_values, 
                     y_IP=ip_values
                 ) 
-                polymer_monomers = set(poly_strings.split('|')[0].split('.'))
+                # polymer_monomers = set(poly_strings.split('|')[0].split('.'))
                 
                 # if polymer_monomers.isdisjoint(test_monomers):
                 train_graphs.append(graph)
@@ -149,15 +153,12 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
         else:
             train_graphs = torch.load(file_graphs_list)
 
-    # monomer split, uncomment to shuffle the graphs
-    # train_graphs = random.sample(train_graphs, len(train_graphs))
-    # test_graphs = random.sample(test_graphs, len(test_graphs))
     return train_graphs, test_graphs
 
 
 def create_data(cfg):
     pre_transform = PositionalEncodingTransform(rw_dim=cfg.pos_enc.rw_dim)
-    
+
     transform_train = GraphJEPAPartitionTransform(
         subgraphing_type=cfg.subgraphing.type,
         num_targets=cfg.jepa.num_targets,
@@ -165,7 +166,8 @@ def create_data(cfg):
         patch_rw_dim=cfg.pos_enc.patch_rw_dim,
         patch_num_diff=cfg.pos_enc.patch_num_diff,
         drop_rate=cfg.subgraphing.drop_rate,
-        context_size=cfg.subgraphing.context_size
+        context_size=cfg.subgraphing.context_size,
+        dataset=cfg.finetuneDataset
     )
 
     transform_val = GraphJEPAPartitionTransform(
@@ -175,18 +177,51 @@ def create_data(cfg):
         patch_rw_dim=cfg.pos_enc.patch_rw_dim,
         patch_num_diff=cfg.pos_enc.patch_num_diff,
         drop_rate=0.0,
-        context_size=cfg.subgraphing.context_size
+        context_size=cfg.subgraphing.context_size,
+        dataset=cfg.finetuneDataset
     )
     
-    
-    train_graphs, test_graphs = get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/train_aldeghi_graphs_list.pt', dataset='aldeghi')
-    pretrn_graphs = train_graphs[:int(0.5*len(train_graphs))]
-    ft_graphs = train_graphs[int(0.5*len(train_graphs)):]
+    if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
+        pretrn_graphs, ft_graphs, test_graphs = [], [], []
+     
+        if not os.path.isfile('Data/aldeghi/pretrain/processed/dataset.pt'):
+            train_graphs, test_graphs = get_graphs(dataset='aldeghi')
+            pretrn_graphs = train_graphs[:int(0.5*len(train_graphs))]
+            ft_graphs = train_graphs[int(0.5*len(train_graphs)):]
 
-    pretrn_dataset = MyDataset(root='Data/aldeghi/pretrain', data_list=pretrn_graphs, pre_transform=pre_transform, transform=transform_train)
-    ft_dataset = MyDataset(root='Data/aldeghi/finetune', data_list=ft_graphs, pre_transform=pre_transform, transform=transform_val)
-    val_dataset = MyDataset(root='Data/aldeghi/val', data_list=test_graphs, pre_transform=pre_transform, transform=transform_val)
-    val_dataset = [x for x in val_dataset] # keep same transform subgraphs throughout epochs
+        pretrn_dataset = MyDataset(root='Data/aldeghi/pretrain', data_list=pretrn_graphs, pre_transform=pre_transform, transform=transform_train)
+        ft_dataset = MyDataset(root='Data/aldeghi/finetune', data_list=ft_graphs, pre_transform=pre_transform, transform=transform_val)
+        val_dataset = MyDataset(root='Data/aldeghi/val', data_list=test_graphs, pre_transform=pre_transform, transform=transform_val)
+        val_dataset = [x for x in val_dataset] # keep same transform subgraphs throughout epochs
+
+    
+    elif cfg.finetuneDataset == 'zinc':
+        smiles_dict = {}
+        if not os.path.isfile('Data/Zinc/subset/processed/train.pt'):
+            sets = ['train', 'val', 'test']
+            for set_name in sets:
+                smiles_df = pd.read_csv(f'Data/Zinc/{set_name}.txt', header=None)
+                print(smiles_df.head())
+
+                with open(f'Data/Zinc/{set_name}.index', 'r') as file:
+                    # Read all lines, split by comma and newline, then flatten the list
+                    indexes = [int(index) for line in file for index in line.split(',')]
+
+                smiles_list = smiles_df.iloc[indexes, 0].tolist()
+
+                smiles_dict[set_name] = smiles_list
+                
+        root = 'Data/Zinc'
+        train_dataset = ZINC(
+            root, subset=True, split='train', pre_transform=pre_transform, transform=transform_train, smiles=smiles_dict)
+        
+        val_dataset = ZINC(root, subset=True, split='val',
+                           pre_transform=pre_transform, transform=transform_val, smiles=smiles_dict)
+        
+        pretrn_dataset = train_dataset.copy() # [:int(0.5*len(train_dataset))]
+        ft_dataset = train_dataset.copy() # [int(0.5*len(train_dataset)):]
+    else:
+        raise ValueError('Invalid dataset name')
 
     return pretrn_dataset, ft_dataset, val_dataset
 

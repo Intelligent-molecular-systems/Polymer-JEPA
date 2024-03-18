@@ -18,17 +18,17 @@ def set_cfg(cfg):
     # Custom log file name
     cfg.logfile = None
 
-    cfg.shouldPretrain = True
+    cfg.shouldPretrain = False
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained
-    cfg.shouldFinetuneOnPretrainedModel = True
+    cfg.shouldFinetuneOnPretrainedModel = False
     cfg.frozenWeights = False
 
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
     cfg.modelVersion = 'v1'
 
     # finetuning dataset, values: 'aldeghi' or 'diblock', 'diblock' can only be finetuned on a v2 model, not v1.
-    cfg.finetuneDataset = 'aldeghi'
+    cfg.finetuneDataset = 'zinc'
 
     # ------------------------------------------------------------------------ #
     # Training options
@@ -95,11 +95,11 @@ def set_cfg(cfg):
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
     cfg.model.gMHA_type = 'Hadamard' # Hadamard is the default one for all datasets (yaml files) in original code
     # Hidden size of the model, I should use 300 for v2, 128 for v1
-    cfg.model.hidden_size = 128 # make it a power of 2 if using the default model with transformer attention heads
+    cfg.model.hidden_size = 96 # make it a power of 2 if using the default model with transformer attention heads
     # Number of GNN layers
-    cfg.model.nlayer_gnn = 3
+    cfg.model.nlayer_gnn = 2
     # Number of mlp mixer layers
-    cfg.model.nlayer_mlpmixer = 2
+    cfg.model.nlayer_mlpmixer = 4
     # Pooling type for generaating graph/subgraph embedding from node embeddings
     cfg.model.pool = 'mean'
     # Use residual connection
@@ -123,7 +123,7 @@ def set_cfg(cfg):
     # The number of partitions we want (upper bound) some subgraphs could be empty
     cfg.subgraphing.n_patches = 32
     # 0 = motif, 1 = metis, 2 = random walk
-    cfg.subgraphing.type = 0
+    cfg.subgraphing.type = 1
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph

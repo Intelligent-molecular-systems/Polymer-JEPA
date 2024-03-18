@@ -14,6 +14,8 @@ from sklearn.metrics import accuracy_score, mean_absolute_error
 
 def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
 
+    print(f'Number of parameters: {count_parameters(model)}')
+
     print("Finetuning on model: ", model_name)
     print(f'Finetuning training on: {len(ft_trn_data)} graphs')
     print(f'Finetuning validating on: {len(ft_val_data)} graphs')
@@ -28,9 +30,9 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
 
     # Initialize scikit-learn models
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'zinc':
-        predictor = Ridge()
+        predictor = Ridge(fit_intercept=True, copy_X=True, max_iter=5000)
     elif cfg.finetuneDataset == 'diblock':
-        log_reg = LogisticRegression(max_iter=10000)
+        log_reg = LogisticRegression(dual=False, fit_intercept=True, max_iter=5000)
         predictor = MultiOutputClassifier(log_reg, n_jobs=-1)
     else:
         raise ValueError('Invalid dataset name')
@@ -61,6 +63,11 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     X_train = np.array(X_train)
     y_train = np.array(y_train)
 
+    # normalize regressor X by subtracting mean and dividing by l2 norm (as it was done in adgcl paper)
+    # X_train -= X_train.mean(0)
+    # # X_train /= np.linalg.norm(X_train, axis=0)
+    # X_train /= X_train.std(0)
+
     # Fit the model
     predictor.fit(X_train, y_train)
 
@@ -85,6 +92,11 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     X_val = np.array(X_val)
     y_val = np.array(y_val)
 
+    # normalize regressor X by subtracting mean and dividing by l2 norm (as it was done in adgcl paper)
+    # X_val -= X_val.mean(0)
+    # # X_val /= np.linalg.norm(X_val, axis=0)
+    # X_val /= X_val.std(0)
+
     print("Data shapes:", X_train.shape, y_train.shape, X_val.shape, y_val.shape)
 
     # Predict and evaluate
@@ -95,3 +107,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     print(f'Val MAE.: {lin_mae}')
 
     return model
+
+def count_parameters(model):
+    # For counting number of parameteres: need to remove unnecessary DiscreteEncoder, and other additional unused params
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)

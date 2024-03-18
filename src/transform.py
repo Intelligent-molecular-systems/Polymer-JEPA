@@ -197,8 +197,9 @@ class GraphJEPAPartitionTransform(object):
 
         mask = torch.zeros(self.n_patches).bool() # if say we have two patches then [False, False]
         mask[subgraphs_batch] = True # if subgraphs_batch = [0, 0, 1, 1] then [True, True]
-        mask[0] = False # dont use the context subgraph, so we set it to False since it s always the first, this way the transformer wont pay attention to it
-     
+        # !!! !!!
+        # mask[0] = False # dont use the context subgraph, so we set it to False since it s always the first, this way the transformer wont pay attention to it
+        # !!! !!!
         # basically mask has the first 20-n elements as False and the remaining n elements as True, n is the number of subgraphs in the graph
         # print(mask) # [RISK]: Check if this is the same in the original code 
         data.subgraphs_batch = subgraphs_batch
@@ -216,6 +217,7 @@ class GraphJEPAPartitionTransform(object):
         # target_subgraph_idxs = torch.tensor(target_subgraph_idxs)
         # 1+len(context_subgraphs_used) make sure that that the selected targets are not subgraphs that were used for the context subgraph, to minimize overlap and make task less trivial
         rand_choice = np.random.choice(subgraphs[1+len(context_subgraphs_used):], self.num_targets, replace=False)
+        # rand_choice = subgraphs[1:]
         target_subgraph_idxs = torch.tensor(rand_choice)
        
         data.context_subgraph_idx = context_subgraph_idx.tolist() # if context subgraph idx is 0, then[0]

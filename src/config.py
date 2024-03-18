@@ -18,10 +18,10 @@ def set_cfg(cfg):
     # Custom log file name
     cfg.logfile = None
 
-    cfg.shouldPretrain = False
+    cfg.shouldPretrain = True
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained
-    cfg.shouldFinetuneOnPretrainedModel = False
+    cfg.shouldFinetuneOnPretrainedModel = True
     cfg.frozenWeights = False
 
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
@@ -60,7 +60,7 @@ def set_cfg(cfg):
     # Multiscale training
     cfg.pretrain.multiscale = False    
     # Regularization (vcReg), between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
-    cfg.pretrain.regularization = False
+    cfg.pretrain.regularization = True
     # this should be used only when using the vicReg objective, where sharing weights is beneficial
     cfg.pretrain.shouldShareWeights = False
     # From vicReg: we have empirically found that using very different values for λ (inv) and μ (var), or taking λ = μ with ν (cov) > μ leads to unstable training. On the other hand taking λ = μ and picking ν < μ leads to stable convergence, setting lambda = mu = 25 and nu = 1 works best
@@ -127,7 +127,7 @@ def set_cfg(cfg):
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph
-    cfg.subgraphing.context_size=0.5
+    cfg.subgraphing.context_size=0.8
 
 
     # ------------------------------------------------------------------------ #
@@ -135,10 +135,8 @@ def set_cfg(cfg):
     # ------------------------------------------------------------------------ #
     cfg.jepa = CN()
     # Use Graph-JEPA
-    # Number of patches to use as context
-    cfg.jepa.num_context = 1
     # Number of patches to use as targets
-    cfg.jepa.num_targets = 3
+    cfg.jepa.num_targets = 4
     # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 1
 

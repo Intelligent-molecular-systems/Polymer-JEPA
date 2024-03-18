@@ -132,21 +132,28 @@ def motifContext(graph, sizeContext=0.7):
     # monomerB_clique = random.choice([clique for clique in monomer_cliques[monomer_mask[intermonomer_bond[1]]] if intermonomer_bond[1] in clique])
     
     # context subgraph: join 2 cliques such that they belong to different monomers and they are connected by an intermonomer bond
-    context_subgraph = monomerA_clique + monomerB_clique
+    # context_subgraph = monomerA_clique + monomerB_clique
     # while length of context subgraph is less than 70% of the total nodes, add a random clique if any is available
     cliques.remove(monomerA_clique)
     cliques.remove(monomerB_clique)
     while len(context_nodes) / len(monomer_mask) < sizeContext and len(cliques) > 2:
         random_clique = random.choice([clique for clique in cliques])
-        context_subgraph += random_clique
+        # context_subgraph += random_clique
         cliques.remove(random_clique)
         cliques_used.append(random_clique)
         context_nodes.update(random_clique)
+    
+    # for context_subgraph in cliques_used:
+    #     context_mask = torch.zeros(node_mask.shape[1], dtype=torch.bool)
+    #     context_mask[context_subgraph] = True
+    #     node_mask[idx] = target_mask
+    #     idx += 1
 
-    node_mask = torch.zeros((1, len(monomer_mask)), dtype=torch.bool)
-    node_mask[0, context_subgraph] = True
-    edge_mask = node_mask[:, graph.edge_index[0]] & node_mask[:, graph.edge_index[1]]
-    return node_mask, edge_mask, cliques_used
+    # node_mask = torch.zeros((1, len(monomer_mask)), dtype=torch.bool)
+    # node_mask[0, context_subgraph] = True
+    # edge_mask = node_mask[:, graph.edge_index[0]] & node_mask[:, graph.edge_index[1]]
+    # return node_mask, edge_mask, cliques_used
+    return cliques_used
 
 
 # metis-based context and target subgraphing

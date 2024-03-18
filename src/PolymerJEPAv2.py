@@ -5,7 +5,7 @@ from src.visualize import plot_from_transform_attributes
 import torch
 import torch.nn as nn
 from torch_geometric.nn import global_mean_pool
-from torch_scatter import scatter
+from torch_scatter import scatter, scatter_mean
 
 
 class PolymerJEPAv2(nn.Module):
@@ -93,8 +93,19 @@ class PolymerJEPAv2(nn.Module):
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
         batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device) # [TODO]: adapt this to work with different ys
 
-        context_subgraph_idx = data.context_subgraph_idx + batch_indexer
-        embedded_context_x = embedded_subgraph_x[context_subgraph_idx] # Extract context subgraph embedding
+        context_subgraph_idx = torch.vstack([torch.tensor(dc) for dc in data.context_subgraph_idxs]).to(data.y_EA.device)
+        context_subgraph_idx += batch_indexer.unsqueeze(1)
+        context_subgraph_idx_flatten = context_subgraph_idx.flatten()
+        # remove padding elements (i.e. negative indices)       
+        context_subgraph_idx_flatten = context_subgraph_idx_flatten[context_subgraph_idx_flatten >= 0]
+        embedded_context_x = embedded_subgraph_x[context_subgraph_idx_flatten] # Extract context subgraph embedding
+        graph_indices = torch.arange(len(data.n_context)).repeat_interleave(data.n_context).to(data.y_EA.device)
+        # pool the context subgraphs embeddings of each graph to obtain a single context embedding for each graph
+        embedded_context_x = scatter_mean(embedded_context_x, graph_indices, dim=0, dim_size=len(data.n_context))
+        
+        # print(embedded_context_x.shape)
+        # context_subgraph_idx = data.context_subgraph_idx + batch_indexer
+        # embedded_context_x = embedded_subgraph_x[context_subgraph_idx] # Extract context subgraph embedding
         
         # Add its patch positional encoding
         # context_pe = data.patch_pe[context_subgraph_idx]

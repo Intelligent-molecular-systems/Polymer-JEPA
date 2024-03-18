@@ -7,7 +7,7 @@ from src.visualize import plot_from_transform_attributes
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_scatter import scatter
+from torch_scatter import scatter, scatter_mean
 
 class GeneralJEPAv1(nn.Module):
 
@@ -130,26 +130,42 @@ class GeneralJEPAv1(nn.Module):
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1) # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
         vis_initial_target_embedding = embedded_subgraph_x[target_subgraphs_idx.flatten()].reshape(-1, self.num_target_patches, self.nhid)[:, 0, :].detach().clone()
-
-        # Find correct idxs for context subgraph
-        context_subgraph_idx = data.context_subgraph_idx + batch_indexer # Get idx of context and target subgraphs according to masks, adjusts the context subgraph indices based on their position in the batch, ensuring each index points to the correct subgraph within the batched data structure.
-        embedded_context_x = embedded_subgraph_x[context_subgraph_idx].clone() # Extract context subgraph embedding
-    
-        # Add its patch positional encoding
-        # context_pe = data.patch_pe[context_subgraph_idx]
-        # embedded_context_x += self.patch_rw_encoder(context_pe) #  modifying embedded_context_x after it is created from embedded_subgraph_x does not modify embedded_subgraph_x, because they do not share storage for their data.     
-        vis_initial_context_embeddings = embedded_context_x.detach().clone() # for visualization
-        embedded_context_x = embedded_context_x.unsqueeze(1) # # 'B d ->  B 1 d'
         
         # in case we use reg and we dont share weights, we dont need an additional context encoder, we already have the initial gnn.
         if not self.regularization or self.shouldShareWeights:
+            # input all subgraphs into context encoder but attend and pool only the context subgraphs
+            context_embedded_subgraph_x = embedded_subgraph_x.clone()
+            context_embedded_subgraph_x += self.patch_rw_encoder(data.patch_pe)
+            context_mixer_x = context_embedded_subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1) # (B * p) d ->  B p d Prepare input (all subgraphs) for target encoder (transformer)
             # mask to attend only context subgraph
-            context_mask = data.mask.flatten()[context_subgraph_idx].reshape(-1, 1) # USELESS IN THEORY SINCE INPUT OF ENCODER IS A SINGLE ELEMENT Given that there's only one element the attention operation "won't do anything", This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
+            # context_mask = data.mask.flatten()[context_subgraph_idx.flatten()].reshape(-1, 1) # USELESS IN THEORY SINCE INPUT OF ENCODER IS A SINGLE ELEMENT Given that there's only one element the attention operation "won't do anything", This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
+            embedded_context_x = self.context_encoder(context_mixer_x, coarsen_adj=data.coarsen_adj, mask=~data.context_mask)
+            embedded_context_x = (embedded_context_x * data.context_mask.unsqueeze(-1)).sum(1) / data.context_mask.sum(1, keepdim=True) # B d
+        else:
+            # Find correct idxs for context subgraph
+            # context_subgraph_idx = data.context_subgraph_idx + batch_indexer # Get idx of context and target subgraphs according to masks, adjusts the context subgraph indices based on their position in the batch, ensuring each index points to the correct subgraph within the batched data structure.
+            # print(data.context_subgraph_idxs)
             
-            embedded_context_x = self.context_encoder(embedded_context_x, coarsen_adj=None, mask=context_mask)
-        
-        vis_context_embedding = embedded_context_x.squeeze().detach().clone() # for visualization
+            # Add its patch positional encoding
+            # context_pe = data.patch_pe[context_subgraph_idx_flatten]
+            # embedded_context_x += self.patch_rw_encoder(context_pe) #  modifying embedded_context_x after it is created from embedded_subgraph_x does not modify embedded_subgraph_x, because they do not share storage for their data.     
+            
+            # initial_context_embeddings = embedded_context_x.detach().clone() # for visualization
+            # embedded_context_x = embedded_context_x.unsqueeze(1) # # 'B d ->  B 1 d'
+            context_subgraph_idx = torch.vstack([torch.tensor(dc) for dc in data.context_subgraph_idxs]).to(data.y.device)
+            context_subgraph_idx += batch_indexer.unsqueeze(1)
+            context_subgraph_idx_flatten = context_subgraph_idx.flatten()
+            # remove padding elements (i.e. negative indices)       
+            context_subgraph_idx_flatten = context_subgraph_idx_flatten[context_subgraph_idx_flatten >= 0]
+            embedded_context_x = embedded_subgraph_x[context_subgraph_idx_flatten].clone() # Extract context subgraph embedding
+            graph_indices = torch.arange(len(data.n_context)).repeat_interleave(data.n_context).to(data.y.device)
+            # pool the context subgraphs embeddings of each graph to obtain a single context embedding for each graph
+            embedded_context_x = scatter_mean(embedded_context_x, graph_indices, dim=0, dim_size=len(data.n_context)) # B d
 
+        embedded_context_x = embedded_context_x.unsqueeze(1) # 'B d ->  B 1 d'
+        vis_context_embedding = embedded_context_x.squeeze().detach().clone() # for visualization
+        vis_initial_context_embeddings = vis_context_embedding # TODO fix this to be the initial wdmpnn output, pick randomly n of batch context subgraph
+        
         ### JEPA - Target Encoder ###
         mixer_x = embedded_subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1) # (B * p) d ->  B p d Prepare input (all subgraphs) for target encoder (transformer)
        

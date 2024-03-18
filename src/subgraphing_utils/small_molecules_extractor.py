@@ -70,91 +70,19 @@ def zincSubgraphs(data, sizeContext, n_patches, n_targets):
 
 
 def metisZinc(data, n_patches, sizeContext, n_targets):
-    
-    # G = to_networkx(data, to_undirected=True)
-    # # apply metis algorithm to the graph
-    # # idea divide each monomer in two partitions, join two partitions from different monomers and use as a context subgraph
-    # # otherwise checkout these algorithms: https://cdlib.readthedocs.io/en/latest/reference/cd_algorithms/node_clustering.html#overlapping-communities
-    # # DOC: https://metis.readthedocs.io/en/latest/
-    # # contig=True ensures that the partitions are connected
-    # nparts = data.num_nodes // 2 # arbitrary choice, this should make subgraphs of roughly size of 2/3 nodes 
-    # # if graph.num_nodes < nparts:
-    # #     parts = torch.randperm(n_patches)
-    # #     parts = parts[:graph.num_nodes-1]
-    # # else:
-    # parts = metis.part_graph(G, nparts=nparts)[1] #, contig=True
-    
-    # # perform a one-hop expansion of each partition to avoid edge loss
-    # # Create a subgraph for each partition
-    # # Create subgraphs for each partition
-    # subgraphs = [set(node for node, part in enumerate(parts) if part == i) for i in range(nparts)]
-    # # Perform one-hop neighbor expansion for each partition
-    # # the one-hop expansion on such small and connected subgraphs cause a lot of overlap between at least some partitions
-    # # this could be non optimal for the prediction task, if the context and target share many nodes, its easy to predict..
-    # # but usually there are at 2/3 partitions with a small overlap so it should be good
-    # # alternatives are: 
-    # # 1. not to expand the subgraphs, 
-    # # 2. expand in a more sophisticated way (checking only the edges lost and including them in a single subgraph)
-    # # 3. use a different algorithm to partition the graph that already gives an overlap by default
-    # subgraphs = [expand_one_hop(G, subgraph) for subgraph in subgraphs if len(subgraph) > 0]
-
-    # # Ensure all subgraphs are connected components
-    # # subgraphs = [sg for sg in expanded_subgraphs if nx.is_connected(G.subgraph(sg))]
-    
-    # context_subgraph = set()
-    # subgraphs_used = []
-    # context_subgraphs_used = []
-    # while len(context_subgraph) / data.num_nodes < sizeContext and subgraphs:
-    #     clique = random.choice(subgraphs)
-    #     if clique in subgraphs_used:
-    #         continue
-    #     subgraphs.remove(clique)
-    #     subgraphs_used.append(clique)
-    #     context_subgraph.update(clique)
-    
-    # # select random cliques untl we have enough for targets, dont use the same clique used for context
-    # all_possible_targets = subgraphs
-    
-    # # make sure we have at least n_targets, otherwise select random node, and do 1-hop expansion
-    # while len(all_possible_targets) < n_targets:
-    #     node = random.choice(list(G.nodes))
-    #     subgraph = set([node])
-    #     subgraph = expand_one_hop(G, subgraph)
-    #     if len(subgraph) >= 3:
-    #         all_possible_targets.append({node})
-
-
-    # for clique in subgraphs_used:
-    #     all_possible_targets.insert(0, clique)
-
-    # context_subgraph = list(context_subgraph)
-    # all_possible_targets = [list(clique) for clique in all_possible_targets]
-    # # Plotting
-    # # all_subgraphs = [context_subgraph] + target_subgraphs
-    # # plot_subgraphs(G, all_subgraphs)
-
-    # node_mask, edge_mask = create_masks(data, context_subgraph, all_possible_targets, data.num_nodes, n_patches)
-    # return node_mask, edge_mask, context_subgraphs_used
     g = data
-    if False:
-        if g.num_nodes < n_patches:
-            membership = torch.arange(g.num_nodes)
-        else:
-            G = torch_geometric.utils.to_networkx(g, to_undirected="lower")
-            cuts, membership = metis.part_graph(G, n_patches, recursive=True)
+    if g.num_nodes < n_patches:
+        membership = torch.randperm(n_patches)
     else:
-        if g.num_nodes < n_patches:
-            membership = torch.randperm(n_patches)
-        else:
-            # data augmentation
-            adjlist = g.edge_index.t()
-            arr = torch.rand(len(adjlist))
-            selected = arr > 0.3
-            G = nx.Graph()
-            G.add_nodes_from(np.arange(g.num_nodes))
-            G.add_edges_from(adjlist[selected].tolist())
-            # metis partition
-            cuts, membership = metis.part_graph(G, n_patches, recursive=True)
+        # data augmentation
+        adjlist = g.edge_index.t()
+        arr = torch.rand(len(adjlist))
+        selected = arr > 0.3
+        G = nx.Graph()
+        G.add_nodes_from(np.arange(g.num_nodes))
+        G.add_edges_from(adjlist[selected].tolist())
+        # metis partition
+        cuts, membership = metis.part_graph(G, n_patches, recursive=True)
 
     assert len(membership) >= g.num_nodes
     membership = torch.tensor(np.array(membership[:g.num_nodes]))
@@ -164,16 +92,38 @@ def metisZinc(data, n_patches, sizeContext, n_targets):
 
     node_mask = torch.stack([membership == i for i in range(n_patches)])
 
-    if True:
-        subgraphs_batch, subgraphs_node_mapper = node_mask.nonzero().T
-        k_hop_node_mask = k_hop_subgraph(
-            g.edge_index, g.num_nodes, 1, False)
-        node_mask.index_add_(0, subgraphs_batch,
+   
+    subgraphs_batch, subgraphs_node_mapper = node_mask.nonzero().T
+    k_hop_node_mask = k_hop_subgraph(
+        g.edge_index, g.num_nodes, 1, False)
+    node_mask.index_add_(0, subgraphs_batch,
                              k_hop_node_mask[subgraphs_node_mapper])
 
-    # take the first n subgraphs until reached the context size
+    
+    # count total n of non empty subgraphs
+    nValidSubgraphs = 0
+    for i in range(n_patches):
+        if node_mask[i].sum().item() != 0:
+            nValidSubgraphs += 1
+
+    # use the first n subgraphs as context, n depends on the size of the context and whether we have enough remaining targets
+    context_nodes = set()
+    context_subgraphs = []
+    for i in range(n_patches):
+        subgraph_nodes = set(torch.where(node_mask[i])[0].tolist())
+        subgraph_size = len(subgraph_nodes)
+        if subgraph_size == 0:
+            continue
+        context_nodes = context_nodes.union(subgraph_nodes)
+        if (len(context_nodes)/g.num_nodes > sizeContext) or (nValidSubgraphs - len(context_subgraphs) == n_targets):
+            # print(nValidSubgraphs - len(context_subgraphs) == n_targets)
+            break
+        context_subgraphs.append(i)
+        # print(context_subgraphs)
+        # print(context_nodes)
+
     edge_mask = node_mask[:, g.edge_index[0]] & node_mask[:, g.edge_index[1]]
-    return node_mask, edge_mask, []
+    return node_mask, edge_mask, context_subgraphs
 
 
 def expand_one_hop(fullG, subgraph_nodes):

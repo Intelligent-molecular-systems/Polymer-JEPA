@@ -7,6 +7,7 @@ from src.linearFinetune import finetune as linearFinetune
 from src.PolymerJEPAv2 import PolymerJEPAv2
 from src.PolymerJEPA import PolymerJEPA
 from src.GeneralJEPA import GeneralJEPAv1
+from src.GeneralJEPAv2 import GeneralJEPAv2
 from src.pretrain import pretrain
 from src.training import reset_parameters
 import string
@@ -113,6 +114,22 @@ def run():
                     regularization=cfg.pretrain.regularization,
                     shouldUse2dHyperbola=cfg.jepa.dist == 0,
                     shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
+                ).to(cfg.device)
+
+            elif cfg.modelVersion == 'v2':
+                model = GeneralJEPAv2(
+                    nfeat_node=28,
+                    nfeat_edge=4,
+                    nhid=cfg.model.hidden_size,
+                    nlayer_gnn=cfg.model.nlayer_gnn,
+                    rw_dim=cfg.pos_enc.rw_dim,
+                    patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+                    pooling=cfg.model.pool,
+                    num_target_patches=cfg.jepa.num_targets,
+                    should_share_weights=cfg.pretrain.shouldShareWeights,
+                    regularization=cfg.pretrain.regularization,
+                    shouldUse2dHyperbola=cfg.jepa.dist == 0,
+                    shouldUseNodeWeights=True
                 ).to(cfg.device)
             else:
                 raise ValueError('Invalid model version')

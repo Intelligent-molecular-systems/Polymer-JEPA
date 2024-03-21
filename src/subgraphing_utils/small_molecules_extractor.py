@@ -62,7 +62,7 @@ def zincSubgraphs(data, sizeContext, n_patches, n_targets):
     context_subgraph = list(context_nodes)
     target_subgraphs = [list(clique) for clique in all_possible_targets]
 
-    all_subgraphs = [context_subgraph] + target_subgraphs
+    # all_subgraphs = [context_subgraph] + target_subgraphs
     # plot_subgraphs(G, all_subgraphs)
 
     node_mask, edge_mask = create_masks(data, context_subgraph, target_subgraphs, data.num_nodes, n_patches)
@@ -136,25 +136,19 @@ def metisZinc(data, n_patches, sizeContext, n_targets):
     # node_mask, edge_mask = create_masks(data, context_subgraph, all_possible_targets, data.num_nodes, n_patches)
     # return node_mask, edge_mask, context_subgraphs_used
     g = data
-    if False:
-        if g.num_nodes < n_patches:
-            membership = torch.arange(g.num_nodes)
-        else:
-            G = torch_geometric.utils.to_networkx(g, to_undirected="lower")
-            cuts, membership = metis.part_graph(G, n_patches, recursive=True)
+    
+    if g.num_nodes < n_patches:
+        membership = torch.randperm(n_patches)
     else:
-        if g.num_nodes < n_patches:
-            membership = torch.randperm(n_patches)
-        else:
-            # data augmentation
-            adjlist = g.edge_index.t()
-            arr = torch.rand(len(adjlist))
-            selected = arr > 0.3
-            G = nx.Graph()
-            G.add_nodes_from(np.arange(g.num_nodes))
-            G.add_edges_from(adjlist[selected].tolist())
-            # metis partition
-            cuts, membership = metis.part_graph(G, n_patches, recursive=True)
+        # data augmentation
+        adjlist = g.edge_index.t()
+        arr = torch.rand(len(adjlist))
+        selected = arr > 0.3
+        G = nx.Graph()
+        G.add_nodes_from(np.arange(g.num_nodes))
+        G.add_edges_from(adjlist[selected].tolist())
+        # metis partition
+        cuts, membership = metis.part_graph(G, n_patches, recursive=True)
 
     assert len(membership) >= g.num_nodes
     membership = torch.tensor(np.array(membership[:g.num_nodes]))
@@ -164,11 +158,11 @@ def metisZinc(data, n_patches, sizeContext, n_targets):
 
     node_mask = torch.stack([membership == i for i in range(n_patches)])
 
-    if True:
-        subgraphs_batch, subgraphs_node_mapper = node_mask.nonzero().T
-        k_hop_node_mask = k_hop_subgraph(
-            g.edge_index, g.num_nodes, 1, False)
-        node_mask.index_add_(0, subgraphs_batch,
+    
+    subgraphs_batch, subgraphs_node_mapper = node_mask.nonzero().T
+    k_hop_node_mask = k_hop_subgraph(
+        g.edge_index, g.num_nodes, 1, False)
+    node_mask.index_add_(0, subgraphs_batch,
                              k_hop_node_mask[subgraphs_node_mapper])
 
     # take the first n subgraphs until reached the context size

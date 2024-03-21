@@ -6,6 +6,7 @@ import string
 from src.PolymerJEPAv2 import PolymerJEPAv2
 from src.PolymerJEPA import PolymerJEPA
 from src.GeneralJEPA import GeneralJEPAv1
+from src.GeneralJEPAv2 import GeneralJEPAv2
 from src.training import train, test
 from src.visualize import visualeEmbeddingSpace, visualize_loss_space
 import time
@@ -82,6 +83,22 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
                 regularization=cfg.pretrain.regularization,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
                 shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
+            ).to(cfg.device)
+
+        elif cfg.modelVersion == 'v2':
+            model = GeneralJEPAv2(
+                nfeat_node=28,
+                nfeat_edge=4,
+                nhid=cfg.model.hidden_size,
+                nlayer_gnn=cfg.model.nlayer_gnn,
+                rw_dim=cfg.pos_enc.rw_dim,
+                patch_rw_dim=cfg.pos_enc.patch_rw_dim,
+                pooling=cfg.model.pool,
+                num_target_patches=cfg.jepa.num_targets,
+                should_share_weights=cfg.pretrain.shouldShareWeights,
+                regularization=cfg.pretrain.regularization,
+                shouldUse2dHyperbola=cfg.jepa.dist == 0,
+                shouldUseNodeWeights=True
             ).to(cfg.device)
         else:
             raise ValueError('Invalid model version')

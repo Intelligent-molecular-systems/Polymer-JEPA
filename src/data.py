@@ -40,52 +40,10 @@ class MyDataset(InMemoryDataset):
 
 def get_graphs(dataset='aldeghi'):
     all_graphs = []
-    # test_graphs = []
-    full_atoms_set = set()
-    
-    # 35 monomer B excluded from training set, its a bit more than 2000 graphs
-    # test_monomers = {
-    #     '[*:3]c1c(O)cc(O)c([*:4])c1O', 
-    #     '[*:3]c1cc(C(F)(F)F)nc([*:4])c1N', 
-    #     '[*:3]c1cc([*:4])cc(OC)c1', 
-    #     '[*:3]c1cc([*:4])cc(C(=O)Cl)c1',  
-    #     '[*:3]c1cc([*:4])c2ccc3cc(C(C)(C)C)cc4ccc1c2c43', 
-    #     '[*:3]c1cccc([*:4])c1[N+](=O)[O-]', 
-    #     '[*:3]c1[nH]nc2c([*:4])cncc12', 
-    #     '[*:3]c1cc([*:4])c(N)c(OC(F)(F)F)c1', 
-    #     '[*:3]c1cc([*:4])c(Cl)c(C#N)c1N', 
-    #     '[*:3]c1cc([*:4])c(F)cc1F', 
-    #     '[*:3]c1cc([*:4])c(N)cc1OC', 
-    #     '[*:3]c1cc(C=CC(=O)O)cc([*:4])c1OCC', 
-    #     '[*:3]c1c(Cl)cc([*:4])c(C)c1Cl', 
-    #     '[*:3]c1cc([*:4])c(OC(C)C)c(C=O)c1', 
-    #     '[*:3]c1ccc2c(c1)c1cc([*:4])ccc1n2CC1CO1', 
-    #     '[*:3]c1c(C)c([N+](=O)[O-])cc([*:4])c1OC', 
-    #     '[*:3]c1nc([*:4])cnc1C(=O)OC', 
-    #     '[*:3]c1cc(CN)cc([*:4])c1OC', 
-    #     '[*:3]c1cc([*:4])cc(C)c1N', 
-    #     '[*:3]c1nc([*:4])nn1COC', 
-    #     '[*:3]c1cc(F)c(C)c([*:4])c1N',
-    #     '[*:3]c1ccc2c(c1)C(=O)c1cc([*:4])ccc1-2',
-    #     '[*:3]c1cc(C=O)cc([*:4])c1OC',
-    #     '[*:3]c1cc(C(=O)O)c([*:4])cc1C(=O)O',
-    #     '[*:3]c1sc([*:4])nc1C',
-    #     '[*:3]c1c(N)c(Cl)cc([*:4])c1OC',
-    #     '[*:3]c1cc(C(=O)NN)cc([*:4])c1O'
-    #     '[*:3]c1cc(C=O)c([*:4])cn1',
-    #     '[*:3]c1cn(C)c([*:4])n1',
-    #     '[*:3]c1cc([*:4])c(Cl)[nH]c1=O',
-    #     '[*:3]c1c(C)ncc([*:4])c1C',
-    #     '[*:3]c1cc([*:4])cc([N+](=O)[O-])c1C',
-    #     '[*:3]c1cc(C)cc([*:4])c1NCC(=O)NN'
-    #     '[*:3]c1ccc2c(c1)C1(CCOCC1)c1cc([*:4])ccc1-2',
-    #     '[*:3]c1cc([*:4])c2nc(-c3ccccc3O)ccc2c1',
-    #     '[*:3]c1cc([*:4])cnc1CC',
-    #     '[*:3]c1cc(N)cc([*:4])c1C' 
-    # }
+    # full_atoms_set = set()
     
     file_csv='Data/aldeghi_coley_ea_ip_dataset.csv' if dataset == 'aldeghi' else 'Data/diblock_copolymer_dataset.csv'
-    file_graphs_list='Data/train_aldeghi_graphs_list.pt' if dataset == 'aldeghi' else 'Data/diblock_graphs_list.pt'
+    file_graphs_list='Data/aldeghi_graphs_list.pt' if dataset == 'aldeghi' else 'Data/diblock_graphs_list.pt'
 
     # check if graphs_list.pt exists
     if not os.path.isfile(file_graphs_list):
@@ -116,9 +74,6 @@ def get_graphs(dataset='aldeghi'):
             # with open('full_atoms_list.txt', 'w') as f:
             #     f.write(','.join([str(a) for a in full_atoms_set]))
             # f.close()
-            
-            # print('Number of training graphs:', len(train_graphs))
-            # print('Number of test graphs:', len(test_graphs))
 
         elif dataset == 'diblock':
             for i in tqdm.tqdm(range(len(df.loc[:, 'poly_chemprop_input']))):
@@ -144,26 +99,13 @@ def get_graphs(dataset='aldeghi'):
         
         random.seed(12345)
         all_graphs = random.sample(all_graphs, len(all_graphs))
-        train_graphs = all_graphs[:int(0.8*len(all_graphs))]
-        test_graphs = all_graphs[int(0.8*len(all_graphs)):]
-        if dataset == 'aldeghi':
-            train_file_graphs_list = 'Data/train_aldeghi_graphs_list.pt'
-            test_file_graphs_list = 'Data/test_aldeghi_graphs_list.pt'
-            torch.save(train_graphs, train_file_graphs_list)
-            torch.save(test_graphs, test_file_graphs_list)
-            print('Graphs pt file saved')
-        else:
-            torch.save(train_graphs, file_graphs_list)
-            print('Graphs pt file saved')
+        torch.save(all_graphs, file_graphs_list)
+        print('Graphs .pt file saved')
     else:
         print('Loading graphs pt file...')
-        if dataset == 'aldeghi':
-            train_graphs = torch.load('Data/train_aldeghi_graphs_list.pt')
-            test_graphs = torch.load('Data/test_aldeghi_graphs_list.pt')
-        else:
-            train_graphs = torch.load(file_graphs_list)
+        all_graphs = torch.load(file_graphs_list)
 
-    return train_graphs, test_graphs
+    return all_graphs
 
 
 def create_data(cfg):
@@ -192,17 +134,25 @@ def create_data(cfg):
     )
     
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
-        pretrn_graphs, ft_graphs, test_graphs = [], [], []
-     
-        if not os.path.isfile('Data/aldeghi/pretrain/processed/dataset.pt'):
-            train_graphs, test_graphs = get_graphs(dataset='aldeghi')
-            pretrn_graphs = train_graphs[:int(0.5*len(train_graphs))]
-            ft_graphs = train_graphs[int(0.5*len(train_graphs)):]
+        
+        all_graphs = []
+        if not os.path.isfile('Data/aldeghi/processed/dataset.pt'):
+            all_graphs = get_graphs(dataset=cfg.finetuneDataset)
+        
+        dataset = MyDataset(root='Data/aldeghi', data_list=all_graphs, pre_transform=pre_transform)
 
-        pretrn_dataset = MyDataset(root='Data/aldeghi/pretrain', data_list=pretrn_graphs, pre_transform=pre_transform, transform=transform_train)
-        ft_dataset = MyDataset(root='Data/aldeghi/finetune', data_list=ft_graphs, pre_transform=pre_transform, transform=transform_val)
-        val_dataset = MyDataset(root='Data/aldeghi/val', data_list=test_graphs, pre_transform=pre_transform, transform=transform_val)
-        val_dataset = [x for x in val_dataset] # keep same transform subgraphs throughout epochs
+        return dataset, transform_train, transform_val
+            
+
+
+        #     train_graphs, test_graphs = get_graphs(dataset='aldeghi')
+        #     pretrn_graphs = train_graphs[:int(0.5*len(train_graphs))]
+        #     ft_graphs = train_graphs[int(0.5*len(train_graphs)):]
+
+        # pretrn_dataset = MyDataset(root='Data/aldeghi/pretrain', data_list=pretrn_graphs, pre_transform=pre_transform, transform=transform_train)
+        # ft_dataset = MyDataset(root='Data/aldeghi/finetune', data_list=ft_graphs, pre_transform=pre_transform, transform=transform_val)
+        # val_dataset = MyDataset(root='Data/aldeghi/val', data_list=test_graphs, pre_transform=pre_transform, transform=transform_val)
+        # val_dataset = [x for x in val_dataset] # keep same transform subgraphs throughout epochs
 
     
     elif cfg.finetuneDataset == 'zinc':
@@ -402,13 +352,14 @@ def getLabData(ft_data, size):
 def getRandomData(ft_data, size):
     # select 'size' number of random data points from ft_data
     # randomly set torch seed based on the current time
-    torch.manual_seed(int(time.time()))
+    # torch.manual_seed(int(time.time()))
     # set random seed for python
     random.seed(int(time.time()))
-    dataset = ft_data.shuffle()
-    dataset = [x for x in dataset]
-    dataset = random.sample(dataset, size)
+    dataset = ft_data #.shuffle()
+    if not isinstance(dataset, list):
+        dataset = [x for x in dataset]
 
+    dataset = random.sample(dataset, size)
     # # print dataset stats as in getMaximizedVariedData
     # monomerADict = collections.defaultdict(int)
     # # stoichiometry and chain architecture dict (same as monomer A), but ratios here are 1/3
@@ -486,3 +437,46 @@ def getTammoData(full_dataset):
     print("Subset atoms:", subset_atoms, "; Full atoms:", full_atoms_list)
     
     return dataset
+
+
+
+# 35 monomer B excluded from training set, its a bit more than 2000 graphs
+    # test_monomers = {
+    #     '[*:3]c1c(O)cc(O)c([*:4])c1O', 
+    #     '[*:3]c1cc(C(F)(F)F)nc([*:4])c1N', 
+    #     '[*:3]c1cc([*:4])cc(OC)c1', 
+    #     '[*:3]c1cc([*:4])cc(C(=O)Cl)c1',  
+    #     '[*:3]c1cc([*:4])c2ccc3cc(C(C)(C)C)cc4ccc1c2c43', 
+    #     '[*:3]c1cccc([*:4])c1[N+](=O)[O-]', 
+    #     '[*:3]c1[nH]nc2c([*:4])cncc12', 
+    #     '[*:3]c1cc([*:4])c(N)c(OC(F)(F)F)c1', 
+    #     '[*:3]c1cc([*:4])c(Cl)c(C#N)c1N', 
+    #     '[*:3]c1cc([*:4])c(F)cc1F', 
+    #     '[*:3]c1cc([*:4])c(N)cc1OC', 
+    #     '[*:3]c1cc(C=CC(=O)O)cc([*:4])c1OCC', 
+    #     '[*:3]c1c(Cl)cc([*:4])c(C)c1Cl', 
+    #     '[*:3]c1cc([*:4])c(OC(C)C)c(C=O)c1', 
+    #     '[*:3]c1ccc2c(c1)c1cc([*:4])ccc1n2CC1CO1', 
+    #     '[*:3]c1c(C)c([N+](=O)[O-])cc([*:4])c1OC', 
+    #     '[*:3]c1nc([*:4])cnc1C(=O)OC', 
+    #     '[*:3]c1cc(CN)cc([*:4])c1OC', 
+    #     '[*:3]c1cc([*:4])cc(C)c1N', 
+    #     '[*:3]c1nc([*:4])nn1COC', 
+    #     '[*:3]c1cc(F)c(C)c([*:4])c1N',
+    #     '[*:3]c1ccc2c(c1)C(=O)c1cc([*:4])ccc1-2',
+    #     '[*:3]c1cc(C=O)cc([*:4])c1OC',
+    #     '[*:3]c1cc(C(=O)O)c([*:4])cc1C(=O)O',
+    #     '[*:3]c1sc([*:4])nc1C',
+    #     '[*:3]c1c(N)c(Cl)cc([*:4])c1OC',
+    #     '[*:3]c1cc(C(=O)NN)cc([*:4])c1O'
+    #     '[*:3]c1cc(C=O)c([*:4])cn1',
+    #     '[*:3]c1cn(C)c([*:4])n1',
+    #     '[*:3]c1cc([*:4])c(Cl)[nH]c1=O',
+    #     '[*:3]c1c(C)ncc([*:4])c1C',
+    #     '[*:3]c1cc([*:4])cc([N+](=O)[O-])c1C',
+    #     '[*:3]c1cc(C)cc([*:4])c1NCC(=O)NN'
+    #     '[*:3]c1ccc2c(c1)C1(CCOCC1)c1cc([*:4])ccc1-2',
+    #     '[*:3]c1cc([*:4])c2nc(-c3ccccc3O)ccc2c1',
+    #     '[*:3]c1cc([*:4])cnc1CC',
+    #     '[*:3]c1cc(N)cc([*:4])c1C' 
+    # }

@@ -14,11 +14,12 @@ from torch_geometric.utils.convert import to_networkx
 from typing import List
 from umap import UMAP
 import warnings
+import wandb
 
 warnings.filterwarnings("ignore", message="n_jobs value .* overridden to 1 by setting random_state. Use no seed for parallelism.")
 
 
-def visualize_aldeghi_results(store_pred: List, store_true: List, label: str, save_folder: str = None, epoch: int = 999):
+def visualize_aldeghi_results(store_pred: List, store_true: List, label: str, save_folder: str = None, epoch: int = 999, shouldPlotMetrics=False):
     assert label in ['ea', 'ip']
 
     xy = np.vstack([store_pred, store_true])
@@ -27,30 +28,33 @@ def visualize_aldeghi_results(store_pred: List, store_true: List, label: str, sa
     # calculate R2 score and RMSE
     R2 = r2_score(store_true, store_pred)
     RMSE = math.sqrt(mean_squared_error(store_true, store_pred))
+    if shouldPlotMetrics:
+        # now lets plot
+        fig = plt.figure(figsize=(5, 5))
+        fig.tight_layout()
+        plt.scatter(store_true, store_pred, s=5, c=z)
+        plt.plot(np.arange(min(store_true)-0.5, max(store_true)+1.5, 1),
+                np.arange(min(store_true)-0.5, max(store_true)+1.5, 1), 'r--', linewidth=1)
 
-    # now lets plot
-    fig = plt.figure(figsize=(5, 5))
-    fig.tight_layout()
-    plt.scatter(store_true, store_pred, s=5, c=z)
-    plt.plot(np.arange(min(store_true)-0.5, max(store_true)+1.5, 1),
-             np.arange(min(store_true)-0.5, max(store_true)+1.5, 1), 'r--', linewidth=1)
+        plt.xlabel('True (eV)')
+        plt.ylabel('Prediction (eV)')
+        plt.grid()
+        plt.title(f'Electron Affinity' if label == 'ea' else 'Ionization Potential')
 
-    plt.xlabel('True (eV)')
-    plt.ylabel('Prediction (eV)')
-    plt.grid()
-    plt.title(f'Electron Affinity' if label == 'ea' else 'Ionization Potential')
+        plt.text(min(store_true), max(store_pred), f'R2 = {R2:.3f}', fontsize=10)
+        plt.text(min(store_true), max(store_pred) - 0.3, f'RMSE = {RMSE:.3f}', fontsize=10)
 
-    plt.text(min(store_true), max(store_pred), f'R2 = {R2:.3f}', fontsize=10)
-    plt.text(min(store_true), max(store_pred) - 0.3, f'RMSE = {RMSE:.3f}', fontsize=10)
+        # v1 or v2 diblock or aldeghi FT percentage
+        if save_folder:
+            os.makedirs(save_folder, exist_ok=True)
+            plt.savefig(f"{save_folder}/{'EA' if label == 'ea' else 'IP'}_{epoch}.png")
+        wandb.log({"metrics_plot": wandb.Image(fig)})
+        plt.close(fig)
 
-    # v1 or v2 diblock or aldeghi FT percentage
-    if save_folder:
-        os.makedirs(save_folder, exist_ok=True)
-        plt.savefig(f"{save_folder}/{'EA' if label == 'ea' else 'IP'}_{epoch}.png")
-    plt.close(fig)
+    return R2, RMSE
 
 
-def visualize_diblock_results(store_pred: List, store_true: List, save_folder: str = None, epoch: int = 999):
+def visualize_diblock_results(store_pred: List, store_true: List, save_folder: str = None, epoch: int = 999, shouldPlotMetrics=False):
     # Convert lists to numpy arrays if they aren't already
     store_pred = np.array(store_pred)
     store_true = np.array(store_true)
@@ -71,32 +75,35 @@ def visualize_diblock_results(store_pred: List, store_true: List, save_folder: s
     prc_mean = np.mean(prcs)
     prc_sem = stats.sem(prcs)
 
-    print(f"PRC = {prc_mean:.2f} +/- {prc_sem:.2f}       ROC = {roc_mean:.2f} +/- {roc_sem:.2f}")
-    
-    # Plot the prcs results, each bar a differ color
-    fig, ax = plt.subplots()
-    colors = sns.color_palette('tab10')
-    y_positions = np.arange(len(prcs))  # Y positions for each dot
+    # print(f"PRC = {prc_mean:.2f} +/- {prc_sem:.2f}       ROC = {roc_mean:.2f} +/- {roc_sem:.2f}")
+    if shouldPlotMetrics:
+        # Plot the prcs results, each bar a differ color
+        fig, ax = plt.subplots()
+        colors = sns.color_palette('tab10')
+        y_positions = np.arange(len(prcs))  # Y positions for each dot
 
-    # Scatter plot for each class
-    for i, prc in enumerate(prcs):
-        ax.scatter(prc, y_positions[i], color=colors[i], s=100)  # s is the size of the dot
+        # Scatter plot for each class
+        for i, prc in enumerate(prcs):
+            ax.scatter(prc, y_positions[i], color=colors[i], s=100)  # s is the size of the dot
 
-    # Adding error bars
-    for i in range(len(prcs)):
-        ax.errorbar(prcs[i], y_positions[i], xerr=prc_sem, fmt='none', ecolor='gray')
+        # Adding error bars
+        for i in range(len(prcs)):
+            ax.errorbar(prcs[i], y_positions[i], xerr=prc_sem, fmt='none', ecolor='gray')
 
-    ax.set_yticks(np.arange(len(prcs)))
-    ax.set_yticklabels(['lamellar', 'cylinder', 'sphere', 'gyroid', 'disordered'])
-    ax.set_xlabel('PRC')
-    ax.set_title(f'PRC for each class, mean = {prc_mean:.2f} +/- {prc_sem:.2f}')
-    plt.tight_layout()
-    
-    # Ensure save_folder exists
-    if save_folder:
-        os.makedirs(save_folder, exist_ok=True)
-        plt.savefig(os.path.join(save_folder, f"average_auprc_epoch_{epoch}.png"))
-    plt.close()
+        ax.set_yticks(np.arange(len(prcs)))
+        ax.set_yticklabels(['lamellar', 'cylinder', 'sphere', 'gyroid', 'disordered'])
+        ax.set_xlabel('PRC')
+        ax.set_title(f'PRC for each class, mean = {prc_mean:.2f} +/- {prc_sem:.2f}')
+        plt.tight_layout()
+        
+        # Ensure save_folder exists
+        if save_folder:
+            os.makedirs(save_folder, exist_ok=True)
+            plt.savefig(os.path.join(save_folder, f"average_auprc_epoch_{epoch}.png"))
+        wandb.log({"metrics_plot": wandb.Image(fig)})
+        plt.close()
+
+    return prc_mean, roc_mean
 
 
 def visualize_loss_space(target_embeddings, predicted_target_embeddings, model_name='', epoch=999, loss_type=0, hidden_size=128):
@@ -138,6 +145,7 @@ def visualize_loss_space(target_embeddings, predicted_target_embeddings, model_n
     save_folder = f'Results/{model_name}/PretrainingLossSpace'
     os.makedirs(save_folder, exist_ok=True)
     plt.savefig(os.path.join(save_folder, f"{epoch}.png"))
+    wandb.log({"loss_space": wandb.Image(fig)})
     plt.close(fig)
 
 
@@ -259,6 +267,44 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     # Save the figure using Plotly's write_image method. Note: This requires the `kaleido` package for static image export.
     fig_file_path = os.path.join(save_folder, f"2D_UMAP_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png")
     fig_2d_stoich.write_image(fig_file_path)
+
+    # add pca visualization
+    pca = PCA(n_components=2)
+    pca_result = pca.fit_transform(embeddings)
+    df_embeddings_2d_pca = pd.DataFrame(pca_result, columns=['Dimension 1', 'Dimension 2'])
+    df_embeddings_2d_pca['Monomer A Type'] = mon_A_type
+    df_embeddings_2d_pca['Stoichiometry'] = stoichiometry
+
+
+    # use matplotlib to plot pca
+    fig, ax = plt.subplots(figsize=(7, 6))
+    for i in range(len(df_embeddings_2d_pca['Monomer A Type'].unique())):
+        indices = np.where(df_embeddings_2d_pca['Monomer A Type'] == i)
+        ax.scatter(df_embeddings_2d_pca.loc[indices, 'Dimension 1'], df_embeddings_2d_pca.loc[indices, 'Dimension 2'], label=f'Mon_A {i+1}')
+    ax.set_xlabel('Dimension 1')
+    ax.set_ylabel('Dimension 2')
+    ax.legend()
+    ax.set_title('2D PCA Visualization by Monomer A Type')
+    fig.suptitle(f'PCA 2D Embeddings Colored by Monomer A Type - Epoch: {epoch}')
+    plt.savefig(os.path.join(save_folder, f"2D_PCA_Mon_A_{epoch}{'_FT' if isFineTuning else ''}.png"))
+    wandb.log({"embedding_space_monA": wandb.Image(fig)})
+    plt.close(fig)
+
+    # use matplotlib to plot pca
+    fig, ax = plt.subplots(figsize=(7, 6))
+    for i in range(len(df_embeddings_2d_pca['Stoichiometry'].unique())):
+        indices = np.where(df_embeddings_2d_pca['Stoichiometry'] == i)
+        ax.scatter(df_embeddings_2d_pca.loc[indices, 'Dimension 1'], df_embeddings_2d_pca.loc[indices, 'Dimension 2'], label=f'Stoichiometry {i}')
+    ax.set_xlabel('Dimension 1')
+    ax.set_ylabel('Dimension 2')
+    ax.legend()
+    ax.set_title('2D PCA Visualization by Stoichiometry')
+    fig.suptitle(f'PCA 2D Embeddings Colored by Stoichiometry - Epoch: {epoch}')
+    plt.savefig(os.path.join(save_folder, f"2D_PCA_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png"))
+    wandb.log({"embedding_space_stoich": wandb.Image(fig)})
+    plt.close(fig)
+
+
    
 
     # def mpl_to_plotly_cmap(cmap, num_classes):

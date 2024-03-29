@@ -107,7 +107,8 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     print(f'Train R2.: {trn_r2}')
     print(f'Val MAE.: {lin_mae}')
 
-    return trn_r2, lin_mae
+    metrics = {'train_r2': trn_r2, 'val_mae': lin_mae}
+    return metrics
 
 def count_parameters(model):
     # For counting number of parameteres: need to remove unnecessary DiscreteEncoder, and other additional unused params

@@ -5,7 +5,7 @@ from src.model_utils.hyperbolic_dist import hyperbolic_dist
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import wandb
 
 def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0, dataset='aldeghi'):
     # check target and context parameters are the same (weight sharing)
@@ -59,11 +59,16 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             print('Loss function not supported! Exiting!')
             exit()
 
+        wandb.log({"pretrn_trn_inv_loss": inv_loss.item()})
+
         if regularization: # if vicReg is used
             context_cov_loss, context_var_loss = vcReg(expanded_context_embeddings)  
             target_cov_loss, target_var_loss = vcReg(expanded_target_embeddings)
             cov_loss = context_cov_loss + target_cov_loss
             var_loss = context_var_loss + target_var_loss
+            
+            wandb.log({"pretrn_trn_cov_loss": cov_loss.item()})
+            wandb.log({"pretrn_trn_var_loss": var_loss.item()})
 
             inv_losses.append(inv_loss.item())
             cov_losses.append(cov_loss.item())
@@ -71,6 +76,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             
             # vicReg objective
             loss = inv_weight * inv_loss + var_weight * var_loss + cov_weight * cov_loss
+            wandb.log({"pretrn_trn_total_loss": loss.item()})
         else:
             loss = inv_loss
             
@@ -119,13 +125,18 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
             print('Loss function not supported! Exiting!')
             exit()
 
+        wandb.log({"pretrn_val_inv_loss": inv_loss.item()})
+
         if regularization:
             context_cov_loss, context_var_loss = vcReg(expanded_context_embeddings)  
             target_cov_loss, target_var_loss = vcReg(expanded_target_embeddings)
             cov_loss = context_cov_loss + target_cov_loss
             var_loss = context_var_loss + target_var_loss
+            wandb.log({"pretrn_val_cov_loss": cov_loss.item()})
+            wandb.log({"pretrn_val_var_loss": var_loss.item()})
             # vicReg objective
             loss = inv_weight * inv_loss + var_weight * var_loss + cov_weight * cov_loss
+            wandb.log({"pretrn_val_total_loss": loss.item()})
         else:
             loss = inv_loss
 
@@ -179,15 +190,4 @@ def reset_parameters(module):
                 module.bias.data.fill_(0.0)
     for child in module.children():
         reset_module_parameters(child)
-
-# import networkx as nx
-        # graph = data[0]
-
-        # edge_index = graph.combined_subgraphs
-        # # plot 
-        # G_context = nx.Graph()
-        # G_context.add_edges_from(edge_index.T.cpu().numpy())
-        # nx.draw(G_context, with_labels=True, node_color='skyblue')
-        # import matplotlib.pyplot as plt
-        # plt.show()
 

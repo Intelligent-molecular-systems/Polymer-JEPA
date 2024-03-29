@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
+import wandb
 
 
 def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
@@ -106,6 +107,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
             else:
                 raise ValueError('Invalid dataset name')
             
+            wandb.log({'train_loss': train_loss.item()})
             total_train_loss += train_loss
             train_loss.backward()
             optimizer.step()    
@@ -162,31 +164,38 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                 with open(f'Results/{model_name}/hyperparams.yml', 'w') as f:
                     with redirect_stdout(f): print(cfg.dump())
 
-            percentage = cfg.pretrain.aldeghiFTPercentage if cfg.finetuneDataset == 'aldeghi' else cfg.pretrain.diblockFTPercentage
+            percentage = cfg.finetune.aldeghiFTPercentage if cfg.finetuneDataset == 'aldeghi' else cfg.finetune.diblockFTPercentage
             save_folder = f'Results/{model_name}/{cfg.finetuneDataset}_{cfg.modelVersion}_{percentage}'
+            metrics = {}
             if cfg.finetuneDataset == 'aldeghi':
                 label = 'ea' if cfg.finetune.property == 'ea' else 'ip'
                 
                 # if cfg.visualize.shouldEmbeddingSpace:
                 #     visualeEmbeddingSpace(all_embeddings, mon_A_type, stoichiometry, model_name, epoch, isFineTuning=True)
 
-                visualize_aldeghi_results(
+                R2, RMSE = visualize_aldeghi_results(
                     np.array(all_y_pred_val), 
                     np.array(all_true_val), 
                     label=label, 
                     save_folder=save_folder,
-                    epoch=epoch+1
+                    epoch=epoch+1,
+                    shouldPlotMetrics=cfg.visualize.shouldPlotMetrics
                 )
+                metrics['R2'] = R2
+                metrics['RMSE'] = RMSE
                 
 
             elif cfg.finetuneDataset == 'diblock':
-                visualize_diblock_results(
+                prc_mean, roc_mean = visualize_diblock_results(
                     np.array(all_y_pred_val), 
                     np.array(all_true_val),
                     save_folder=save_folder,
-                    epoch=epoch+1
+                    epoch=epoch+1,
+                    shouldPlotMetrics=cfg.visualize.shouldPlotMetrics
                 )
+                metrics['prc_mean'] = prc_mean
+                metrics['roc_mean'] = roc_mean
             else:
                 raise ValueError('Invalid dataset name')
     
-    return train_loss, val_loss
+    return train_loss, val_loss, metrics

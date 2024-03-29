@@ -198,7 +198,8 @@ class GraphJEPAPartitionTransform(object):
         mask = torch.zeros(self.n_patches).bool() # if say we have two patches then [False, False]
         mask[subgraphs_batch] = True # if subgraphs_batch = [0, 0, 1, 1] then [True, True]
         # !!! !!!
-        # mask[subgraphs_batch[0]] = False # dont use the context subgraph, so we set it to False since it s always the first, this way the transformer wont pay attention to it
+        # Comment this line if using zinc metis subgraphing
+        mask[subgraphs_batch[0]] = False # dont use the context subgraph, so we set it to False since it s always the first, this way the transformer wont pay attention to it
         # !!! !!!
         # basically mask has the first 20-n elements as False and the remaining n elements as True, n is the number of subgraphs in the graph
         # print(mask) # [RISK]: Check if this is the same in the original code 

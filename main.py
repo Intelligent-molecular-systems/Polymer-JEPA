@@ -1,6 +1,6 @@
 import random
 from src.config import cfg
-from src.data import create_data
+from src.data import create_data, getMaximizedVariedData, getLabData, getRandomData, getTammoData
 from src.finetune import finetune
 from src.linearFinetune import finetune as linearFinetune
 # from PolymerJEPA_old import PolymerJEPA
@@ -15,17 +15,25 @@ import time
 import torch
 
 
-def run():
-    pretrn_dataset, ft_dataset, val_dataset = create_data(cfg)
-    pretrn_dataset.shuffle()
+def run(pretrn_dataset, ft_dataset, val_dataset):
+
+    ft_trn_loss = 0.0
+    ft_val_loss = 0.0
     # ft_dataset.shuffle()
     # pretraning always done on the aldeghi dataset since its bigger dataset and no issues with homopolymer or tri, penta...blocks polymers
     # which would require different subgraphing techniques
-
+    
     if cfg.finetuneDataset == 'aldeghi':
         print('Finetuning will be on aldeghi dataset...')
-        ft_data = ft_dataset[:int(cfg.pretrain.aldeghiFTPercentage*len(ft_dataset))]
+        #ft_data = getMaximizedVariedData(ft_dataset.copy(), int(cfg.pretrain.aldeghiFTPercentage*len(ft_dataset))) #ft_dataset[:int(cfg.pretrain.aldeghiFTPercentage*len(ft_dataset))]
+        #ft_data = getLabData(ft_dataset.copy(), int(cfg.pretrain.aldeghiFTPercentage*len(ft_dataset)))
+        ft_data = getRandomData(ft_dataset.copy(), int(cfg.pretrain.aldeghiFTPercentage*len(ft_dataset)))
+        #ft_data = getTammoData(pretrn_dataset + ft_dataset)
+
         # for official result use the full val_dataset, but to run experiments fast i can use 0.95
+        # print(ft_data)
+        # get a list of all .smiles        
+       
         pre_test_data = val_dataset # .copy()
         ft_test_data = val_dataset #.copy()
 
@@ -141,9 +149,9 @@ def run():
             model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}/model.pt', map_location=cfg.device))
 
             if cfg.finetune.isLinear:
-                linearFinetune(ft_data, ft_test_data, model, model_name, cfg)
+                ft_trn_loss, ft_val_loss = linearFinetune(ft_data, ft_test_data, model, model_name, cfg)
             else:
-                finetune(ft_data, ft_test_data, model, model_name, cfg)
+                ft_trn_loss, ft_val_loss = finetune(ft_data, ft_test_data, model, model_name, cfg)
         
         else:
             reset_parameters(model)
@@ -153,11 +161,28 @@ def run():
             model_name += '_NotPretrained'
 
             if cfg.finetune.isLinear:
-                linearFinetune(ft_data, ft_test_data, model, model_name, cfg)
+                ft_trn_loss, ft_val_loss = linearFinetune(ft_data, ft_test_data, model, model_name, cfg)
             else:
-                finetune(ft_data, ft_test_data, model, model_name, cfg)
+                ft_trn_loss, ft_val_loss = finetune(ft_data, ft_test_data, model, model_name, cfg)
+    
+    return ft_trn_loss, ft_val_loss
+
 if __name__ == '__main__':
-    run()
+    pretrn_dataset, ft_dataset, val_dataset = create_data(cfg)
+    pretrn_dataset.shuffle()
+    ft_dataset.shuffle()
+    trn_losses = []
+    val_losses = []
+
+    for i in range(cfg.runs):
+        ft_trn_loss, ft_val_loss = run(pretrn_dataset, ft_dataset, val_dataset)
+        trn_losses.append(ft_trn_loss)
+        val_losses.append(ft_val_loss)
+    
+    print(f'N of runs {cfg.runs}')
+    print(f'Avg train loss {sum(trn_losses)/len(trn_losses)}')
+    print(f'Avg val loss {sum(val_losses)/len(val_losses)}')
+
 
 
 

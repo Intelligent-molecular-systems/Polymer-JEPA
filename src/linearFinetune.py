@@ -103,10 +103,11 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     y_pred_val = predictor.predict(X_val)
 
     lin_mae = mean_absolute_error(y_val, y_pred_val)
-    print(f'Train R2.: {predictor.score(X_train, y_train)}')
+    trn_r2 = predictor.score(X_train, y_train)
+    print(f'Train R2.: {trn_r2}')
     print(f'Val MAE.: {lin_mae}')
 
-    return model
+    return trn_r2, lin_mae
 
 def count_parameters(model):
     # For counting number of parameteres: need to remove unnecessary DiscreteEncoder, and other additional unused params

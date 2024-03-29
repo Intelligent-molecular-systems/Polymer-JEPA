@@ -189,4 +189,4 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
             else:
                 raise ValueError('Invalid dataset name')
     
-    return model
+    return train_loss, val_loss

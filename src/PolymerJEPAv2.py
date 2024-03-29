@@ -118,6 +118,9 @@ class PolymerJEPAv2(nn.Module):
             # in case of vicReg to avoid collapse we have regularization
             full_graph_nodes_embedding = self.target_encoder(*parameters)
 
+        with torch.no_grad():
+            vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
+            
         # map it as we do for x at the beginning
         full_graph_nodes_embedding = full_graph_nodes_embedding[data.subgraphs_nodes_mapper]
 
@@ -127,8 +130,7 @@ class PolymerJEPAv2(nn.Module):
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
 
-        with torch.no_grad():
-            vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
+        
 
         # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
         # print('n of nodes in the context_subgraph_idx:', n_context_nodes)

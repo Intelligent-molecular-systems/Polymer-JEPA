@@ -1,10 +1,14 @@
+import collections
 import os
 import pandas as pd
 import random
+from rdkit import Chem
 from src.featurization_utils.featurization import poly_smiles_to_graph
 from src.transform import PositionalEncodingTransform, GraphJEPAPartitionTransform
+import time
 import torch
 from torch_geometric.data import InMemoryDataset
+from torch_geometric.datasets import ZINC
 import tqdm
 
 
@@ -34,9 +38,10 @@ class MyDataset(InMemoryDataset):
         torch.save(self.collate(self.data_list), self.processed_paths[0])
 
 
-def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/train_aldeghi_graphs_list.pt', dataset='aldeghi'):
-    train_graphs = []
-    test_graphs = []
+def get_graphs(dataset='aldeghi'):
+    all_graphs = []
+    # test_graphs = []
+    full_atoms_set = set()
     
     # 35 monomer B excluded from training set, its a bit more than 2000 graphs
     # test_monomers = {
@@ -79,6 +84,9 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
     #     '[*:3]c1cc(N)cc([*:4])c1C' 
     # }
     
+    file_csv='Data/aldeghi_coley_ea_ip_dataset.csv' if dataset == 'aldeghi' else 'Data/diblock_copolymer_dataset.csv'
+    file_graphs_list='Data/train_aldeghi_graphs_list.pt' if dataset == 'aldeghi' else 'Data/diblock_graphs_list.pt'
+
     # check if graphs_list.pt exists
     if not os.path.isfile(file_graphs_list):
         print('Creating graphs pt file...')
@@ -96,15 +104,21 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
                     y_EA=ea_values, 
                     y_IP=ip_values
                 ) 
-                polymer_monomers = set(poly_strings.split('|')[0].split('.'))
-                
+                # polymer_monomers = set(poly_strings.split('|')[0].split('.'))
+
+                # m = Chem.MolFromSmiles(graph.smiles['polymer'])
+                # full_atoms_set.update(set([atom.GetAtomicNum() for atom in m.GetAtoms()]))
                 # if polymer_monomers.isdisjoint(test_monomers):
-                train_graphs.append(graph)
+                all_graphs.append(graph)
                 # else:
                 #     test_graphs.append(graph)
-        
-            print('Number of training graphs:', len(train_graphs))
-            print('Number of test graphs:', len(test_graphs))
+            
+            # with open('full_atoms_list.txt', 'w') as f:
+            #     f.write(','.join([str(a) for a in full_atoms_set]))
+            # f.close()
+            
+            # print('Number of training graphs:', len(train_graphs))
+            # print('Number of test graphs:', len(test_graphs))
 
         elif dataset == 'diblock':
             for i in tqdm.tqdm(range(len(df.loc[:, 'poly_chemprop_input']))):
@@ -124,14 +138,14 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
                     y_gyroid=gyroid_values,
                     y_disordered=disordered_values
                 ) 
-                train_graphs.append(graph)
+                all_graphs.append(graph)
         else:
             raise ValueError('Invalid dataset name')
         
         random.seed(12345)
-        train_graphs = random.sample(train_graphs, len(train_graphs))
-        train_graphs = train_graphs[:int(0.8*len(train_graphs))]
-        test_graphs = train_graphs[int(0.8*len(train_graphs)):]
+        all_graphs = random.sample(all_graphs, len(all_graphs))
+        train_graphs = all_graphs[:int(0.8*len(all_graphs))]
+        test_graphs = all_graphs[int(0.8*len(all_graphs)):]
         if dataset == 'aldeghi':
             train_file_graphs_list = 'Data/train_aldeghi_graphs_list.pt'
             test_file_graphs_list = 'Data/test_aldeghi_graphs_list.pt'
@@ -149,15 +163,12 @@ def get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list
         else:
             train_graphs = torch.load(file_graphs_list)
 
-    # monomer split, uncomment to shuffle the graphs
-    # train_graphs = random.sample(train_graphs, len(train_graphs))
-    # test_graphs = random.sample(test_graphs, len(test_graphs))
     return train_graphs, test_graphs
 
 
 def create_data(cfg):
     pre_transform = PositionalEncodingTransform(rw_dim=cfg.pos_enc.rw_dim)
-    
+
     transform_train = GraphJEPAPartitionTransform(
         subgraphing_type=cfg.subgraphing.type,
         num_targets=cfg.jepa.num_targets,
@@ -165,7 +176,8 @@ def create_data(cfg):
         patch_rw_dim=cfg.pos_enc.patch_rw_dim,
         patch_num_diff=cfg.pos_enc.patch_num_diff,
         drop_rate=cfg.subgraphing.drop_rate,
-        context_size=cfg.subgraphing.context_size
+        context_size=cfg.subgraphing.context_size,
+        dataset=cfg.finetuneDataset
     )
 
     transform_val = GraphJEPAPartitionTransform(
@@ -175,18 +187,73 @@ def create_data(cfg):
         patch_rw_dim=cfg.pos_enc.patch_rw_dim,
         patch_num_diff=cfg.pos_enc.patch_num_diff,
         drop_rate=0.0,
-        context_size=cfg.subgraphing.context_size
+        context_size=cfg.subgraphing.context_size,
+        dataset=cfg.finetuneDataset
     )
     
-    
-    train_graphs, test_graphs = get_graphs(file_csv='Data/aldeghi_coley_ea_ip_dataset.csv', file_graphs_list='Data/train_aldeghi_graphs_list.pt', dataset='aldeghi')
-    pretrn_graphs = train_graphs[:int(0.5*len(train_graphs))]
-    ft_graphs = train_graphs[int(0.5*len(train_graphs)):]
+    if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
+        pretrn_graphs, ft_graphs, test_graphs = [], [], []
+     
+        if not os.path.isfile('Data/aldeghi/pretrain/processed/dataset.pt'):
+            train_graphs, test_graphs = get_graphs(dataset='aldeghi')
+            pretrn_graphs = train_graphs[:int(0.5*len(train_graphs))]
+            ft_graphs = train_graphs[int(0.5*len(train_graphs)):]
 
-    pretrn_dataset = MyDataset(root='Data/aldeghi/pretrain', data_list=pretrn_graphs, pre_transform=pre_transform, transform=transform_train)
-    ft_dataset = MyDataset(root='Data/aldeghi/finetune', data_list=ft_graphs, pre_transform=pre_transform, transform=transform_val)
-    val_dataset = MyDataset(root='Data/aldeghi/val', data_list=test_graphs, pre_transform=pre_transform, transform=transform_val)
-    val_dataset = [x for x in val_dataset] # keep same transform subgraphs throughout epochs
+        pretrn_dataset = MyDataset(root='Data/aldeghi/pretrain', data_list=pretrn_graphs, pre_transform=pre_transform, transform=transform_train)
+        ft_dataset = MyDataset(root='Data/aldeghi/finetune', data_list=ft_graphs, pre_transform=pre_transform, transform=transform_val)
+        val_dataset = MyDataset(root='Data/aldeghi/val', data_list=test_graphs, pre_transform=pre_transform, transform=transform_val)
+        val_dataset = [x for x in val_dataset] # keep same transform subgraphs throughout epochs
+
+    
+    elif cfg.finetuneDataset == 'zinc':
+        smiles_dict = {}
+        if not os.path.isfile('Data/Zinc/subset/processed/train.pt'):
+            sets = ['train', 'val', 'test']
+            for set_name in sets:
+                smiles_df = pd.read_csv(f'Data/Zinc/{set_name}.txt', header=None)
+                print(smiles_df.head())
+
+                with open(f'Data/Zinc/{set_name}.index', 'r') as file:
+                    # Read all lines, split by comma and newline, then flatten the list
+                    indexes = [int(index) for line in file for index in line.split(',')]
+
+                smiles_list = smiles_df.iloc[indexes, 0].tolist()
+
+                smiles_dict[set_name] = smiles_list
+                
+        root = 'Data/Zinc'
+        train_dataset = ZINC(
+            root, subset=True, split='train', pre_transform=pre_transform, transform=transform_train, smiles=smiles_dict)
+        
+        val_dataset = ZINC(root, subset=True, split='val',
+                           pre_transform=pre_transform, transform=transform_val, smiles=smiles_dict)
+        
+        pretrn_dataset = train_dataset.copy() # [:int(0.5*len(train_dataset))]
+        ft_dataset = train_dataset.copy() # [int(0.5*len(train_dataset)):]
+    else:
+        raise ValueError('Invalid dataset name')
+    
+
+    # pretrn_set = [x.full_input_string for x in pretrn_dataset]
+    # print(f'Pretraining dataset size: {len(pretrn_dataset)}')
+    # pretrn_set = set(pretrn_set)
+    # print(f'Pretraining dataset size: {len(pretrn_dataset)}')
+
+    # ft_set = [x.full_input_string for x in ft_dataset]
+    # print(f'Finetuning dataset size: {len(ft_dataset)}')
+    # ft_set = set(ft_set)
+    # print(f'Finetuning dataset size: {len(ft_dataset)}')
+
+    # val_set = set([x.full_input_string for x in val_dataset])
+    # print(f'Validation dataset size: {len(val_dataset)}')
+    # val_set = set(val_set)
+    # print(f'Validation dataset size: {len(val_dataset)}')
+
+    # # check for overlap between datasets
+    # print(f'Overlap between pretraining and finetuning datasets: {len(pretrn_set.intersection(ft_set))}')
+    # print(f'Overlap between pretraining and validation datasets: {len(pretrn_set.intersection(val_set))}')
+    # print(f'Overlap between finetuning and validation datasets: {len(ft_set.intersection(val_set))}')
+
 
     return pretrn_dataset, ft_dataset, val_dataset
 
@@ -205,3 +272,217 @@ def printStats(graphs):
     # print max number of nodes
     print(f'Max number of nodes: {max([g.num_nodes for g in graphs])}')
     print(f'min number of nodes: {min([g.num_nodes for g in graphs])}')
+
+
+def getFullAtomsList():
+    with open('full_atoms_list.txt', 'r') as f:
+        full_atoms_list = f.read()
+    f.close()
+
+    full_atoms_list = set(full_atoms_list.split(','))
+
+    return full_atoms_list
+
+
+def getMaximizedVariedData(ft_data, size):
+    torch.manual_seed(int(time.time()))
+    # shuffle the dataset randomly
+    ft_data.shuffle()
+    current_size = 0
+    i = 0
+    # keep track of how many occurrences of each monomerA, if for a monomerA we have 1/9 of the size, we can stop adding that monomerA
+    monomerADict = collections.defaultdict(int)
+    # stoichiometry and chain architecture dict (same as monomer A), but ratios here are 1/3
+    stoichDict = collections.defaultdict(int)
+    chainArchDict = collections.defaultdict(int)
+    # just make sure that the monomerB is not repeating, so its not in the set
+    monomerBSet = set()
+    # TODO need to make sure that all possible atoms are included in the dataset, so with monomerB we should keep track of the atoms seen so far, and those that are missing
+    # from featurization i can return a list of atoms that are present in the monomerB/polymer
+    dataset = []
+
+    full_atoms_list = getFullAtomsList()
+    subset_atoms = set()
+    while i < len(ft_data) and current_size < size:
+        m = Chem.MolFromSmiles(ft_data[i].smiles['polymer'])
+        m_atoms = set([atom.GetAtomicNum() for atom in m.GetAtoms()])
+        monomerA = ft_data[i].smiles['monomer1']
+        monomerB = ft_data[i].smiles['monomer2']
+        stoich = ft_data[i].stoichiometry 
+        #chainArch = ft_data[i].chain_architecture # TODO: add chain architecture to the data object in featurization.py
+
+        # atoms conditions: if subset_atoms < full_atoms_list and subset_atoms.intersections(m_atoms) == m_atoms then skip current iteration
+        # translated means that if we are still missing some atoms in the subset, and the current molecule doesnt bring any new atoms skip it, 
+        # in case we already seen all atoms or the moleucle bring some new atoms we add it to the subset
+
+        # chainArchDict[chainArch] >= size // 3 or \
+        if \
+        monomerADict[monomerA] >= size // 9 or \
+        monomerB in monomerBSet or \
+        stoichDict[stoich] >= size // 3 or \
+        (len(subset_atoms) < len(full_atoms_list) and len(m_atoms) == len(m_atoms.intersection(subset_atoms))):
+            i += 1
+            continue
+
+        monomerADict[monomerA] += 1
+        monomerBSet.add(monomerB)
+        subset_atoms.update(m_atoms)
+        stoichDict[stoich] += 1
+        #chainArchDict[chainArch] += 1
+        current_size += 1
+        dataset.append(ft_data[i])
+        i += 1
+
+    if current_size < size:
+        print('Not enough data to reach the desired size')
+
+    # print dataset stats
+    # print("\Maximized variation dataset stats:\n")
+    # print("Mon A dict:", monomerADict)
+    # print("Mon B set length", len(monomerBSet), '; current size:', current_size)
+    # print("Stoich dict:", stoichDict)
+    # print("Subset atoms length:", len(subset_atoms), "; Full atoms length:", len(full_atoms_list))
+
+    return dataset
+
+
+# include the least possible number of different monomerA and monomerB while making sure that all possible atoms are present in the dataset
+def getLabData(ft_data, size):
+    torch.manual_seed(int(time.time()))
+    ft_data.shuffle()
+    current_size = 0
+    i = 0
+     # keep track of how many occurrences of each monomerA, if for a monomerA we have 1/9 of the size, we can stop adding that monomerA
+    monomerADict = collections.defaultdict(int)
+    # stoichiometry and chain architecture dict (same as monomer A), but ratios here are 1/3
+    stoichDict = collections.defaultdict(int)
+    chainArchDict = collections.defaultdict(int)
+    # just make sure that the monomerB is not repeating, so its not in the set
+    monomerBDict = collections.defaultdict(int)
+   
+    dataset = []
+    full_atoms_list = getFullAtomsList()
+    subset_atoms = set()
+
+    # keep track of how many keys in monomerADict and monomerBSet, 
+    while i < len(ft_data) and current_size < size:
+        m = Chem.MolFromSmiles(ft_data[i].smiles['polymer'])
+        m_atoms = set([atom.GetAtomicNum() for atom in m.GetAtoms()])
+        monomerA = ft_data[i].smiles['monomer1']
+        monomerB = ft_data[i].smiles['monomer2']
+        stoich = ft_data[i].stoichiometry
+
+        # chainArchDict[chainArch] >= size // 3 or \
+        if \
+        (len(monomerADict) >= 4 and monomerA not in monomerADict) or \
+        (len(monomerBDict) >= 20 and monomerB not in monomerBDict) or \
+        stoichDict[stoich] >= size // 3 or \
+        (len(subset_atoms) < len(full_atoms_list) and len(m_atoms) == len(m_atoms.intersection(subset_atoms))):
+            i += 1
+            continue
+
+        monomerADict[monomerA] += 1
+        monomerBDict[monomerB] += 1
+        stoichDict[stoich] += 1
+        subset_atoms.update(m_atoms)
+        current_size += 1
+        dataset.append(ft_data[i])
+        i += 1
+    
+    # print("\Lab dataset stats:\n")
+    # print("Size:", current_size)
+    # print("Mon A dict:", monomerADict)
+    # print("Mon B dict", len(monomerBDict))
+    # print("Stoich dict:", stoichDict)
+    # print("Subset atoms length:", len(subset_atoms), "; Full atoms length:", len(full_atoms_list))
+
+    return dataset
+
+
+def getRandomData(ft_data, size):
+    # select 'size' number of random data points from ft_data
+    # randomly set torch seed based on the current time
+    torch.manual_seed(int(time.time()))
+    # set random seed for python
+    random.seed(int(time.time()))
+    dataset = ft_data.shuffle()
+    dataset = [x for x in dataset]
+    dataset = random.sample(dataset, size)
+
+    # # print dataset stats as in getMaximizedVariedData
+    # monomerADict = collections.defaultdict(int)
+    # # stoichiometry and chain architecture dict (same as monomer A), but ratios here are 1/3
+    # stoichDict = collections.defaultdict(int)
+    # chainArchDict = collections.defaultdict(int)
+    # # just make sure that the monomerB is not repeating, so its not in the set
+    # monomerBDict = collections.defaultdict(int)
+    # full_atoms_list = getFullAtomsList()
+    # subset_atoms = set()
+
+    # for i in range(len(dataset)):
+    #     m = Chem.MolFromSmiles(dataset[i].smiles['polymer'])
+    #     m_atoms = set([atom.GetAtomicNum() for atom in m.GetAtoms()])
+    #     monomerA = dataset[i].smiles['monomer1']
+    #     monomerB = dataset[i].smiles['monomer2']
+    #     stoich = dataset[i].stoichiometry
+
+    #     monomerADict[monomerA] += 1
+    #     monomerBDict[monomerB] += 1
+    #     stoichDict[stoich] += 1
+    #     subset_atoms.update(m_atoms)
+    
+    # print("\nRandom dataset stats:\n")
+    # print("Size:", size)
+    # print("Mon A dict:", monomerADict)
+    # print("Mon B dict", len(monomerBDict))
+    # print("Stoich dict:", stoichDict)
+    # print("Subset atoms length:", len(subset_atoms), "; Full atoms length:", len(full_atoms_list))
+
+    return dataset
+
+def getTammoData(full_dataset):
+    with open('polymers_used.txt', 'r') as f:
+        polymer_smiles = f.read()
+    f.close()
+
+    polymer_smiles = set(polymer_smiles.split(','))
+    print('Number of polymers in polymers_used.txt:', len(polymer_smiles))
+    dataset = []
+    for g in full_dataset:
+        # in case we already have all the polymers we need, stop
+        if len(dataset) == len(polymer_smiles):
+            break
+
+        if g.full_input_string in polymer_smiles:
+            dataset.append(g)
+
+    monomerADict = collections.defaultdict(int)
+    # stoichiometry and chain architecture dict (same as monomer A), but ratios here are 1/3
+    stoichDict = collections.defaultdict(int)
+    chainArchDict = collections.defaultdict(int)
+    # just make sure that the monomerB is not repeating, so its not in the set
+    monomerBDict = collections.defaultdict(int)
+    full_atoms_list = getFullAtomsList()
+    subset_atoms = set()
+
+    for i in range(len(dataset)):
+        m = Chem.MolFromSmiles(dataset[i].smiles['polymer'])
+        m_atoms = set([atom.GetAtomicNum() for atom in m.GetAtoms()])
+        monomerA = dataset[i].smiles['monomer1']
+        monomerB = dataset[i].smiles['monomer2']
+        stoich = dataset[i].stoichiometry
+
+        monomerADict[monomerA] += 1
+        monomerBDict[monomerB] += 1
+        stoichDict[stoich] += 1
+        subset_atoms.update(m_atoms)
+    
+    print("\nRandom dataset stats:\n")
+    print("Size:", len(dataset))
+    print("Mon A dict:", monomerADict)
+    print("Mon B dict", len(monomerBDict))
+    print("Stoich dict:", stoichDict)
+    print("Subset atoms length:", len(subset_atoms), "; Full atoms length:", len(full_atoms_list))
+    print("Subset atoms:", subset_atoms, "; Full atoms:", full_atoms_list)
+    
+    return dataset

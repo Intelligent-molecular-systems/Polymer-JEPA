@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0):
+def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0, dataset='aldeghi'):
     # check target and context parameters are the same (weight sharing)
     # for param_q, param_k in zip(model.context_encoder.parameters(), model.target_encoder.parameters()):
     #     if not torch.equal(param_q, param_k):
@@ -33,19 +33,20 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         optimizer.zero_grad()
         target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings = model(data, epoch)
         
-        ### visualization ###
-        if i == 0: # save the first target_x and target_y for visualization of hyperbolic space
-            target_embeddings_saved = target_embeddings
-            predicted_target_embeddings_saved = predicted_target_embeddings
-        if i % 6 == 0: # around 6k if training on 35/40k, save the embeddings for visualization of embedding space
-            all_graph_embeddings = torch.cat((all_graph_embeddings, graph_embeddings.detach().clone()), dim=0)
-            all_initial_context_embeddings = torch.cat((all_initial_context_embeddings, initial_context_embeddings.detach().clone()), dim=0)
-            all_initial_target_embeddings = torch.cat((all_initial_target_embeddings, initial_target_embeddings.detach().clone()), dim=0)
-            all_target_encoder_embeddings = torch.cat((all_target_encoder_embeddings, target_encoder_embeddings.detach().clone()), dim=0)
-            all_context_encoder_embeddings = torch.cat((all_context_encoder_embeddings, context_embeddings.detach().clone()), dim=0)
-            mon_A_type.extend(data.mon_A_type)
-            stoichiometry.extend(data.stoichiometry)
-        ### End visualization ### 
+        if dataset == 'aldeghi':
+            ### visualization ###
+            if i == 0: # save the first target_x and target_y for visualization of hyperbolic space
+                target_embeddings_saved = target_embeddings
+                predicted_target_embeddings_saved = predicted_target_embeddings
+            if i % 6 == 0: # around 6k if training on 35/40k, save the embeddings for visualization of embedding space
+                all_graph_embeddings = torch.cat((all_graph_embeddings, graph_embeddings.detach().clone()), dim=0)
+                all_initial_context_embeddings = torch.cat((all_initial_context_embeddings, initial_context_embeddings.detach().clone()), dim=0)
+                all_initial_target_embeddings = torch.cat((all_initial_target_embeddings, initial_target_embeddings.detach().clone()), dim=0)
+                all_target_encoder_embeddings = torch.cat((all_target_encoder_embeddings, target_encoder_embeddings.detach().clone()), dim=0)
+                all_context_encoder_embeddings = torch.cat((all_context_encoder_embeddings, context_embeddings.detach().clone()), dim=0)
+                mon_A_type.extend(data.mon_A_type)
+                stoichiometry.extend(data.stoichiometry)
+            ### End visualization ### 
             
         # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
         if criterion_type == 0:

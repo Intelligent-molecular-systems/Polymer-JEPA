@@ -286,6 +286,11 @@ def poly_smiles_to_graph(poly_strings, isAldeghiDataset=True, **label_dicts):
         graph_data_kwargs["mon_A_type"] = mon_A_type
         graph_data_kwargs["stoichiometry"] = stoichiometry
 
+        smile = poly_strings.split("|")[0]
+        monomer_smiles = smile.split(".")
+        graph_data_kwargs['smiles'] = {'polymer':smile, 'monomer1': monomer_smiles[0], 'monomer2': monomer_smiles[1]}
+        graph_data_kwargs['full_input_string'] = poly_strings
+
     # Add labels dynamically from label_dicts
     for label_name, label_values in label_dicts.items():
         #if type is float64 convert to float32 # for training on mps on mac

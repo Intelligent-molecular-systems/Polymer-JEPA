@@ -34,6 +34,9 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
         # Binary Cross-Entropy With Logits Loss
         # https://discuss.pytorch.org/t/using-bcewithlogisloss-for-multi-label-classification/67011/2
         criterion = nn.BCEWithLogitsLoss() # binary multiclass classification
+    elif cfg.finetuneDataset == 'zinc':
+        out_dim = 1
+        criterion = nn.L1Loss()
     else:
         raise ValueError('Invalid dataset name')
     
@@ -65,7 +68,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
         total_train_loss = 0
 
         all_embeddings = torch.tensor([], requires_grad=False, device=cfg.device)
-        mon_A_type = torch.tensor([], requires_grad=False, device=cfg.device)
+        mon_A_type = []
         stoichiometry = []
 
         for data in ft_trn_loader:
@@ -79,9 +82,9 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                 graph_embeddings = model.encode(data)
 
             if cfg.finetuneDataset == 'aldeghi':
-                mon_A_type = torch.cat((mon_A_type, data.mon_A_type), dim=0)
                 all_embeddings = torch.cat((all_embeddings, graph_embeddings), dim=0)
                 stoichiometry.extend(data.stoichiometry)
+                mon_A_type.extend(data.mon_A_type)
 
             y_pred_trn = predictor(graph_embeddings).squeeze()
 
@@ -98,6 +101,8 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                 true_labels = torch.stack([y_lamellar, y_cylinder, y_sphere, y_gyroid, y_disordered], dim=1)
 
                 train_loss = criterion(y_pred_trn, true_labels)
+            elif cfg.finetuneDataset == 'zinc':
+                train_loss = criterion(y_pred_trn, data.y.float())
             else:
                 raise ValueError('Invalid dataset name')
             
@@ -138,6 +143,11 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                         val_loss += criterion(y_pred_val, true_labels)
                         all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
                         all_true_val.extend(true_labels.detach().cpu().numpy())
+
+                    elif cfg.finetuneDataset == 'zinc':
+                        val_loss += criterion(y_pred_val, data.y.float())
+                        all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
+                        all_true_val.extend(data.y.detach().cpu().numpy())
                     else:
                         raise ValueError('Invalid dataset name')
                     
@@ -179,4 +189,4 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
             else:
                 raise ValueError('Invalid dataset name')
     
-    return model
+    return train_loss, val_loss

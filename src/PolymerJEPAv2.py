@@ -143,7 +143,7 @@ class PolymerJEPAv2(nn.Module):
 
         
 
-        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
+        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in context_subgraph_idx for idx in idx_list]
         # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
 
         # # Example for target subgraphs; adjust according to actual data structure

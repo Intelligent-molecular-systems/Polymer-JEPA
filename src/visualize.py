@@ -215,7 +215,7 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     # Save the figure using Plotly's write_image method. Note: This requires kaleido package for static image export.
     fig_file_path = os.path.join(save_folder, f"2D_UMAP_Mon_A_{epoch}{'_FT' if isFineTuning else ''}.png")
     fig_2d_monA.write_image(fig_file_path)
-    wandb.log({"2D_UMAP_Mon_A": wandb.Image(fig_2d_monA.to_image(format="png"))}, commit=False)
+    wandb.log({"2D_UMAP_Mon_A": wandb.Image(fig_file_path)}, commit=False)
 
     fig_2d_stoich = px.scatter(df_embeddings_2d, x='Dimension 1', y='Dimension 2', color='Stoichiometry',
                            color_discrete_sequence=px.colors.qualitative.Set1, 
@@ -231,7 +231,8 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     # Save the figure using Plotly's write_image method. Note: This requires the `kaleido` package for static image export.
     fig_file_path = os.path.join(save_folder, f"2D_UMAP_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png")
     fig_2d_stoich.write_image(fig_file_path)
-    wandb.log({"2D_UMAP_Stoichiometry": wandb.Image(fig_2d_stoich.to_image(format="png"))}, commit=False)
+
+    wandb.log({"2D_UMAP_Stoichiometry": wandb.Image(fig_file_path)}, commit=False)
 
     # # add pca visualization
     # pca = PCA(n_components=2)

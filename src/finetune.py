@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
+import wandb
 
 
 def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
@@ -34,6 +35,9 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
         # Binary Cross-Entropy With Logits Loss
         # https://discuss.pytorch.org/t/using-bcewithlogisloss-for-multi-label-classification/67011/2
         criterion = nn.BCEWithLogitsLoss() # binary multiclass classification
+    elif cfg.finetuneDataset == 'zinc':
+        out_dim = 1
+        criterion = nn.L1Loss()
     else:
         raise ValueError('Invalid dataset name')
     
@@ -65,7 +69,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
         total_train_loss = 0
 
         all_embeddings = torch.tensor([], requires_grad=False, device=cfg.device)
-        mon_A_type = torch.tensor([], requires_grad=False, device=cfg.device)
+        mon_A_type = []
         stoichiometry = []
 
         for data in ft_trn_loader:
@@ -79,9 +83,9 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                 graph_embeddings = model.encode(data)
 
             if cfg.finetuneDataset == 'aldeghi':
-                mon_A_type = torch.cat((mon_A_type, data.mon_A_type), dim=0)
                 all_embeddings = torch.cat((all_embeddings, graph_embeddings), dim=0)
                 stoichiometry.extend(data.stoichiometry)
+                mon_A_type.extend(data.mon_A_type)
 
             y_pred_trn = predictor(graph_embeddings).squeeze()
 
@@ -98,9 +102,12 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                 true_labels = torch.stack([y_lamellar, y_cylinder, y_sphere, y_gyroid, y_disordered], dim=1)
 
                 train_loss = criterion(y_pred_trn, true_labels)
+            elif cfg.finetuneDataset == 'zinc':
+                train_loss = criterion(y_pred_trn, data.y.float())
             else:
                 raise ValueError('Invalid dataset name')
             
+            wandb.log({'finetune_epoch': epoch, 'finetune_train_loss': train_loss.item()})
             total_train_loss += train_loss
             train_loss.backward()
             optimizer.step()    
@@ -138,6 +145,11 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                         val_loss += criterion(y_pred_val, true_labels)
                         all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
                         all_true_val.extend(true_labels.detach().cpu().numpy())
+
+                    elif cfg.finetuneDataset == 'zinc':
+                        val_loss += criterion(y_pred_val, data.y.float())
+                        all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
+                        all_true_val.extend(data.y.detach().cpu().numpy())
                     else:
                         raise ValueError('Invalid dataset name')
                     
@@ -152,31 +164,38 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                 with open(f'Results/{model_name}/hyperparams.yml', 'w') as f:
                     with redirect_stdout(f): print(cfg.dump())
 
-            percentage = cfg.pretrain.aldeghiFTPercentage if cfg.finetuneDataset == 'aldeghi' else cfg.pretrain.diblockFTPercentage
+            percentage = cfg.finetune.aldeghiFTPercentage if cfg.finetuneDataset == 'aldeghi' else cfg.finetune.diblockFTPercentage
             save_folder = f'Results/{model_name}/{cfg.finetuneDataset}_{cfg.modelVersion}_{percentage}'
+            metrics = {}
             if cfg.finetuneDataset == 'aldeghi':
                 label = 'ea' if cfg.finetune.property == 'ea' else 'ip'
                 
                 # if cfg.visualize.shouldEmbeddingSpace:
                 #     visualeEmbeddingSpace(all_embeddings, mon_A_type, stoichiometry, model_name, epoch, isFineTuning=True)
 
-                visualize_aldeghi_results(
+                R2, RMSE = visualize_aldeghi_results(
                     np.array(all_y_pred_val), 
                     np.array(all_true_val), 
                     label=label, 
                     save_folder=save_folder,
-                    epoch=epoch+1
+                    epoch=epoch+1,
+                    shouldPlotMetrics=cfg.visualize.shouldPlotMetrics
                 )
+                metrics['R2'] = R2
+                metrics['RMSE'] = RMSE
                 
 
             elif cfg.finetuneDataset == 'diblock':
-                visualize_diblock_results(
+                prc_mean, roc_mean = visualize_diblock_results(
                     np.array(all_y_pred_val), 
                     np.array(all_true_val),
                     save_folder=save_folder,
-                    epoch=epoch+1
+                    epoch=epoch+1,
+                    shouldPlotMetrics=cfg.visualize.shouldPlotMetrics
                 )
+                metrics['prc_mean'] = prc_mean
+                metrics['roc_mean'] = roc_mean
             else:
                 raise ValueError('Invalid dataset name')
     
-    return model
+    return train_loss, val_loss, metrics

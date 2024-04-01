@@ -18,6 +18,8 @@ def set_cfg(cfg):
     # Custom log file name
     cfg.logfile = None
 
+    cfg.runs = 5
+
     cfg.shouldPretrain = True
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained
@@ -25,7 +27,7 @@ def set_cfg(cfg):
     cfg.frozenWeights = False
 
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
-    cfg.modelVersion = 'v1'
+    cfg.modelVersion = 'v2'
 
     # finetuning dataset, values: 'aldeghi' or 'diblock', 'diblock' can only be finetuned on a v2 model, not v1.
     cfg.finetuneDataset = 'aldeghi'
@@ -37,11 +39,11 @@ def set_cfg(cfg):
     # Total graph mini-batch size
     cfg.pretrain.batch_size = 128
     # Maximal number of epochs
-    cfg.pretrain.epochs = 15
+    cfg.pretrain.epochs = 10
     # Number of runs with random init
     cfg.pretrain.runs = 4
     # Base learning rate
-    cfg.pretrain.lr = 0.0005
+    cfg.pretrain.lr = 0.001
     # number of steps before 
     # reduce learning rate
     cfg.pretrain.lr_patience = 20
@@ -67,11 +69,6 @@ def set_cfg(cfg):
     cfg.pretrain.inv_weight = 25
     cfg.pretrain.var_weight = 25
     cfg.pretrain.cov_weight = 1
-    # which percentage of the full dataset should be used to pretrain
-    # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
-    # this value is relative to 40%: 0.01 -> 1 % = 160 graphs 0.2 * 40
-    cfg.pretrain.aldeghiFTPercentage = 0.01
-    cfg.pretrain.diblockFTPercentage = 0.05
 
     
     cfg.finetune = CN()
@@ -84,6 +81,13 @@ def set_cfg(cfg):
     cfg.finetune.wd = 0.
     # Total graph mini-batch size
     cfg.finetune.batch_size = 64
+    cfg.finetune.isLinear = False
+    # which percentage of the full dataset should be used to pretrain
+    # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
+    # this value is relative to 40%: 0.01 -> 1 % = 160 graphs 0.2 * 40
+    cfg.finetune.aldeghiFTPercentage = 0.04
+    # diblock has around 5k graphs in total
+    cfg.finetune.diblockFTPercentage = 0.06
 
     # ------------------------------------------------------------------------ #
     # Model options
@@ -93,10 +97,10 @@ def set_cfg(cfg):
     cfg.model.shouldUseNodeWeights = True
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
     cfg.model.gMHA_type = 'Hadamard' # Hadamard is the default one for all datasets (yaml files) in original code
-    # Hidden size of the model
-    cfg.model.hidden_size = 96 # make it a power of 2 if using the default model with transformer attention heads
+    # Hidden size of the model, I should use 300 for v2, 128 for v1
+    cfg.model.hidden_size = 300 # make it a power of 2 if using the default model with transformer attention heads
     # Number of GNN layers
-    cfg.model.nlayer_gnn = 2
+    cfg.model.nlayer_gnn = 3
     # Number of mlp mixer layers
     cfg.model.nlayer_mlpmixer = 2
     # Pooling type for generaating graph/subgraph embedding from node embeddings
@@ -126,7 +130,7 @@ def set_cfg(cfg):
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph
-    cfg.subgraphing.context_size=0.7
+    cfg.subgraphing.context_size=0.6
 
 
     # ------------------------------------------------------------------------ #
@@ -135,15 +139,16 @@ def set_cfg(cfg):
     cfg.jepa = CN()
     # Use Graph-JEPA
     # Number of patches to use as targets
-    cfg.jepa.num_targets = 3
+    cfg.jepa.num_targets = 4
     # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
-    cfg.jepa.dist = 1
+    cfg.jepa.dist = 0
 
 
     cfg.visualize = CN()
     cfg.visualize.should3DPlot = False
     cfg.visualize.shouldEmbeddingSpace = True
-    cfg.visualize.shouldLoss = False
+    cfg.visualize.shouldLoss = True
+    cfg.visualize.shouldPlotMetrics = False
 
     return cfg
 

@@ -155,9 +155,7 @@ class PolymerJEPA(nn.Module):
     
         # ### JEPA - Target Encoder ###
         target_mixer_x = embedded_subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1) # (B * p) d ->  B p d Prepare input (all subgraphs) for target encoder (transformer)
-        # print("bef")
-        # print(target_mixer_x.data_ptr() == embedded_context_x.data_ptr())
-        # print("are equal", torch.equal(target_mixer_x, embedded_context_x))
+       
         if not self.regularization:
             # in case of EMA weights update to avoid collapse, the target forward step musn't store gradients, since the target encoder is optimized via EMA
             with torch.no_grad():
@@ -181,8 +179,9 @@ class PolymerJEPA(nn.Module):
         
         target_mixer_x = target_mixer_x.reshape(-1, self.nhid) # B p d -> (B * p) d
         embedded_target_x = target_mixer_x[target_subgraphs_idx.flatten()] # (B * n_targets) d
+
         embedded_target_x = embedded_target_x.reshape(-1, self.num_target_patches, self.nhid) # (B * n_targets) d ->  B n_targets d
-        initial_target_embeddings = embedded_target_x[:, 0, :].detach().clone()  # take a single target for each graph for visualization, so element [0] at position 1 (n_targets)
+        vis_target_embeddings = embedded_target_x[:, 0, :].detach().clone()  # take a single target for each graph for visualization, so element [0] at position 1 (n_targets)
 
         expanded_context_embeddings = torch.tensor([]) # save the embeddings for regularization
         expanded_target_embeddings = torch.tensor([])
@@ -206,6 +205,7 @@ class PolymerJEPA(nn.Module):
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
 
         return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_embedding, initial_target_embeddings, context_embedding
+
     
 
     def encode(self, data):

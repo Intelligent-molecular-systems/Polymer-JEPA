@@ -5,9 +5,9 @@ from src.model_utils.hyperbolic_dist import hyperbolic_dist
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import wandb
 
-
-def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0):
+def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0, dataset='aldeghi'):
     # check target and context parameters are the same (weight sharing)
     # for param_q, param_k in zip(model.context_encoder.parameters(), model.target_encoder.parameters()):
     #     if not torch.equal(param_q, param_k):
@@ -17,10 +17,11 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
 
     total_loss = 0
     all_graph_embeddings = torch.tensor([], requires_grad=False, device=device)
-    all_initial_embeddings = torch.tensor([], requires_grad=False, device=device)
+    all_initial_context_embeddings = torch.tensor([], requires_grad=False, device=device)
+    all_initial_target_embeddings = torch.tensor([], requires_grad=False, device=device)
     all_target_encoder_embeddings = torch.tensor([], requires_grad=False, device=device)
-    all_context_embeddings = torch.tensor([], requires_grad=False, device=device)
-    mon_A_type = torch.tensor([], requires_grad=False, device=device)
+    all_context_encoder_embeddings = torch.tensor([], requires_grad=False, device=device)
+    mon_A_type = []
     stoichiometry = []
     inv_losses = []
     cov_losses = []
@@ -30,21 +31,23 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     for i, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_embeddings, target_encoder_embeddings,  context_embeddings = model(data, epoch)
-        if i == 0: # save the first target_x and target_y for visualization of hyperbolic space
-            target_embeddings_saved = target_embeddings
-            predicted_target_embeddings_saved = predicted_target_embeddings
-        if i % 6 == 0: # around 6k if training on 35/40k, save the embeddings for visualization of embedding space
-            with torch.no_grad():
-                model.eval()
-                graph_embeddings = model.encode(data).detach()
-            model.train()
-            mon_A_type = torch.cat((mon_A_type, data.mon_A_type.detach().clone()), dim=0)
-            all_graph_embeddings = torch.cat((all_graph_embeddings, graph_embeddings), dim=0)
-            # all_initial_embeddings = torch.cat((all_initial_embeddings, initial_embeddings.detach().clone()), dim=0)
-            all_target_encoder_embeddings = torch.cat((all_target_encoder_embeddings, target_encoder_embeddings.detach().clone()), dim=0)
-            all_context_embeddings = torch.cat((all_context_embeddings, context_embeddings.detach().clone()), dim=0)
-            stoichiometry.extend(data.stoichiometry)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings = model(data, epoch)
+        
+        if dataset == 'aldeghi':
+            ### visualization ###
+            if i == 0: # save the first target_x and target_y for visualization of hyperbolic space
+                target_embeddings_saved = target_embeddings
+                predicted_target_embeddings_saved = predicted_target_embeddings
+            if i % 6 == 0: # around 6k if training on 35/40k, save the embeddings for visualization of embedding space
+                all_graph_embeddings = torch.cat((all_graph_embeddings, graph_embeddings.detach().clone()), dim=0)
+                all_initial_context_embeddings = torch.cat((all_initial_context_embeddings, initial_context_embeddings.detach().clone()), dim=0)
+                all_initial_target_embeddings = torch.cat((all_initial_target_embeddings, initial_target_embeddings.detach().clone()), dim=0)
+                all_target_encoder_embeddings = torch.cat((all_target_encoder_embeddings, target_encoder_embeddings.detach().clone()), dim=0)
+                all_context_encoder_embeddings = torch.cat((all_context_encoder_embeddings, context_embeddings.detach().clone()), dim=0)
+                mon_A_type.extend(data.mon_A_type)
+                stoichiometry.extend(data.stoichiometry)
+            ### End visualization ### 
+            
         # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings) # https://pytorch.org/docs/stable/generated/torch.nn.functional.smooth_l1_loss.html
@@ -56,11 +59,16 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             print('Loss function not supported! Exiting!')
             exit()
 
+        wandb_log_dict = {"pretrn_trn_inv_loss": inv_loss.item()}
+
         if regularization: # if vicReg is used
             context_cov_loss, context_var_loss = vcReg(expanded_context_embeddings)  
             target_cov_loss, target_var_loss = vcReg(expanded_target_embeddings)
             cov_loss = context_cov_loss + target_cov_loss
             var_loss = context_var_loss + target_var_loss
+            
+            wandb_log_dict["pretrn_trn_cov_loss"] = cov_loss.item()
+            wandb_log_dict["pretrn_trn_var_loss"] = var_loss.item()
 
             inv_losses.append(inv_loss.item())
             cov_losses.append(cov_loss.item())
@@ -68,6 +76,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             
             # vicReg objective
             loss = inv_weight * inv_loss + var_weight * var_loss + cov_weight * cov_loss
+            wandb_log_dict["pretrn_trn_total_loss"] = loss.item()
         else:
             loss = inv_loss
             
@@ -91,9 +100,11 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         print(f'\ninv_loss: {avg_inv_loss:.5f}, cov_loss: {avg_cov_loss:.5f}, var_loss: {avg_var_loss:.5f}')        
         print(f'Weighted values: inv_loss: {inv_weight*avg_inv_loss:.5f}, cov_loss: {cov_weight*avg_cov_loss:.5f}, var_loss: {var_weight*avg_var_loss:.5f}\n')
 
-    embeddings_data = ([], all_target_encoder_embeddings, all_graph_embeddings, all_context_embeddings, mon_A_type, stoichiometry)
+    embeddings_data = (all_initial_context_embeddings, all_initial_target_embeddings, all_target_encoder_embeddings, all_graph_embeddings, all_context_encoder_embeddings, mon_A_type, stoichiometry)
+
     loss_data = (target_embeddings_saved, predicted_target_embeddings_saved)
-    
+    wandb_log_dict["pretrain_epoch"] = epoch
+    wandb.log(wandb_log_dict)
     return avg_trn_loss, embeddings_data, loss_data
 
 
@@ -103,7 +114,7 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
     for data in loader:
         data = data.to(device)
         model.eval()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, _, _, _ = model(data)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, _, _, _, _, _ = model(data)
 
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings)
@@ -115,19 +126,26 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
             print('Loss function not supported! Exiting!')
             exit()
 
+        wandb_log_dict = {"pretrn_val_inv_loss": inv_loss.item()}
+
         if regularization:
             context_cov_loss, context_var_loss = vcReg(expanded_context_embeddings)  
             target_cov_loss, target_var_loss = vcReg(expanded_target_embeddings)
             cov_loss = context_cov_loss + target_cov_loss
             var_loss = context_var_loss + target_var_loss
+           
+            wandb_log_dict["pretrn_val_cov_loss"] = cov_loss.item()
+            wandb_log_dict["pretrn_val_var_loss"] = var_loss.item()
             # vicReg objective
             loss = inv_weight * inv_loss + var_weight * var_loss + cov_weight * cov_loss
+            wandb_log_dict["pretrn_val_total_loss"] = loss.item()
         else:
             loss = inv_loss
 
         total_loss += loss.item()
 
     avg_val_loss = total_loss / len(loader)
+    wandb.log(wandb_log_dict)
     return avg_val_loss
 
 
@@ -175,15 +193,4 @@ def reset_parameters(module):
                 module.bias.data.fill_(0.0)
     for child in module.children():
         reset_module_parameters(child)
-
-# import networkx as nx
-        # graph = data[0]
-
-        # edge_index = graph.combined_subgraphs
-        # # plot 
-        # G_context = nx.Graph()
-        # G_context.add_edges_from(edge_index.T.cpu().numpy())
-        # nx.draw(G_context, with_labels=True, node_color='skyblue')
-        # import matplotlib.pyplot as plt
-        # plt.show()
 

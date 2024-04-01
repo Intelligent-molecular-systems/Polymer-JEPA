@@ -48,7 +48,7 @@ def visualize_aldeghi_results(store_pred: List, store_true: List, label: str, sa
         if save_folder:
             os.makedirs(save_folder, exist_ok=True)
             plt.savefig(f"{save_folder}/{'EA' if label == 'ea' else 'IP'}_{epoch}.png")
-        wandb.log({"metrics_plot": wandb.Image(fig)})
+        wandb.log({"metrics_plot": wandb.Image(fig)}, commit=False)
         plt.close(fig)
 
     return R2, RMSE
@@ -100,7 +100,7 @@ def visualize_diblock_results(store_pred: List, store_true: List, save_folder: s
         if save_folder:
             os.makedirs(save_folder, exist_ok=True)
             plt.savefig(os.path.join(save_folder, f"average_auprc_epoch_{epoch}.png"))
-        wandb.log({"metrics_plot": wandb.Image(fig)})
+        wandb.log({"metrics_plot": wandb.Image(fig)}, commit=False)
         plt.close()
 
     return prc_mean, roc_mean
@@ -145,7 +145,7 @@ def visualize_loss_space(target_embeddings, predicted_target_embeddings, model_n
     save_folder = f'Results/{model_name}/PretrainingLossSpace'
     os.makedirs(save_folder, exist_ok=True)
     plt.savefig(os.path.join(save_folder, f"{epoch}.png"))
-    wandb.log({"loss_space": wandb.Image(fig)})
+    wandb.log({"loss_space": wandb.Image(fig)}, commit=False)
     plt.close(fig)
 
 
@@ -174,10 +174,7 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
         mon_A_type = mon_A_type[indices]
         stoichiometry = stoichiometry[indices]
     
-    # mon_A_type = mon_A_type + 1  # Shift to 1-indexing for better visualization
-
     # UMAP for 2D visualization with deterministic results
-    # why to use UMAP: https://stats.stackexchange.com/questions/402668/intuitive-explanation-of-how-umap-works-compared-to-t-sne
     umap_2d = UMAP(n_components=2, init='random', random_state=0) #n_components=2
     embeddings_2d = umap_2d.fit_transform(embeddings)
 
@@ -186,30 +183,9 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
         umap_3d = UMAP(n_components=3)
         embeddings_3d = umap_3d.fit_transform(embeddings)
 
-    # save_folder = f'Results/{model_name}/{"FineTuningEmbeddingSpace" if isFineTuning else "PretrainingEmbeddingSpace"}'
-    # os.makedirs(save_folder, exist_ok=True)
-
-    # Define color maps for visualization
-    # num_classes = 9
-    # colors_monA = plt.cm.get_cmap('tab10', num_classes)
-    # colors_stoch = plt.cm.get_cmap('viridis', 3)  # Assuming 3 stoichiometry classes
-
-    # 2D Visualization colored by Monomer A Type
-    # fig, ax = plt.subplots(figsize=(7, 6))
-    # for i in range(num_classes):
-    #     indices = np.where(mon_A_type == i)
-    #     ax.scatter(embeddings_2d[indices, 0], embeddings_2d[indices, 1], color=colors_monA(i), label=f'Mon_A {i+1}')
-    # ax.set_xlabel('Dimension 1')
-    # ax.set_ylabel('Dimension 2')
-    # ax.legend()
-    # ax.set_title('2D UMAP Visualization by Monomer A Type')
-    # fig.suptitle(f'UMAP 2D Embeddings Colored by Monomer A Type - Epoch: {epoch}')
-    # plt.savefig(os.path.join(save_folder, f"2D_UMAP_mon_A_{epoch}{'_FT' if isFineTuning else ''}.png"))
-    # plt.close(fig)
     df_embeddings_2d = pd.DataFrame(embeddings_2d, columns=['Dimension 1', 'Dimension 2'])
     df_embeddings_2d['Monomer A Type'] = mon_A_type
     df_embeddings_2d['Stoichiometry'] = stoichiometry
-    # mon_A_types_sorted = sorted(df_embeddings_2d['Monomer A Type'].unique())
 
     fig_2d_monA = px.scatter(df_embeddings_2d, x='Dimension 1', y='Dimension 2', color='Monomer A Type',
                     color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'],
@@ -239,20 +215,8 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     # Save the figure using Plotly's write_image method. Note: This requires kaleido package for static image export.
     fig_file_path = os.path.join(save_folder, f"2D_UMAP_Mon_A_{epoch}{'_FT' if isFineTuning else ''}.png")
     fig_2d_monA.write_image(fig_file_path)
+    wandb.log({"2D_UMAP_Mon_A": wandb.Image(fig_2d_monA.to_image(format="png"))}, commit=False)
 
-    # 2D Visualization colored by Stoichiometry
-    # fig, ax = plt.subplots(figsize=(7, 6))
-    # stoichiometries = ["1:1", "3:1", "1:3"]
-    # for i, stoch in enumerate(stoichiometries):
-    #     indices = np.where(stoichiometry == stoch)  # Update this if stoichiometry is not numeric
-    #     ax.scatter(embeddings_2d[indices, 0], embeddings_2d[indices, 1], color=colors_stoch(i), label=f'Stoichiometry {stoch}')
-    # ax.set_xlabel('Dimension 1')
-    # ax.set_ylabel('Dimension 2')
-    # ax.legend()
-    # ax.set_title('2D UMAP Visualization by Stoichiometry')
-    # fig.suptitle(f'UMAP 2D Embeddings Colored by Stoichiometry - Epoch: {epoch}')
-    # plt.savefig(os.path.join(save_folder, f"2D_Embedding_stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png"))
-    # plt.close(fig)
     fig_2d_stoich = px.scatter(df_embeddings_2d, x='Dimension 1', y='Dimension 2', color='Stoichiometry',
                            color_discrete_sequence=px.colors.qualitative.Set1, 
                            labels={'Stoichiometry': 'Stoichiometry'},
@@ -267,45 +231,44 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     # Save the figure using Plotly's write_image method. Note: This requires the `kaleido` package for static image export.
     fig_file_path = os.path.join(save_folder, f"2D_UMAP_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png")
     fig_2d_stoich.write_image(fig_file_path)
+    wandb.log({"2D_UMAP_Stoichiometry": wandb.Image(fig_2d_stoich.to_image(format="png"))}, commit=False)
 
-    # add pca visualization
-    pca = PCA(n_components=2)
-    pca_result = pca.fit_transform(embeddings)
-    df_embeddings_2d_pca = pd.DataFrame(pca_result, columns=['Dimension 1', 'Dimension 2'])
-    df_embeddings_2d_pca['Monomer A Type'] = mon_A_type
-    df_embeddings_2d_pca['Stoichiometry'] = stoichiometry
-
-
-    # use matplotlib to plot pca
-    fig, ax = plt.subplots(figsize=(7, 6))
-    for i in range(len(df_embeddings_2d_pca['Monomer A Type'].unique())):
-        indices = np.where(df_embeddings_2d_pca['Monomer A Type'] == i)
-        ax.scatter(df_embeddings_2d_pca.loc[indices, 'Dimension 1'], df_embeddings_2d_pca.loc[indices, 'Dimension 2'], label=f'Mon_A {i+1}')
-    ax.set_xlabel('Dimension 1')
-    ax.set_ylabel('Dimension 2')
-    ax.legend()
-    ax.set_title('2D PCA Visualization by Monomer A Type')
-    fig.suptitle(f'PCA 2D Embeddings Colored by Monomer A Type - Epoch: {epoch}')
-    plt.savefig(os.path.join(save_folder, f"2D_PCA_Mon_A_{epoch}{'_FT' if isFineTuning else ''}.png"))
-    wandb.log({"embedding_space_monA": wandb.Image(fig)})
-    plt.close(fig)
-
-    # use matplotlib to plot pca
-    fig, ax = plt.subplots(figsize=(7, 6))
-    for i in range(len(df_embeddings_2d_pca['Stoichiometry'].unique())):
-        indices = np.where(df_embeddings_2d_pca['Stoichiometry'] == i)
-        ax.scatter(df_embeddings_2d_pca.loc[indices, 'Dimension 1'], df_embeddings_2d_pca.loc[indices, 'Dimension 2'], label=f'Stoichiometry {i}')
-    ax.set_xlabel('Dimension 1')
-    ax.set_ylabel('Dimension 2')
-    ax.legend()
-    ax.set_title('2D PCA Visualization by Stoichiometry')
-    fig.suptitle(f'PCA 2D Embeddings Colored by Stoichiometry - Epoch: {epoch}')
-    plt.savefig(os.path.join(save_folder, f"2D_PCA_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png"))
-    wandb.log({"embedding_space_stoich": wandb.Image(fig)})
-    plt.close(fig)
+    # # add pca visualization
+    # pca = PCA(n_components=2)
+    # pca_result = pca.fit_transform(embeddings)
+    # df_embeddings_2d_pca = pd.DataFrame(pca_result, columns=['Dimension 1', 'Dimension 2'])
+    # df_embeddings_2d_pca['Monomer A Type'] = mon_A_type
+    # df_embeddings_2d_pca['Stoichiometry'] = stoichiometry
 
 
-   
+    # # use matplotlib to plot pca
+    # fig, ax = plt.subplots(figsize=(7, 6))
+    # for i in range(len(df_embeddings_2d_pca['Monomer A Type'].unique())):
+    #     indices = np.where(df_embeddings_2d_pca['Monomer A Type'] == i)
+    #     ax.scatter(df_embeddings_2d_pca.loc[indices, 'Dimension 1'], df_embeddings_2d_pca.loc[indices, 'Dimension 2'], label=f'Mon_A {i+1}')
+    # ax.set_xlabel('Dimension 1')
+    # ax.set_ylabel('Dimension 2')
+    # ax.legend()
+    # ax.set_title('2D PCA Visualization by Monomer A Type')
+    # fig.suptitle(f'PCA 2D Embeddings Colored by Monomer A Type - Epoch: {epoch}')
+    # plt.savefig(os.path.join(save_folder, f"2D_PCA_Mon_A_{epoch}{'_FT' if isFineTuning else ''}.png"))
+    # wandb.log({"embedding_space_monA": wandb.Image(fig)}, commit=False)
+    # plt.close(fig)
+
+    # # use matplotlib to plot pca
+    # fig, ax = plt.subplots(figsize=(7, 6))
+    # for i in range(len(df_embeddings_2d_pca['Stoichiometry'].unique())):
+    #     indices = np.where(df_embeddings_2d_pca['Stoichiometry'] == i)
+    #     ax.scatter(df_embeddings_2d_pca.loc[indices, 'Dimension 1'], df_embeddings_2d_pca.loc[indices, 'Dimension 2'], label=f'Stoichiometry {i}')
+    # ax.set_xlabel('Dimension 1')
+    # ax.set_ylabel('Dimension 2')
+    # ax.legend()
+    # ax.set_title('2D PCA Visualization by Stoichiometry')
+    # fig.suptitle(f'PCA 2D Embeddings Colored by Stoichiometry - Epoch: {epoch}')
+    # plt.savefig(os.path.join(save_folder, f"2D_PCA_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png"))
+    # wandb.log({"embedding_space_stoich": wandb.Image(fig)}, commit=False)
+    # plt.close(fig)
+
 
     # def mpl_to_plotly_cmap(cmap, num_classes):
     #     colors = cmap(np.linspace(0, 1, num_classes))

@@ -215,12 +215,13 @@ if __name__ == '__main__':
             # ft_dataset.shuffle()
 
             ft_trn_loss, ft_val_loss, metric = run(pretrn_dataset, ft_dataset, val_dataset)
-            wandb.log({'final_ft_val_loss': ft_val_loss})
+            wandb_dict = {'final_ft_val_loss': ft_val_loss}
             trn_losses.append(ft_trn_loss)
             val_losses.append(ft_val_loss)
             for k, v in metric.items():
                 metrics[k].append(v)
-                wandb.log({k: v})
+            wandb_dict.update(metric)
+            wandb.log(wandb_dict)
             wandb.finish()
             
 
@@ -235,10 +236,11 @@ if __name__ == '__main__':
             ft_trn_loss, ft_val_loss, metric = run(pretrn_dataset, ft_dataset, val_dataset)
             trn_losses.append(ft_trn_loss)
             val_losses.append(ft_val_loss)
-            wandb.log({'final_ft_val_loss': ft_val_loss})
+            wandb_dict = {'final_ft_val_loss': ft_val_loss}
             for k, v in metric.items():
                 metrics[k].append(v)
-                wandb.log({k: v})
+            wandb_dict.update(metric)
+            wandb.log(wandb_dict)
             wandb.finish()
 
     else:

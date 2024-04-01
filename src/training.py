@@ -59,7 +59,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             print('Loss function not supported! Exiting!')
             exit()
 
-        wandb.log({"pretrn_trn_inv_loss": inv_loss.item()})
+        wandb_log_dict = {"pretrn_trn_inv_loss": inv_loss.item()}
 
         if regularization: # if vicReg is used
             context_cov_loss, context_var_loss = vcReg(expanded_context_embeddings)  
@@ -67,8 +67,8 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             cov_loss = context_cov_loss + target_cov_loss
             var_loss = context_var_loss + target_var_loss
             
-            wandb.log({"pretrn_trn_cov_loss": cov_loss.item()})
-            wandb.log({"pretrn_trn_var_loss": var_loss.item()})
+            wandb_log_dict["pretrn_trn_cov_loss"] = cov_loss.item()
+            wandb_log_dict["pretrn_trn_var_loss"] = var_loss.item()
 
             inv_losses.append(inv_loss.item())
             cov_losses.append(cov_loss.item())
@@ -76,7 +76,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             
             # vicReg objective
             loss = inv_weight * inv_loss + var_weight * var_loss + cov_weight * cov_loss
-            wandb.log({"pretrn_trn_total_loss": loss.item()})
+            wandb_log_dict["pretrn_trn_total_loss"] = loss.item()
         else:
             loss = inv_loss
             
@@ -103,7 +103,8 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     embeddings_data = (all_initial_context_embeddings, all_initial_target_embeddings, all_target_encoder_embeddings, all_graph_embeddings, all_context_encoder_embeddings, mon_A_type, stoichiometry)
 
     loss_data = (target_embeddings_saved, predicted_target_embeddings_saved)
-    
+    wandb_log_dict["pretrain_epoch"] = epoch
+    wandb.log(wandb_log_dict)
     return avg_trn_loss, embeddings_data, loss_data
 
 
@@ -125,24 +126,26 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
             print('Loss function not supported! Exiting!')
             exit()
 
-        wandb.log({"pretrn_val_inv_loss": inv_loss.item()})
+        wandb_log_dict = {"pretrn_val_inv_loss": inv_loss.item()}
 
         if regularization:
             context_cov_loss, context_var_loss = vcReg(expanded_context_embeddings)  
             target_cov_loss, target_var_loss = vcReg(expanded_target_embeddings)
             cov_loss = context_cov_loss + target_cov_loss
             var_loss = context_var_loss + target_var_loss
-            wandb.log({"pretrn_val_cov_loss": cov_loss.item()})
-            wandb.log({"pretrn_val_var_loss": var_loss.item()})
+           
+            wandb_log_dict["pretrn_val_cov_loss"] = cov_loss.item()
+            wandb_log_dict["pretrn_val_var_loss"] = var_loss.item()
             # vicReg objective
             loss = inv_weight * inv_loss + var_weight * var_loss + cov_weight * cov_loss
-            wandb.log({"pretrn_val_total_loss": loss.item()})
+            wandb_log_dict["pretrn_val_total_loss"] = loss.item()
         else:
             loss = inv_loss
 
         total_loss += loss.item()
 
     avg_val_loss = total_loss / len(loader)
+    wandb.log(wandb_log_dict)
     return avg_val_loss
 
 

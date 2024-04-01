@@ -121,8 +121,6 @@ class PolymerJEPA(nn.Module):
                 x, _ = wdmpnn(x, edge_index, edge_attr, edge_weights, node_weights, h0)
 
         embedded_subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling) # (B * n_patches) d   pool each subgraph node embeddings to obtain an embedding for each subgraph/patch
-
-        initial_embedding = embedded_subgraph_x[data.mask.reshape(-1), :].detach().clone() # for visualization
         
         ### JEPA - Context Encoder ###
         # Create the correct indexer for each subgraph given the batching procedure
@@ -135,8 +133,12 @@ class PolymerJEPA(nn.Module):
             context_embedded_subgraph_x = embedded_subgraph_x.clone()
             context_embedded_subgraph_x += self.patch_rw_encoder(data.patch_pe)
             context_mixer_x = context_embedded_subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1) # (B * p) d ->  B p d Prepare input (all subgraphs) for target encoder (transformer)
+
+            # mask to attend only context subgraph
+            # context_mask = data.mask.flatten()[context_subgraph_idx.flatten()].reshape(-1, 1) # USELESS IN THEORY SINCE INPUT OF ENCODER IS A SINGLE ELEMENT Given that there's only one element the attention operation "won't do anything", This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
             embedded_context_x = self.context_encoder(context_mixer_x, coarsen_adj=data.coarsen_adj, mask=~data.context_mask)
             embedded_context_x = (embedded_context_x * data.context_mask.unsqueeze(-1)).sum(1) / data.context_mask.sum(1, keepdim=True) # B d
+            
         else:
             # initial_context_embeddings = embedded_context_x.detach().clone() # for visualization
             # embedded_context_x = embedded_context_x.unsqueeze(1) # # 'B d ->  B 1 d'
@@ -151,7 +153,8 @@ class PolymerJEPA(nn.Module):
             embedded_context_x = scatter_mean(embedded_context_x, graph_indices, dim=0, dim_size=len(data.n_context)) # B d
    
         embedded_context_x = embedded_context_x.unsqueeze(1) # 'B d ->  B 1 d'
-        context_embedding = embedded_context_x.squeeze() # for visualization
+        vis_context_embedding = embedded_context_x.squeeze().detach().clone() # for visualization
+        vis_initial_context_embeddings = vis_context_embedding # TODO fix this to be the initial wdmpnn output, pick randomly n of batch context subgraph
     
         # ### JEPA - Target Encoder ###
         target_mixer_x = embedded_subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1) # (B * p) d ->  B p d Prepare input (all subgraphs) for target encoder (transformer)
@@ -162,11 +165,15 @@ class PolymerJEPA(nn.Module):
                 target_mixer_x = self.target_encoder(target_mixer_x, coarsen_adj=data.coarsen_adj, mask=~data.mask) # Don't attend to empty patches when doing the target encoding, nor to context patch
         else:
             target_mixer_x = self.target_encoder(target_mixer_x, coarsen_adj=data.coarsen_adj, mask=~data.mask)
-  
+
+        with torch.no_grad():
+            vis_graph_embedding = (target_mixer_x * data.mask.unsqueeze(-1)).sum(1) / data.mask.sum(1, keepdim=True) # for visualization
+        
         # Find correct idxs for target subgraphs
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1) # Similar to context subgraphs, target_subgraphs_idx += batch_indexer.unsqueeze(1) adjusts the indices of target subgraphs. This operation is necessary because the target subgraphs can span multiple graphs within a batch, and their indices need to be corrected to reflect their actual positions in the batched data.
-        
+        vis_initial_target_embedding = embedded_subgraph_x[target_subgraphs_idx.flatten()].reshape(-1, self.num_target_patches, self.nhid)[:, 0, :].detach().clone()
+
         # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in context_subgraph_idx for idx in idx_list]
         # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
 
@@ -204,7 +211,7 @@ class PolymerJEPA(nn.Module):
         embedded_context_x_pe_conditioned = embedded_context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # B n_targets d
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
 
-        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_embedding, initial_target_embeddings, context_embedding
+        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, vis_initial_context_embeddings, vis_initial_target_embedding, vis_context_embedding, vis_target_embeddings, vis_graph_embedding
 
     
 

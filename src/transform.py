@@ -153,6 +153,7 @@ class GraphJEPAPartitionTransform(object):
                 # node_masks = torch.cat([context_node_masks, node_masks], dim=0)
                 # edge_masks = torch.cat([context_edge_masks, edge_masks], dim=0)
 
+
             # elif self.subgraphing_type == 1: # metis
             #     # context_node_masks, context_edge_masks = metisContext(data, sizeContext=self.context_size)
             #     # node_masks, edge_masks = metisTargets(data, n_patches=self.n_patches-1, drop_rate=self.drop_rate, num_hops=1, is_directed=False)
@@ -205,6 +206,7 @@ class GraphJEPAPartitionTransform(object):
         context_mask[subgraphs_batch[0]:subgraphs_batch[0]+n_context_subgraphs] = True
         data.context_mask = context_mask.unsqueeze(0)
 
+
         data.subgraphs_batch = subgraphs_batch
         
         data.subgraphs_nodes_mapper = subgraphs_nodes[1] # this is the node idxs [0, 2, 1, 3] (original node idxs)
@@ -215,12 +217,13 @@ class GraphJEPAPartitionTransform(object):
         subgraphs = subgraphs_nodes[0].unique()
         context_subgraph_idxs = subgraphs[:n_context_subgraphs]
         # pad the context subgraph idxs with -1s to make it the same length      
-        context_subgraph_idxs = torch.cat([context_subgraph_idxs, -1000000*torch.ones(20 - len(context_subgraph_idxs), dtype=torch.long)])
+        context_subgraph_idxs = torch.cat([context_subgraph_idxs, -1000000*torch.ones(32 - len(context_subgraph_idxs), dtype=torch.long)])
       
         # target_subgraph_idxs will be the the numbers between 15-n_targets and 15-n_targets+3 both included
         # target_subgraph_idxs = [i for i in range((self.n_patches - len(subgraphs))+1, (self.n_patches - len(subgraphs))+1+self.num_targets)]
         # target_subgraph_idxs = torch.tensor(target_subgraph_idxs)
         rand_choice = np.random.choice(subgraphs[n_context_subgraphs:], self.num_targets, replace=False)
+
         target_subgraph_idxs = torch.tensor(rand_choice)
        
         data.context_subgraph_idxs = context_subgraph_idxs.tolist() # if context subgraph idx is 0, then[0]

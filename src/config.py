@@ -62,7 +62,7 @@ def set_cfg(cfg):
     # Multiscale training
     cfg.pretrain.multiscale = False    
     # Regularization (vcReg), between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
-    cfg.pretrain.regularization = False
+    cfg.pretrain.regularization = True
     # this should be used only when using the vicReg objective, where sharing weights is beneficial
     cfg.pretrain.shouldShareWeights = False
     # From vicReg: we have empirically found that using very different values for λ (inv) and μ (var), or taking λ = μ with ν (cov) > μ leads to unstable training. On the other hand taking λ = μ and picking ν < μ leads to stable convergence, setting lambda = mu = 25 and nu = 1 works best
@@ -126,11 +126,11 @@ def set_cfg(cfg):
     # The number of partitions we want (upper bound) some subgraphs could be empty
     cfg.subgraphing.n_patches = 32
     # 0 = motif, 1 = metis, 2 = random walk
-    cfg.subgraphing.type = 0
+    cfg.subgraphing.type = 1
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph
-    cfg.subgraphing.context_size=0.6
+    cfg.subgraphing.context_size=0.8
 
 
     # ------------------------------------------------------------------------ #

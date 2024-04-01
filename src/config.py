@@ -30,7 +30,7 @@ def set_cfg(cfg):
     cfg.modelVersion = 'v2'
 
     # finetuning dataset, values: 'aldeghi' or 'diblock', 'diblock' can only be finetuned on a v2 model, not v1.
-    cfg.finetuneDataset = 'aldeghi'
+    cfg.finetuneDataset = 'zinc'
 
     # ------------------------------------------------------------------------ #
     # Training options
@@ -147,7 +147,7 @@ def set_cfg(cfg):
     cfg.visualize = CN()
     cfg.visualize.should3DPlot = False
     cfg.visualize.shouldEmbeddingSpace = True
-    cfg.visualize.shouldLoss = True
+    cfg.visualize.shouldLoss = False
     cfg.visualize.shouldPlotMetrics = False
 
     return cfg

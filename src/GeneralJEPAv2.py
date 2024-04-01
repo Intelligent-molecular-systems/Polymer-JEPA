@@ -5,7 +5,7 @@ from src.visualize import plot_from_transform_attributes
 import torch
 import torch.nn as nn
 from torch_geometric.nn import global_mean_pool
-from torch_scatter import scatter
+from torch_scatter import scatter, scatter_mean
 
 
 class GeneralJEPAv2(nn.Module):
@@ -115,8 +115,19 @@ class GeneralJEPAv2(nn.Module):
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
         batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y.device) # [TODO]: adapt this to work with different ys
 
-        context_subgraph_idx = data.context_subgraph_idx + batch_indexer
-        embedded_context_x = embedded_subgraph_x[context_subgraph_idx] # Extract context subgraph embedding
+        context_subgraph_idx = torch.vstack([torch.tensor(dc) for dc in data.context_subgraph_idxs]).to(data.y.device)
+        context_subgraph_idx += batch_indexer.unsqueeze(1)
+        context_subgraph_idx_flatten = context_subgraph_idx.flatten()
+        # remove padding elements (i.e. negative indices)       
+        context_subgraph_idx_flatten = context_subgraph_idx_flatten[context_subgraph_idx_flatten >= 0]
+        embedded_context_x = embedded_subgraph_x[context_subgraph_idx_flatten] # Extract context subgraph embedding
+        graph_indices = torch.arange(len(data.n_context)).repeat_interleave(data.n_context).to(data.y.device)
+        # pool the context subgraphs embeddings of each graph to obtain a single context embedding for each graph
+        embedded_context_x = scatter_mean(embedded_context_x, graph_indices, dim=0, dim_size=len(data.n_context))
+        
+        # print(embedded_context_x.shape)
+        # context_subgraph_idx = data.context_subgraph_idx + batch_indexer
+        # embedded_context_x = embedded_subgraph_x[context_subgraph_idx] # Extract context subgraph embedding
         
         # Add its patch positional encoding
         # context_pe = data.patch_pe[context_subgraph_idx]
@@ -172,6 +183,16 @@ class GeneralJEPAv2(nn.Module):
 
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
+
+        n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in context_subgraph_idx for idx in idx_list]
+        print('n of nodes in the context_subgraph_idx:', n_context_nodes)
+
+        # Example for target subgraphs; adjust according to actual data structure
+        n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
+        print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
+
+        for graph in data.to_data_list():
+            plot_from_transform_attributes(graph)
 
         embedded_target_x = subgraphs_x_from_full[target_subgraphs_idx.flatten()]
 

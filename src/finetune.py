@@ -107,7 +107,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
             else:
                 raise ValueError('Invalid dataset name')
             
-            wandb.log({'train_loss': train_loss.item()})
+            wandb.log({'finetune_epoch': epoch, 'finetune_train_loss': train_loss.item()})
             total_train_loss += train_loss
             train_loss.backward()
             optimizer.step()    

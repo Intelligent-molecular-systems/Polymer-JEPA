@@ -129,26 +129,15 @@ class PolymerJEPA(nn.Module):
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
         batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device)
        
-        # in case we use reg and we dont share weights, we dont need an additional context encoder, we already have the initial gnn.
+        # in case we dont use reg or we share weights, we need an additional context encoder, namely the transformer, otherwise (else) we already have the initial gnn.
         if not self.regularization or self.shouldShareWeights:
-            # input all subgraphs into context encoder but attend and pool only the context subgraphs
+            # input all subgraphs into context encoder but attend and pool only the context subgraphs (via context_mask)
             context_embedded_subgraph_x = embedded_subgraph_x.clone()
             context_embedded_subgraph_x += self.patch_rw_encoder(data.patch_pe)
             context_mixer_x = context_embedded_subgraph_x.reshape(len(data.call_n_patches), data.call_n_patches[0][0], -1) # (B * p) d ->  B p d Prepare input (all subgraphs) for target encoder (transformer)
-            # mask to attend only context subgraph
-
-            # context_mask = data.mask.flatten()[context_subgraph_idx.flatten()].reshape(-1, 1) # USELESS IN THEORY SINCE INPUT OF ENCODER IS A SINGLE ELEMENT Given that there's only one element the attention operation "won't do anything", This is simply for commodity of the EMA (need same weights so same model) between context and target encoders
             embedded_context_x = self.context_encoder(context_mixer_x, coarsen_adj=data.coarsen_adj, mask=~data.context_mask)
             embedded_context_x = (embedded_context_x * data.context_mask.unsqueeze(-1)).sum(1) / data.context_mask.sum(1, keepdim=True) # B d
         else:
-            # Find correct idxs for context subgraph
-            # context_subgraph_idx = data.context_subgraph_idx + batch_indexer # Get idx of context and target subgraphs according to masks, adjusts the context subgraph indices based on their position in the batch, ensuring each index points to the correct subgraph within the batched data structure.
-            # print(data.context_subgraph_idxs)
-            
-            # Add its patch positional encoding
-            # context_pe = data.patch_pe[context_subgraph_idx_flatten]
-            # embedded_context_x += self.patch_rw_encoder(context_pe) #  modifying embedded_context_x after it is created from embedded_subgraph_x does not modify embedded_subgraph_x, because they do not share storage for their data.     
-            
             # initial_context_embeddings = embedded_context_x.detach().clone() # for visualization
             # embedded_context_x = embedded_context_x.unsqueeze(1) # # 'B d ->  B 1 d'
             context_subgraph_idx = torch.vstack([torch.tensor(dc) for dc in data.context_subgraph_idxs]).to(data.y_EA.device)

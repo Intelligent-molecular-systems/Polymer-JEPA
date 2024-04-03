@@ -11,7 +11,7 @@ from tqdm import tqdm
 import wandb
 
 
-def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
+def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
 
     # print(len(ft_val_data))
     # ft_tst_data = ft_data[int(0.9*len(ft_data)):].copy()
@@ -48,7 +48,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
         nn.Linear(50, 50),
         nn.ReLU(),
         nn.Linear(50, out_dim)
-    ).to(cfg.device)
+    ).to(device)
     
     if cfg.frozenWeights:
         print(f'Finetuning while freezing the weights of the model {model_name}')
@@ -68,12 +68,12 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
         predictor.train()
         total_train_loss = 0
 
-        all_embeddings = torch.tensor([], requires_grad=False, device=cfg.device)
+        all_embeddings = torch.tensor([], requires_grad=False, device=device)
         mon_A_type = []
         stoichiometry = []
 
         for data in ft_trn_loader:
-            data = data.to(cfg.device)
+            data = data.to(device)
             optimizer.zero_grad()
 
             if cfg.frozenWeights:
@@ -93,11 +93,11 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                 train_loss = criterion(y_pred_trn, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
 
             elif cfg.finetuneDataset == 'diblock':
-                y_lamellar = torch.tensor(data.y_lamellar, dtype=torch.float32, device=cfg.device)
-                y_cylinder = torch.tensor(data.y_cylinder, dtype=torch.float32, device=cfg.device)
-                y_sphere = torch.tensor(data.y_sphere, dtype=torch.float32, device=cfg.device)
-                y_gyroid = torch.tensor(data.y_gyroid, dtype=torch.float32, device=cfg.device)
-                y_disordered = torch.tensor(data.y_disordered, dtype=torch.float32, device=cfg.device)
+                y_lamellar = torch.tensor(data.y_lamellar, dtype=torch.float32, device=device)
+                y_cylinder = torch.tensor(data.y_cylinder, dtype=torch.float32, device=device)
+                y_sphere = torch.tensor(data.y_sphere, dtype=torch.float32, device=device)
+                y_gyroid = torch.tensor(data.y_gyroid, dtype=torch.float32, device=device)
+                y_disordered = torch.tensor(data.y_disordered, dtype=torch.float32, device=device)
 
                 true_labels = torch.stack([y_lamellar, y_cylinder, y_sphere, y_gyroid, y_disordered], dim=1)
 
@@ -123,7 +123,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                 all_true_val = []
 
                 for data in ft_val_loader:
-                    data = data.to(cfg.device)
+                    data = data.to(device)
                     graph_embeddings = model.encode(data)
                     y_pred_val = predictor(graph_embeddings).squeeze()
 
@@ -133,11 +133,11 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
                         all_true_val.extend(data.y_EA.detach().cpu().numpy() if cfg.finetune.property == 'ea' else data.y_IP.detach().cpu().numpy())
 
                     elif cfg.finetuneDataset == 'diblock':
-                        y_lamellar = torch.tensor(data.y_lamellar, dtype=torch.float32, device=cfg.device)
-                        y_cylinder = torch.tensor(data.y_cylinder, dtype=torch.float32, device=cfg.device)
-                        y_sphere = torch.tensor(data.y_sphere, dtype=torch.float32, device=cfg.device)
-                        y_gyroid = torch.tensor(data.y_gyroid, dtype=torch.float32, device=cfg.device)
-                        y_disordered = torch.tensor(data.y_disordered, dtype=torch.float32, device=cfg.device)
+                        y_lamellar = torch.tensor(data.y_lamellar, dtype=torch.float32, device=device)
+                        y_cylinder = torch.tensor(data.y_cylinder, dtype=torch.float32, device=device)
+                        y_sphere = torch.tensor(data.y_sphere, dtype=torch.float32, device=device)
+                        y_gyroid = torch.tensor(data.y_gyroid, dtype=torch.float32, device=device)
+                        y_disordered = torch.tensor(data.y_disordered, dtype=torch.float32, device=device)
 
                         true_labels = torch.stack([y_lamellar, y_cylinder, y_sphere, y_gyroid, y_disordered], dim=1)
 

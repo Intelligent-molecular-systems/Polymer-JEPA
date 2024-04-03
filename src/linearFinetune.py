@@ -12,7 +12,7 @@ from sklearn.linear_model import Ridge, LogisticRegression
 from sklearn.multioutput import MultiOutputClassifier
 from sklearn.metrics import accuracy_score, mean_absolute_error
 
-def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
+def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
 
     print(f'Number of parameters: {count_parameters(model)}')
 
@@ -43,7 +43,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
 
     # Collect training data
     for data in ft_trn_loader:
-        data = data.to(cfg.device)
+        data = data.to(device)
         with torch.no_grad():  # Ensure no gradient is computed to save memory
             graph_embeddings = model.encode(data).detach().cpu().numpy()
         X_train.extend(graph_embeddings)
@@ -74,7 +74,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     # Evaluation
     X_val, y_val = [], []
     for data in ft_val_loader:
-        data = data.to(cfg.device)
+        data = data.to(device)
         with torch.no_grad():
             graph_embeddings = model.encode(data).detach().cpu().numpy()
         X_val.extend(graph_embeddings)
@@ -97,15 +97,15 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg):
     # # X_val /= np.linalg.norm(X_val, axis=0)
     # X_val /= X_val.std(0)
 
-    print("Data shapes:", X_train.shape, y_train.shape, X_val.shape, y_val.shape)
+    # print("Data shapes:", X_train.shape, y_train.shape, X_val.shape, y_val.shape)
 
     # Predict and evaluate
     y_pred_val = predictor.predict(X_val)
 
     lin_mae = mean_absolute_error(y_val, y_pred_val)
     trn_r2 = predictor.score(X_train, y_train)
-    print(f'Train R2.: {trn_r2}')
-    print(f'Val MAE.: {lin_mae}')
+    # print(f'Train R2.: {trn_r2}')
+    # print(f'Val MAE.: {lin_mae}')
 
     metrics = {'train_r2': trn_r2, 'val_mae': lin_mae}
     return metrics

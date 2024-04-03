@@ -11,8 +11,6 @@ def set_cfg(cfg):
     # ------------------------------------------------------------------------ #
     # Additional num of worker for data loading
     cfg.num_workers = 1
-    # Cuda device number, used for machine with multiple gpus
-    cfg.device = 'cpu'
     # Whether fix the running seed to remove randomness
     cfg.seed = None
     # Custom log file name

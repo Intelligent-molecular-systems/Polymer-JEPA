@@ -14,7 +14,7 @@ import torch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-def pretrain(pre_trn_data, pre_val_data, cfg):
+def pretrain(pre_trn_data, pre_val_data, cfg, device):
     # 70-20-10 split for pretraining - validation - test data
     print(f'Pretraining training on: {len(pre_trn_data)} graphs')
     print(f'Pretraining validation on: {len(pre_val_data)} graphs')
@@ -43,7 +43,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
                 regularization=cfg.pretrain.regularization,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
                 shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
-            ).to(cfg.device)
+            ).to(device)
 
         elif cfg.modelVersion == 'v2':
             model = PolymerJEPAv2(
@@ -59,7 +59,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
                 regularization=cfg.pretrain.regularization,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
                 shouldUseNodeWeights=cfg.model.shouldUseNodeWeights,
-            ).to(cfg.device)
+            ).to(device)
 
         else:
             raise ValueError('Invalid model version')
@@ -83,7 +83,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
                 regularization=cfg.pretrain.regularization,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
                 shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
-            ).to(cfg.device)
+            ).to(device)
 
         elif cfg.modelVersion == 'v2':
             model = GeneralJEPAv2(
@@ -99,7 +99,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
                 regularization=cfg.pretrain.regularization,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
                 shouldUseNodeWeights=True
-            ).to(cfg.device)
+            ).to(device)
         else:
             raise ValueError('Invalid model version')
 
@@ -139,7 +139,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
             pre_trn_loader, 
             model, 
             optimizer, 
-            device=cfg.device, 
+            device=device, 
             momentum_weight=next(momentum_scheduler), 
             criterion_type=cfg.jepa.dist,
             regularization=cfg.pretrain.regularization,
@@ -155,7 +155,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg):
         val_loss = test(
             pre_val_loader, 
             model,
-            device=cfg.device, 
+            device=device, 
             criterion_type=cfg.jepa.dist,
             regularization=cfg.pretrain.regularization,
             inv_weight=cfg.pretrain.inv_weight, 

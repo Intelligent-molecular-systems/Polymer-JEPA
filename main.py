@@ -22,7 +22,7 @@ import wandb
 
 def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
     
-    os.environ["WANDB_MODE"]="offline"
+    # os.environ["WANDB_MODE"]="offline"
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 

@@ -10,7 +10,7 @@ def set_cfg(cfg):
     # Basic options
     # ------------------------------------------------------------------------ #
     # Additional num of worker for data loading
-    cfg.num_workers = 8
+    cfg.num_workers = 0
     # Whether fix the running seed to remove randomness
     cfg.seed = None
     # Custom log file name
@@ -18,7 +18,7 @@ def set_cfg(cfg):
 
     cfg.runs = 5
 
-    cfg.shouldPretrain = True
+    cfg.shouldPretrain = False
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained
     cfg.shouldFinetuneOnPretrainedModel = True
@@ -83,7 +83,7 @@ def set_cfg(cfg):
     # which percentage of the full dataset should be used to pretrain
     # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
     # this value is relative to 40%: 0.01 -> 1 % = 160 graphs 0.2 * 40
-    cfg.finetune.aldeghiFTPercentage = 0.01
+    cfg.finetune.aldeghiFTPercentage = 0.04
     # diblock has around 5k graphs in total
     cfg.finetune.diblockFTPercentage = 0.06
 

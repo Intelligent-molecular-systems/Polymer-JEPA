@@ -18,6 +18,7 @@ runs
 *.txt
 *.html
 .DS_Store
+slurm*
 
 Models/
 Results/

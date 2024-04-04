@@ -146,8 +146,8 @@ def set_cfg(cfg):
 
     cfg.visualize = CN()
     cfg.visualize.should3DPlot = False
-    cfg.visualize.shouldEmbeddingSpace = True
-    cfg.visualize.shouldLoss = True
+    cfg.visualize.shouldEmbeddingSpace = False
+    cfg.visualize.shouldLoss = False
     cfg.visualize.shouldPlotMetrics = False
 
     return cfg

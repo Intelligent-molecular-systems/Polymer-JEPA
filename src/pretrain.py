@@ -21,8 +21,8 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
 
     # pre_trn_data = [x for x in pre_trn_data] # this way we can use the same transform for the validation data all the times
 
-    pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.pretrain.batch_size, shuffle=True)
-    pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.pretrain.batch_size, shuffle=False)
+    pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.pretrain.batch_size, shuffle=True, num_workers=cfg.num_workers)
+    pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.pretrain.batch_size, shuffle=False, num_workers=cfg.num_workers)
 
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
         if cfg.modelVersion == 'v1':

@@ -25,8 +25,8 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
     ft_trn_data = [x for x in ft_trn_data]
     ft_val_data = [x for x in ft_val_data]
 
-    ft_trn_loader = DataLoader(dataset=ft_trn_data, batch_size=cfg.finetune.batch_size, shuffle=True)
-    ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False)
+    ft_trn_loader = DataLoader(dataset=ft_trn_data, batch_size=cfg.finetune.batch_size, shuffle=True, num_workers=cfg.num_workers)
+    ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False, num_workers=cfg.num_workers)
 
     # Initialize scikit-learn models
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'zinc':

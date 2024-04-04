@@ -10,7 +10,7 @@ def set_cfg(cfg):
     # Basic options
     # ------------------------------------------------------------------------ #
     # Additional num of worker for data loading
-    cfg.num_workers = 1
+    cfg.num_workers = 8
     # Whether fix the running seed to remove randomness
     cfg.seed = None
     # Custom log file name
@@ -83,7 +83,7 @@ def set_cfg(cfg):
     # which percentage of the full dataset should be used to pretrain
     # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
     # this value is relative to 40%: 0.01 -> 1 % = 160 graphs 0.2 * 40
-    cfg.finetune.aldeghiFTPercentage = 0.04
+    cfg.finetune.aldeghiFTPercentage = 0.01
     # diblock has around 5k graphs in total
     cfg.finetune.diblockFTPercentage = 0.06
 
@@ -141,7 +141,7 @@ def set_cfg(cfg):
     # Number of patches to use as targets
     cfg.jepa.num_targets = 4
     # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
-    cfg.jepa.dist = 0
+    cfg.jepa.dist = 1
 
 
     cfg.visualize = CN()

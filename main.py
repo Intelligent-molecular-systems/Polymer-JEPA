@@ -19,11 +19,12 @@ import time
 import torch
 import wandb
 
-# os.environ["WANDB_MODE"]="offline"
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f'Using device: {device}')
 
 def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
+    
+    os.environ["WANDB_MODE"]="offline"
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Using device: {device}')
 
     model_name = None
 
@@ -143,6 +144,7 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
 
 if __name__ == '__main__':
     cfg = update_cfg(cfg) # update cfg with command line arguments
+    print(cfg.subgraphing.context_size)
     trn_losses = []
     val_losses = []
     metrics = collections.defaultdict(list)
@@ -205,7 +207,7 @@ if __name__ == '__main__':
             # ft_dataset.shuffle()
 
             ft_trn_loss, ft_val_loss, metric = run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset)
-            print(f"losses_{run_idx}:", ft_trn_loss, ft_val_loss)
+            print(f"losses_{run_idx}:", ft_trn_loss.item(), ft_val_loss.item())
             wandb_dict = {'final_ft_val_loss': ft_val_loss}
             trn_losses.append(ft_trn_loss)
             val_losses.append(ft_val_loss)
@@ -230,7 +232,7 @@ if __name__ == '__main__':
             print(f'Run {i}/{cfg.runs-1}')
             start_WB_log_hyperparameters(cfg)
             ft_trn_loss, ft_val_loss, metric = run(pretrn_trn_dataset, val_dataset, ft_dataset, val_dataset)
-            print(f"losses_{i}:", ft_trn_loss, ft_val_loss)
+            print(f"losses_{i}:", ft_trn_loss.item(), ft_val_loss.item())
             trn_losses.append(ft_trn_loss)
             val_losses.append(ft_val_loss)
             wandb_dict = {'final_ft_val_loss': ft_val_loss}

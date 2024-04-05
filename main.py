@@ -213,6 +213,11 @@ if __name__ == '__main__':
             wandb.log(wandb_dict)
             wandb.finish()
             
+            # if we are not pretraining and we are finetuning on a pretrained model, we only need to run once
+            if not cfg.shouldPretrain and cfg.shouldFinetuneOnPretrainedModel:
+                break
+
+            
     elif cfg.finetuneDataset == 'zinc':
         # for zinc, create_data returns directly the datasets, not the trasforms
         pretrn_trn_dataset, ft_dataset, val_dataset = create_data(cfg) 

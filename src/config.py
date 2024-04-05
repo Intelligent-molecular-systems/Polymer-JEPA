@@ -18,10 +18,12 @@ def set_cfg(cfg):
 
     cfg.runs = 5
 
-    cfg.shouldPretrain = False
+    cfg.shouldPretrain = True
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained
     cfg.shouldFinetuneOnPretrainedModel = True
+    # name of the pretrained model, used only if shouldPretrain is False
+    cfg.pretrainedModelName = 'name'
     cfg.frozenWeights = False
 
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
@@ -41,7 +43,7 @@ def set_cfg(cfg):
     # Number of runs with random init
     cfg.pretrain.runs = 4
     # Base learning rate
-    cfg.pretrain.lr = 0.001
+    cfg.pretrain.lr = 0.0005
     # number of steps before 
     # reduce learning rate
     cfg.pretrain.lr_patience = 20
@@ -128,7 +130,7 @@ def set_cfg(cfg):
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph
-    cfg.subgraphing.context_size=0.6
+    cfg.subgraphing.context_size=0.5
 
 
     # ------------------------------------------------------------------------ #
@@ -139,7 +141,7 @@ def set_cfg(cfg):
     # Number of patches to use as context
     cfg.jepa.num_context = 1
     # Number of patches to use as targets
-    cfg.jepa.num_targets = 4
+    cfg.jepa.num_targets = 3
     # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 1
 

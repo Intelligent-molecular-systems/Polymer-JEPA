@@ -3,11 +3,11 @@ import os
 import random
 import string
 # from PolymerJEPA_old import PolymerJEPA
-from src.PolymerJEPAv2 import PolymerJEPAv2
-from src.PolymerJEPA import PolymerJEPA
-from src.GeneralJEPA import GeneralJEPAv1
-from src.GeneralJEPAv2 import GeneralJEPAv2
-from src.training import train, test
+from src.JEPA_models.PolymerJEPAv2 import PolymerJEPAv2
+from src.JEPA_models.PolymerJEPA import PolymerJEPA
+from src.JEPA_models.GeneralJEPA import GeneralJEPAv1
+from src.JEPA_models.GeneralJEPAv2 import GeneralJEPAv2
+from src.training import train, test, reset_parameters
 from src.visualize import visualeEmbeddingSpace, visualize_loss_space
 import time
 import torch
@@ -15,11 +15,8 @@ from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
 def pretrain(pre_trn_data, pre_val_data, cfg, device):
-    # 70-20-10 split for pretraining - validation - test data
     print(f'Pretraining training on: {len(pre_trn_data)} graphs')
     print(f'Pretraining validation on: {len(pre_val_data)} graphs')
-
-    # pre_trn_data = [x for x in pre_trn_data] # this way we can use the same transform for the validation data all the times
 
     pre_trn_loader = DataLoader(dataset=pre_trn_data, batch_size=cfg.pretrain.batch_size, shuffle=True, num_workers=cfg.num_workers)
     pre_val_loader = DataLoader(dataset=pre_val_data, batch_size=cfg.pretrain.batch_size, shuffle=False, num_workers=cfg.num_workers)
@@ -98,13 +95,14 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 should_share_weights=cfg.pretrain.shouldShareWeights,
                 regularization=cfg.pretrain.regularization,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
-                shouldUseNodeWeights=True
+                shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
             ).to(device)
         else:
             raise ValueError('Invalid model version')
 
 
     # print('model', model)
+    reset_parameters(model)
     print(f"\nNumber of parameters: {count_parameters(model)}")
 
     optimizer = torch.optim.Adam(

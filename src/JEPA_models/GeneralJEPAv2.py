@@ -1,6 +1,6 @@
 import numpy as np
-from src.model_utils.elements import MLP  
-from src.model_utils.gnn import GNN
+from src.JEPA_models.model_utils.elements import MLP  
+from src.JEPA_models.model_utils.gnn import GNN
 from src.visualize import plot_from_transform_attributes
 import torch
 import torch.nn as nn

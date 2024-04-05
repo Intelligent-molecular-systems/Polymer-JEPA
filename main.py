@@ -8,10 +8,10 @@ from src.finetune import finetune
 from src.linearFinetune import finetune as linearFinetune
 from src.logger import start_WB_log_hyperparameters
 # from PolymerJEPA_old import PolymerJEPA
-from src.PolymerJEPAv2 import PolymerJEPAv2
-from src.PolymerJEPA import PolymerJEPA
-from src.GeneralJEPA import GeneralJEPAv1
-from src.GeneralJEPAv2 import GeneralJEPAv2
+from src.JEPA_models.PolymerJEPAv2 import PolymerJEPAv2
+from src.JEPA_models.PolymerJEPA import PolymerJEPA
+from src.JEPA_models.GeneralJEPA import GeneralJEPAv1
+from src.JEPA_models.GeneralJEPAv2 import GeneralJEPAv2
 from src.pretrain import pretrain
 from src.training import reset_parameters
 import string
@@ -19,10 +19,9 @@ import time
 import torch
 import wandb
 
+# os.environ["WANDB_MODE"]="offline"
 
 def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
-    
-    # os.environ["WANDB_MODE"]="offline"
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
@@ -113,10 +112,12 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
                 ).to(device)
             else:
                 raise ValueError('Invalid model version')
+            
+        reset_parameters(model)
 
         if cfg.shouldFinetuneOnPretrainedModel:
-            if not model_name: # it means we are not pretraining in the current run
-                model_name = '232lmXan'
+            if not model_name: # it means we have not pretrained in the current run, so we need to load a pretrained model to finetune
+                model_name = cfg.pretrainedModelName
             wandb.config.update({'local_model_name': model_name})
 
             model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}/model.pt', map_location=device))
@@ -127,7 +128,6 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
                 ft_trn_loss, ft_val_loss, metrics = finetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
         
         else:
-            reset_parameters(model)
             # in case we are not finetuning on a pretrained model
             random.seed(time.time())
             model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
@@ -144,7 +144,6 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
 
 if __name__ == '__main__':
     cfg = update_cfg(cfg) # update cfg with command line arguments
-    print(cfg.subgraphing.context_size)
     trn_losses = []
     val_losses = []
     metrics = collections.defaultdict(list)
@@ -152,7 +151,7 @@ if __name__ == '__main__':
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
         full_aldeghi_dataset, train_transform, val_transform = create_data(cfg)
         
-        # !! setting folds = runs is risky !!
+        # !! setting folds = runs is risky, they shouldn't be used as done here !!
         kf = KFold(n_splits=cfg.runs, shuffle=True, random_state=12345)
         train_indices, test_indices = [], []
         for train_index, test_index in kf.split(torch.zeros(len(full_aldeghi_dataset))):
@@ -166,29 +165,27 @@ if __name__ == '__main__':
             start_WB_log_hyperparameters(cfg)                
             print("----------------------------------------")
             print(f'Run {run_idx}/{cfg.runs-1}')
-            if cfg.finetuneDataset == 'aldeghi':
+            if cfg.finetuneDataset == 'aldeghi': # pretrain and finetune on same dataset (aldeghi), pretrain and finetune val dataset are the same.
                 train_dataset = full_aldeghi_dataset[train_index].copy()
 
                 if cfg.shouldPretrain:
-                    pretrn_trn_dataset = train_dataset[:len(train_dataset)//2]
+                    pretrn_trn_dataset = train_dataset[:len(train_dataset)//2] # half of the train dataset for pretraining
                     pretrn_trn_dataset.transform = train_transform
 
                 pretrn_val_dataset = full_aldeghi_dataset[test_index].copy()
                 pretrn_val_dataset.transform = val_transform
-                pretrn_val_dataset = [x for x in pretrn_val_dataset]
+                pretrn_val_dataset = [x for x in pretrn_val_dataset] # apply transform only once
                 ft_val_dataset = pretrn_val_dataset # use same val dataset for pretraining and finetuning
 
-                ft_trn_dataset = train_dataset[len(train_dataset)//2:]
+                ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
                 ft_trn_dataset.transform = train_transform
                 #ft_data = getMaximizedVariedData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))) #ft_dataset[:int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))]
                 #ft_data = getLabData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset)))
                 ft_trn_dataset = getRandomData(ft_trn_dataset, int(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)))
                 #ft_data = getTammoData(pretrn_dataset + ft_dataset)
                 
-                
-
             elif cfg.finetuneDataset == 'diblock':
-                if cfg.shouldPretrain:
+                if cfg.shouldPretrain: # only compute pretrain datasets if we are pretraining, it's an expensive operation
                     pretrn_trn_dataset = full_aldeghi_dataset[train_index].copy()
                     pretrn_trn_dataset.transform = train_transform
                     pretrn_val_dataset = full_aldeghi_dataset[test_index].copy()
@@ -199,12 +196,8 @@ if __name__ == '__main__':
                     diblock_dataset = torch.load('Data/diblock_graphs_list.pt') 
                 random.seed(time.time())
                 diblock_dataset = random.sample(diblock_dataset, len(diblock_dataset))
-                ft_trn_dataset = diblock_dataset[:int(cfg.finetune.diblockFTPercentage*len(diblock_dataset))]
-                ft_val_dataset = diblock_dataset[int(cfg.finetune.diblockFTPercentage*len(diblock_dataset)):]
-
-            
-            # pretrn_dataset.shuffle()
-            # ft_dataset.shuffle()
+                ft_trn_dataset = diblock_dataset[:int(cfg.finetune.diblockFTPercentage*len(diblock_dataset))].copy()
+                ft_val_dataset = diblock_dataset[int(cfg.finetune.diblockFTPercentage*len(diblock_dataset)):].copy()
 
             ft_trn_loss, ft_val_loss, metric = run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset)
             print(f"losses_{run_idx}:", ft_trn_loss.item(), ft_val_loss.item())
@@ -220,12 +213,9 @@ if __name__ == '__main__':
             wandb.log(wandb_dict)
             wandb.finish()
             
-
-
     elif cfg.finetuneDataset == 'zinc':
-        pretrn_trn_dataset, ft_dataset, val_dataset = create_data(cfg)
-        # pretrn_dataset.shuffle()
-        # ft_dataset.shuffle()
+        # for zinc, create_data returns directly the datasets, not the trasforms
+        pretrn_trn_dataset, ft_dataset, val_dataset = create_data(cfg) 
 
         for i in range(cfg.runs):
             print("----------------------------------------")
@@ -257,31 +247,3 @@ if __name__ == '__main__':
     print("----------------------------------------")
     print("config used:")
     print(cfg)
-    
-
-
-
-
-
-# check features dimensions for batches
-# for i in range(0, len(dataset), 20):
-#     try:
-#         Batch.from_data_list(dataset[i:i+20])
-#     except Exception as e:
-#         print(f"An error occurred: {e}")
-#         for data in dataset[i:i+20]:
-#             print(data)
-#             quit()
-
-
-# params_before = {name: param.clone() for name, param in model.named_parameters()}
-# params_after = {name: param.clone() for name, param in model.named_parameters()}
-
-            # Compare parameters
-            # for name, param_before in params_before.items():
-            #     param_after = params_after[name]
-            #     # Check if the same (using torch.equal to compare tensors)
-            #     if not torch.equal(param_before, param_after):
-            #         print(f"Parameter {name} has changed.")
-            #     else:
-            #         print(f"Parameter {name} remains the same.")

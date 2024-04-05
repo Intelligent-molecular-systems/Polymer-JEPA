@@ -18,10 +18,12 @@ def set_cfg(cfg):
 
     cfg.runs = 5
 
-    cfg.shouldPretrain = False
+    cfg.shouldPretrain = True
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained
     cfg.shouldFinetuneOnPretrainedModel = True
+    # name of the pretrained model, used only if shouldPretrain is False
+    cfg.pretrainedModelName = 'name'
     cfg.frozenWeights = False
 
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2

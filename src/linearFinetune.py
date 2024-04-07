@@ -1,16 +1,9 @@
-from contextlib import redirect_stdout
-import os
 import numpy as np
-import random
-from src.config import cfg
-from src.visualize import visualize_aldeghi_results, visualize_diblock_results, visualeEmbeddingSpace
 import torch
-import torch.nn as nn
 from torch_geometric.loader import DataLoader
-from tqdm import tqdm
 from sklearn.linear_model import Ridge, LogisticRegression
 from sklearn.multioutput import MultiOutputClassifier
-from sklearn.metrics import accuracy_score, mean_absolute_error
+from sklearn.metrics import mean_absolute_error
 
 def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
 

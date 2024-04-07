@@ -138,6 +138,11 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
             else:
                 ft_trn_loss, ft_val_loss, metrics = finetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
     
+    # check if folder Results/{model_name} exists, if so, delete it to save space
+    # delete this code if you want to keep the plots of each run saved in the Results folder locally
+    if os.path.exists(f'Results/{model_name}'):
+        os.system(f'rm -r Results/{model_name}')
+
     return ft_trn_loss, ft_val_loss, metrics
 
     

@@ -184,16 +184,6 @@ class GeneralJEPAv2(nn.Module):
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
 
-        n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in context_subgraph_idx for idx in idx_list]
-        print('n of nodes in the context_subgraph_idx:', n_context_nodes)
-
-        # Example for target subgraphs; adjust according to actual data structure
-        n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
-        print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
-
-        for graph in data.to_data_list():
-            plot_from_transform_attributes(graph)
-
         embedded_target_x = subgraphs_x_from_full[target_subgraphs_idx.flatten()]
 
         embedded_target_x = embedded_target_x.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid

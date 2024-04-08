@@ -193,10 +193,10 @@ class PolymerJEPA(nn.Module):
         expanded_context_embeddings = torch.tensor([]) # save the embeddings for regularization
         expanded_target_embeddings = torch.tensor([])
         if self.regularization: 
-            input_context_x = embedded_context_x.reshape(-1, self.nhid).clone()
+            input_context_x = embedded_context_x.reshape(-1, self.nhid)
             expanded_context_embeddings = self.context_expander(input_context_x)#.reshape(-1, self.expander_dim)
 
-            input_target_x = embedded_target_x[:, 0, :].reshape(-1, self.nhid).clone() # take only the first patch to avoid overrepresenting the target embeddings
+            input_target_x = embedded_target_x[:, 0, :].reshape(-1, self.nhid) # take only the first patch to avoid overrepresenting the target embeddings
             expanded_target_embeddings = self.target_expander(input_target_x)#.reshape(-1, self.expander_dim)
 
         if self.shouldUse2dHyperbola:

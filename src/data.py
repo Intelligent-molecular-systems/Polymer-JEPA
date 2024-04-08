@@ -122,38 +122,27 @@ def create_data(cfg):
         dataset=cfg.finetuneDataset
     )
 
+    # no dropout for validation
     transform_val = GraphJEPAPartitionTransform(
         subgraphing_type=cfg.subgraphing.type,
         num_targets=cfg.jepa.num_targets,
         n_patches=cfg.subgraphing.n_patches,
         patch_rw_dim=cfg.pos_enc.patch_rw_dim,
         patch_num_diff=cfg.pos_enc.patch_num_diff,
-        drop_rate=0.0,
+        drop_rate=0.0, 
         context_size=cfg.subgraphing.context_size,
         dataset=cfg.finetuneDataset
     )
     
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
-        
         all_graphs = []
-        if not os.path.isfile('Data/aldeghi/processed/dataset.pt'):
+        if not os.path.isfile('Data/aldeghi/processed/dataset.pt'): # avoid loading the graphs, if dataset already exists
             all_graphs = get_graphs(dataset=cfg.finetuneDataset)
         
         dataset = MyDataset(root='Data/aldeghi', data_list=all_graphs, pre_transform=pre_transform)
 
+        # return full dataset and transforms, split in pretrain/finetune, train/test is done in the training script with k fold
         return dataset, transform_train, transform_val
-            
-
-
-        #     train_graphs, test_graphs = get_graphs(dataset='aldeghi')
-        #     pretrn_graphs = train_graphs[:int(0.5*len(train_graphs))]
-        #     ft_graphs = train_graphs[int(0.5*len(train_graphs)):]
-
-        # pretrn_dataset = MyDataset(root='Data/aldeghi/pretrain', data_list=pretrn_graphs, pre_transform=pre_transform, transform=transform_train)
-        # ft_dataset = MyDataset(root='Data/aldeghi/finetune', data_list=ft_graphs, pre_transform=pre_transform, transform=transform_val)
-        # val_dataset = MyDataset(root='Data/aldeghi/val', data_list=test_graphs, pre_transform=pre_transform, transform=transform_val)
-        # val_dataset = [x for x in val_dataset] # keep same transform subgraphs throughout epochs
-
     
     elif cfg.finetuneDataset == 'zinc':
         smiles_dict = {}

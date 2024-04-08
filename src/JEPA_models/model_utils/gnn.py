@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
-import src.model_utils.gnn_wrapper as gnn_wrapper
-from src.model_utils.elements import Identity
+import src.JEPA_models.model_utils.gnn_wrapper as gnn_wrapper
+from src.JEPA_models.model_utils.elements import Identity
 BN = True
 
 

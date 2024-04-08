@@ -153,10 +153,7 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     mon_A_type = np.array(mon_A_type)
     stoichiometry = np.array(stoichiometry)
 
-    if isFineTuning:
-        embeddings = embeddings.detach().clone().cpu().numpy()
-    else:
-        embeddings = embeddings.cpu().clone().numpy()
+    embeddings = embeddings.detach().cpu().clone().numpy()
 
     # Calculate mean and standard deviation statistics
     means = np.mean(embeddings, axis=0)
@@ -175,129 +172,59 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
         stoichiometry = stoichiometry[indices]
     
     # UMAP for 2D visualization with deterministic results
-    umap_2d = UMAP(n_components=2, init='random', random_state=0) #n_components=2
-    embeddings_2d = umap_2d.fit_transform(embeddings)
+    umap_2d = UMAP(n_components=2, init='random', random_state=0)
+    tsne = TSNE(n_components=2, random_state=0)
+    pca = PCA(n_components=2)
 
-    # UMAP for 3D visualization if required
-    if should3DPlot:
-        umap_3d = UMAP(n_components=3)
-        embeddings_3d = umap_3d.fit_transform(embeddings)
+    # Fit and transform embeddings
+    embeddings_umap = umap_2d.fit_transform(embeddings)
+    embeddings_tsne = tsne.fit_transform(embeddings)
+    embeddings_pca = pca.fit_transform(embeddings)
 
-    df_embeddings_2d = pd.DataFrame(embeddings_2d, columns=['Dimension 1', 'Dimension 2'])
-    df_embeddings_2d['Monomer A Type'] = mon_A_type
-    df_embeddings_2d['Stoichiometry'] = stoichiometry
+    # Create DataFrame for each method
+    df_umap = pd.DataFrame(embeddings_umap, columns=['Dimension 1', 'Dimension 2'])
+    df_tsne = pd.DataFrame(embeddings_tsne, columns=['Dimension 1', 'Dimension 2'])
+    df_pca = pd.DataFrame(embeddings_pca, columns=['Dimension 1', 'Dimension 2'])
+    for df in [df_umap, df_tsne, df_pca]:
+        df['Monomer A Type'] = mon_A_type
+        df['Stoichiometry'] = stoichiometry
 
-    fig_2d_monA = px.scatter(df_embeddings_2d, x='Dimension 1', y='Dimension 2', color='Monomer A Type',
-                    color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'],
-                    labels={'Monomer A Type': 'Monomer A Type'},
-                    title=f'2D UMAP Visualization by Monomer A Type - Epoch: {epoch}',
-                    category_orders={'Monomer A Type': ['[*:1]c1cc(F)c([*:2])cc1F', '[*:1]c1cc2ccc3cc([*:2])cc4ccc(c1)c2c34', '[*:1]c1ccc(-c2ccc([*:2])s2)s1', '[*:1]c1ccc([*:2])cc1', '[*:1]c1ccc2c(c1)[nH]c1cc([*:2])ccc12', '[*:1]c1ccc([*:2])c2nsnc12', '[*:1]c1ccc2c(c1)C(C)(C)c1cc([*:2])ccc1-2', '[*:1]c1cc2cc3sc([*:2])cc3cc2s1', '[*:1]c1ccc2c(c1)S(=O)(=O)c1cc([*:2])ccc1-2']},
-                    opacity=0.85)
-    
-    # Update figure size
-    fig_2d_monA.update_layout(width=800, height=600)  # Adjust the size as needed
+    # Plotting
+    plots_monA = []
+    plots_stoich = []
+    monA_colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    for df, name in zip([df_umap, df_tsne, df_pca], ['UMAP', 't-SNE', 'PCA']):
+        fig_monA = px.scatter(df, x='Dimension 1', y='Dimension 2',  color='Monomer A Type', color_discrete_sequence=monA_colors, title=f'{name} by Monomer A Type - Epoch: {epoch}', labels={'Monomer A Type': 'Monomer A Type'}, category_orders={'Monomer A Type': ['[*:1]c1cc(F)c([*:2])cc1F', '[*:1]c1cc2ccc3cc([*:2])cc4ccc(c1)c2c34', '[*:1]c1ccc(-c2ccc([*:2])s2)s1', '[*:1]c1ccc([*:2])cc1', '[*:1]c1ccc2c(c1)[nH]c1cc([*:2])ccc12', '[*:1]c1ccc([*:2])c2nsnc12', '[*:1]c1ccc2c(c1)C(C)(C)c1cc([*:2])ccc1-2', '[*:1]c1cc2cc3sc([*:2])cc3cc2s1', '[*:1]c1ccc2c(c1)S(=O)(=O)c1cc([*:2])ccc1-2']}, opacity=0.85)
+        fig_stoich = px.scatter(df, x='Dimension 1', y='Dimension 2', color='Stoichiometry', color_discrete_sequence=px.colors.qualitative.Set1, title=f'{name} by Stoichiometry - Epoch: {epoch}', category_orders={'Stoichiometry': ['1:1', '3:1', '1:3']}, opacity=0.85)
+        fig_monA.update_layout(width=800, height=600)
+        fig_stoich.update_layout(width=800, height=600)
+        fig_monA.update_layout(
+            title_font_size=20,
+            legend_title_font_size=12,
+            legend_font_size=10,
+            xaxis_title_font_size=14,
+            yaxis_title_font_size=14,
+            xaxis_tickfont_size=10,
+            yaxis_tickfont_size=10
+        )
 
-    # Update label and axis font sizes
-    fig_2d_monA.update_layout(
-        title_font_size=20,
-        legend_title_font_size=12,
-        legend_font_size=10,
-        xaxis_title_font_size=14,
-        yaxis_title_font_size=14,
-        xaxis_tickfont_size=10,
-        yaxis_tickfont_size=10
-    )
+        plots_monA.append(fig_monA)
+        plots_stoich.append(fig_stoich)
 
-    # Adjust the path to save the figure
-    save_folder = f'Results/{model_name}/{"FineTuningEmbeddingSpace/" if isFineTuning else "PretrainingEmbeddingSpace"}/{type}'
-    os.makedirs(save_folder, exist_ok=True)
-
-    # Save the figure using Plotly's write_image method. Note: This requires kaleido package for static image export.
-    fig_file_path = os.path.join(save_folder, f"2D_UMAP_Mon_A_{epoch}{'_FT' if isFineTuning else ''}.png")
-    fig_2d_monA.write_image(fig_file_path)
-    wandb.log({"2D_UMAP_Mon_A": wandb.Image(fig_file_path)}, commit=False)
-
-    fig_2d_stoich = px.scatter(df_embeddings_2d, x='Dimension 1', y='Dimension 2', color='Stoichiometry',
-                           color_discrete_sequence=px.colors.qualitative.Set1, 
-                           labels={'Stoichiometry': 'Stoichiometry'},
-                           title=f'2D UMAP Visualization by Stoichiometry - Epoch: {epoch}',
-                           category_orders={'Stoichiometry': ['1:1', '3:1', '1:3']},
-                           opacity=0.85)
-
-    # Adjust the path to save the figure
-    save_folder = f'Results/{model_name}/{"FineTuningEmbeddingSpace" if isFineTuning else "PretrainingEmbeddingSpace"}/{type}'
-    os.makedirs(save_folder, exist_ok=True)
-
-    # Save the figure using Plotly's write_image method. Note: This requires the `kaleido` package for static image export.
-    fig_file_path = os.path.join(save_folder, f"2D_UMAP_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png")
-    fig_2d_stoich.write_image(fig_file_path)
-
-    wandb.log({"2D_UMAP_Stoichiometry": wandb.Image(fig_file_path)}, commit=False)
-
-    # # add pca visualization
-    # pca = PCA(n_components=2)
-    # pca_result = pca.fit_transform(embeddings)
-    # df_embeddings_2d_pca = pd.DataFrame(pca_result, columns=['Dimension 1', 'Dimension 2'])
-    # df_embeddings_2d_pca['Monomer A Type'] = mon_A_type
-    # df_embeddings_2d_pca['Stoichiometry'] = stoichiometry
+    save_folder_base = f'Results/{model_name}/{"FineTuningEmbeddingSpace" if isFineTuning else "PretrainingEmbeddingSpace"}/{type}'
+    for i, (fig_monA, fig_stoich) in enumerate(zip(plots_monA, plots_stoich)):
+        name = ['UMAP', 't-SNE', 'PCA'][i]
+        save_folder = os.path.join(save_folder_base, name)
+        os.makedirs(save_folder, exist_ok=True)
+        fig_file_path_monA = os.path.join(save_folder, f"{name}_Mon_A_{epoch}{'_FT' if isFineTuning else ''}.png")
+        fig_file_path_stoich = os.path.join(save_folder, f"{name}_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png")
+        fig_monA.write_image(fig_file_path_monA)
+        fig_stoich.write_image(fig_file_path_stoich)
+       
+        wandb.log({f"{type}_{name}_Mon_A": wandb.Image(fig_file_path_monA)}, commit=False)
+        wandb.log({f"{type}_{name}_Stoichiometry": wandb.Image(fig_file_path_stoich)}, commit=False)
 
 
-    # # use matplotlib to plot pca
-    # fig, ax = plt.subplots(figsize=(7, 6))
-    # for i in range(len(df_embeddings_2d_pca['Monomer A Type'].unique())):
-    #     indices = np.where(df_embeddings_2d_pca['Monomer A Type'] == i)
-    #     ax.scatter(df_embeddings_2d_pca.loc[indices, 'Dimension 1'], df_embeddings_2d_pca.loc[indices, 'Dimension 2'], label=f'Mon_A {i+1}')
-    # ax.set_xlabel('Dimension 1')
-    # ax.set_ylabel('Dimension 2')
-    # ax.legend()
-    # ax.set_title('2D PCA Visualization by Monomer A Type')
-    # fig.suptitle(f'PCA 2D Embeddings Colored by Monomer A Type - Epoch: {epoch}')
-    # plt.savefig(os.path.join(save_folder, f"2D_PCA_Mon_A_{epoch}{'_FT' if isFineTuning else ''}.png"))
-    # wandb.log({"embedding_space_monA": wandb.Image(fig)}, commit=False)
-    # plt.close(fig)
-
-    # # use matplotlib to plot pca
-    # fig, ax = plt.subplots(figsize=(7, 6))
-    # for i in range(len(df_embeddings_2d_pca['Stoichiometry'].unique())):
-    #     indices = np.where(df_embeddings_2d_pca['Stoichiometry'] == i)
-    #     ax.scatter(df_embeddings_2d_pca.loc[indices, 'Dimension 1'], df_embeddings_2d_pca.loc[indices, 'Dimension 2'], label=f'Stoichiometry {i}')
-    # ax.set_xlabel('Dimension 1')
-    # ax.set_ylabel('Dimension 2')
-    # ax.legend()
-    # ax.set_title('2D PCA Visualization by Stoichiometry')
-    # fig.suptitle(f'PCA 2D Embeddings Colored by Stoichiometry - Epoch: {epoch}')
-    # plt.savefig(os.path.join(save_folder, f"2D_PCA_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png"))
-    # wandb.log({"embedding_space_stoich": wandb.Image(fig)}, commit=False)
-    # plt.close(fig)
-
-
-    # def mpl_to_plotly_cmap(cmap, num_classes):
-    #     colors = cmap(np.linspace(0, 1, num_classes))
-    #     plotly_colors = ['rgb' + str((int(color[0]*255), int(color[1]*255), int(color[2]*255))) for color in colors]
-    #     return plotly_colors
-
-    # if should3DPlot:
-    #     # 3D Visualization for Monomer A Type with Plotly
-    #     monA_colors_plotly = mpl_to_plotly_cmap(plt.cm.tab10, num_classes)
-    #     fig = px.scatter_3d(
-    #         x=tsne_results_3d[:, 0], y=tsne_results_3d[:, 1], z=tsne_results_3d[:, 2],
-    #         color=mon_A_type.astype(str),  # Ensure discrete coloring
-    #         color_discrete_sequence=monA_colors_plotly,
-    #         title=f'3D t-SNE Visualization Colored by Monomer A Type - Epoch: {epoch}',
-    #         labels={'color': 'Monomer A Type'}
-    #     )
-    #     fig.write_html(os.path.join(save_folder, f"3D_tsne_mon_A_type_{epoch}{'_FT' if isFineTuning else ''}.html"))
-
-    #     # 3D Visualization for Stoichiometry with Plotly
-    #     stoich_colors_plotly = mpl_to_plotly_cmap(plt.cm.viridis, len(stoichiometries))
-    #     fig = px.scatter_3d(
-    #         x=tsne_results_3d[:, 0], y=tsne_results_3d[:, 1], z=tsne_results_3d[:, 2],
-    #         color=stoichiometry,  # Ensure discrete coloring
-    #         color_discrete_sequence=stoich_colors_plotly,
-    #         title=f'3D t-SNE Visualization Colored by Stoichiometry - Epoch: {epoch}',
-    #         labels={'color': 'Stoichiometry'}
-    #     )
-    #     fig.write_html(os.path.join(save_folder, f"3D_tsne_stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.html"))
 
 
 def plot_subgraphs(G, subgraphs):

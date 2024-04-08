@@ -91,7 +91,7 @@ def start_WB_log_hyperparameters(cfg):
 
     wandb.init(
         project='polymer-jepa',
-        group=f'{cfg.finetuneDataset}_{cfg.modelVersion}_{percentage}',
+        group=f'{cfg.finetuneDataset}_v2_{percentage}', # v2 by default, but it could be v1, its just to keep consistency with old naming and grouping in wandb
         tags=tags,
         config=config
     )

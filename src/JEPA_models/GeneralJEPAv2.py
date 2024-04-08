@@ -1,6 +1,6 @@
 import numpy as np
-from src.model_utils.elements import MLP  
-from src.WDNodeMPNN import WDNodeMPNN
+from src.JEPA_models.model_utils.elements import MLP  
+from src.JEPA_models.model_utils.gnn import GNN
 from src.visualize import plot_from_transform_attributes
 import torch
 import torch.nn as nn
@@ -8,7 +8,7 @@ from torch_geometric.nn import global_mean_pool
 from torch_scatter import scatter, scatter_mean
 
 
-class PolymerJEPAv2(nn.Module):
+class GeneralJEPAv2(nn.Module):
     def __init__(self,
         nfeat_node, 
         nfeat_edge,
@@ -34,15 +34,29 @@ class PolymerJEPAv2(nn.Module):
         self.rw_encoder = MLP(rw_dim, nhid, 1)
         self.patch_rw_encoder = MLP(patch_rw_dim, nhid, 1)
 
-        self.input_encoder = nn.Linear(nfeat_node, nhid)
+        self.input_encoder = nn.Embedding(nfeat_node, nhid)
+        self.edge_encoder = nn.Embedding(nfeat_edge, nhid)
 
-        # Context and Target Encoders are both WDNodeMPNN
-        self.context_encoder = WDNodeMPNN(nhid, nfeat_edge, n_message_passing_layers=nlayer_gnn, hidden_dim=nhid, shouldUseNodeWeights=shouldUseNodeWeights)
+        
+        self.contextGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
+                        bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
+                                            
+        self.contextU = nn.ModuleList(
+                [MLP(nhid, nhid, nlayer=1, with_final_activation=True) for _ in range(nlayer_gnn-1)])
+        
+        # put the above two in a unique module, like create a GNN class i can use.
+        self.context_encoder = nn.ModuleList([self.contextGNNs, self.contextU])
         
         if regularization and should_share_weights:
             self.target_encoder = self.context_encoder
         else:
-            self.target_encoder = WDNodeMPNN(nhid, nfeat_edge, n_message_passing_layers=nlayer_gnn, hidden_dim=nhid, shouldUseNodeWeights=shouldUseNodeWeights)
+            self.targetGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
+                        bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
+                                            
+            self.targetU = nn.ModuleList(
+                    [MLP(nhid, nhid, nlayer=1, with_final_activation=True) for _ in range(nlayer_gnn-1)])
+            
+            self.target_encoder = nn.ModuleList([self.targetGNNs, self.targetU])
         
         self.shouldUse2dHyperbola = shouldUse2dHyperbola
         
@@ -76,30 +90,38 @@ class PolymerJEPAv2(nn.Module):
     def forward(self, data, epoch=0):
         # Embed node features and edge attributes
         x = self.input_encoder(data.x).squeeze()
+        edge_attr = self.edge_encoder(data.edge_attr)
+
         x += self.rw_encoder(data.rw_pos_enc)
         # x = torch.cat([data.x, data.rw_pos_enc], dim=1)
         x = x[data.subgraphs_nodes_mapper]
-        node_weights = data.node_weight[data.subgraphs_nodes_mapper]
         edge_index = data.combined_subgraphs # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices       
-        edge_attr = data.edge_attr[data.subgraphs_edges_mapper] # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
-        edge_weights = data.edge_weight[data.subgraphs_edges_mapper]
+        edge_attr = edge_attr[data.subgraphs_edges_mapper] # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
         batch_x = data.subgraphs_batch # i.e. the subgraph idxs [0, 0, 1, 1, ...]
 
         ### JEPA - Context Encoder ###
         # initial encoder, encode all the subgraphs, then consider only the context subgraphs
-        x = self.context_encoder(x, edge_index, edge_attr, edge_weights, node_weights)
-        embedded_subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling) # batch_size*call_n_patches x nhid
+        for i, gnn in enumerate(self.contextGNNs):
+            if i > 0:
+                subgraph = scatter(x, batch_x, dim=0,
+                                   reduce=self.pooling)[batch_x]
+                x = x + self.contextU[i-1](subgraph)
+                x = scatter(x, data.subgraphs_nodes_mapper,
+                            dim=0, reduce='mean')[data.subgraphs_nodes_mapper]
+            x = gnn(x, edge_index, edge_attr)
+
+        embedded_subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling) # pool each subgraph node embeddings to obtain an embedding for each subgraph/patch
 
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
-        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device) # [TODO]: adapt this to work with different ys
+        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y.device)
 
-        context_subgraph_idx = torch.vstack([torch.tensor(dc) for dc in data.context_subgraph_idxs]).to(data.y_EA.device)
+        context_subgraph_idx = torch.vstack([torch.tensor(dc) for dc in data.context_subgraph_idxs]).to(data.y.device)
         context_subgraph_idx += batch_indexer.unsqueeze(1)
         context_subgraph_idx_flatten = context_subgraph_idx.flatten()
         # remove padding elements (i.e. negative indices)       
         context_subgraph_idx_flatten = context_subgraph_idx_flatten[context_subgraph_idx_flatten >= 0]
         embedded_context_x = embedded_subgraph_x[context_subgraph_idx_flatten] # Extract context subgraph embedding
-        graph_indices = torch.arange(len(data.n_context)).repeat_interleave(data.n_context).to(data.y_EA.device)
+        graph_indices = torch.arange(len(data.n_context)).repeat_interleave(data.n_context).to(data.y.device)
         # pool the context subgraphs embeddings of each graph to obtain a single context embedding for each graph
         embedded_context_x = scatter_mean(embedded_context_x, graph_indices, dim=0, dim_size=len(data.n_context))
         
@@ -117,44 +139,51 @@ class PolymerJEPAv2(nn.Module):
         # full graph nodes embedding (original full graph)
         # full_x = torch.cat([data.x, data.rw_pos_enc], dim=1)
         full_x = self.input_encoder(data.x).squeeze()
+        edge_attr = self.edge_encoder(data.edge_attr)
         full_x += self.rw_encoder(data.rw_pos_enc)
-        parameters = (full_x, data.edge_index, data.edge_attr, data.edge_weight, data.node_weight)
+        parameters = (full_x, data.edge_index, edge_attr)
 
         if not self.regularization:
             # in case of EMA update to avoid collapse
             with torch.no_grad():
                 # work on the original full graph
-                full_graph_nodes_embedding = self.target_encoder(*parameters)
+                for i, gnn in enumerate(self.targetGNNs):
+                    if i > 0:
+                        # global mean pooling here we use the original full graph, than map it to n of nodes
+                        graphEmbedding = global_mean_pool(x, data.batch)[data.batch]
+                        x = x + self.targetU[i-1](graphEmbedding)
+                       
+                    if i == 0:
+                        x = gnn(*parameters)
+                    else:
+                        x = gnn(x, data.edge_index, edge_attr)
+                full_graph_nodes_embedding = x
         else:
             # in case of vicReg to avoid collapse we have regularization
-            full_graph_nodes_embedding = self.target_encoder(*parameters)
+            for i, gnn in enumerate(self.targetGNNs):
+                if i > 0:
+                    # global mean pooling here we use the original full graph, than map it to n of nodes
+                    graphEmbedding = global_mean_pool(x, data.batch)[data.batch]
+                    x = x + self.targetU[i-1](graphEmbedding)
+                    
+                if i == 0:
+                    x = gnn(*parameters)
+                else:
+                    x = gnn(x, data.edge_index, edge_attr)
+            full_graph_nodes_embedding = x
 
         with torch.no_grad():
-            vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
-            
+            vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding.detach().clone(), data.batch)
+
         # map it as we do for x at the beginning
         full_graph_nodes_embedding = full_graph_nodes_embedding[data.subgraphs_nodes_mapper]
 
         # pool the embeddings found for the full graph, this will produce the subgraphs embeddings for all subgraphs (context and target subgraphs)
         subgraphs_x_from_full = scatter(full_graph_nodes_embedding, batch_x, dim=0, reduce=self.pooling) # batch_size*call_n_patches x nhid
 
-        target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
+        target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
 
-        
-
-        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in context_subgraph_idx for idx in idx_list]
-        # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
-
-        # # Example for target subgraphs; adjust according to actual data structure
-        # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
-        # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
-
-        # for graph in data.to_data_list():
-        #     plot_from_transform_attributes(graph)
-
-        # target subgraphs nodes embedding
-        # Construct context and target PEs frome the node pes of each subgraph
         embedded_target_x = subgraphs_x_from_full[target_subgraphs_idx.flatten()]
 
         embedded_target_x = embedded_target_x.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
@@ -184,83 +213,17 @@ class PolymerJEPAv2(nn.Module):
 
     def encode(self, data):
         full_x = self.input_encoder(data.x).squeeze()
+        full_x += self.rw_encoder(data.rw_pos_enc)
 
-        if hasattr(data, 'rw_pos_enc'):
-            full_x += self.rw_encoder(data.rw_pos_enc)
+        edge_attr = self.edge_encoder(data.edge_attr)
        
         node_embeddings = self.target_encoder(
             full_x, 
             data.edge_index, 
-            data.edge_attr, 
+            edge_attr, 
             data.edge_weight, 
             data.node_weight
         )
 
         graph_embedding = global_mean_pool(node_embeddings, data.batch)
         return graph_embedding
-    
-
-     # torch.set_printoptions(threshold=10_000)
-        # print(data.subgraphs_batch.shape)
-        # print(data.subgraphs_nodes_mapper.shape)
-        # quit()
-        # x = data.x
-        # with torch.no_grad():
-        #     x = self.linearTry(x)
-        # print('x before:', x.shape)
-        # for i, row in enumerate(x):
-        #     # Round each element in the row to 2 decimal places
-        #     rounded_row = [round(element, 2) for element in row.tolist()]
-        #     print(i, rounded_row)
-
-        # print('data.subgraphs_nodes_mapper:', data.subgraphs_nodes_mapper)    
-        # x = x[data.subgraphs_nodes_mapper]
-        # print('x after:', x.shape)
-        # for i, row in enumerate(x):
-        #     # Again, round each element in the row to 2 decimal places
-        #     rounded_row = [round(element, 2) for element in row.tolist()]
-        #     print(i, rounded_row)
-
-
-# from collections import Counter
-
-        # # Step 1: Count the occurrences of each node in the mapper
-        # node_occurrences = Counter(data.subgraphs_nodes_mapper.tolist())
-
-        # # Step 2: Identify nodes that are repeated (appear more than once)
-        # repeated_nodes = {node: count for node, count in node_occurrences.items() if count > 1}
-
-        # print("Repeated Nodes and their counts:", repeated_nodes)
-
-        # node_to_subgraphs = {node: [] for node in repeated_nodes.keys()}
-        # for idx, node in enumerate(data.subgraphs_nodes_mapper.tolist()):
-        #     if node in node_to_subgraphs:
-        #         subgraph_idx = data.subgraphs_batch[idx].item()
-        #         node_to_subgraphs[node].append(subgraph_idx)
-        # i = 0
-        # for node, subgraphs in node_to_subgraphs.items():
-        #     if i < 4:
-        #         print(f"Node {node} belongs to subgraphs: {subgraphs}")
-        #     i += 1
-        # print('target_subgraphs_idx:', target_subgraphs_idx)
-        # # Debug print n of nodes in the context and target subgraphs (already with the new index keeping the batch
-        # # indexer into account) they always match with the n of nodes
-        # # we can see in the plot from the original datat
-        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
-        # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
-
-        # # # Example for target subgraphs; adjust according to actual data structure
-        # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
-        # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
-        # for graph in data.to_data_list():
-        #     # plot_from_transform_attributes(graph)
-        #     # graph = data[0]
-        #     import networkx as nx
-        #     edge_index = graph.combined_subgraphs
-        #     # plot 
-        #     G_context = nx.Graph()
-        #     G_context.add_edges_from(edge_index.T.cpu().numpy())
-        #     nx.draw(G_context, with_labels=True, node_color='skyblue')
-        #     import matplotlib.pyplot as plt
-        #     plt.show()
-        # print("\n\n")

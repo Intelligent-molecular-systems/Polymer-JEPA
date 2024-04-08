@@ -1,8 +1,8 @@
 from einops.layers.torch import Rearrange
 import numpy as np
-from src.model_utils.elements import MLP
-import src.model_utils.gMHA_wrapper as gMHA_wrapper
-from src.model_utils.gnn import GNN
+from src.JEPA_models.model_utils.elements import MLP
+import src.JEPA_models.model_utils.gMHA_wrapper as gMHA_wrapper
+from src.JEPA_models.model_utils.gnn import GNN
 from src.visualize import plot_from_transform_attributes
 import torch
 import torch.nn as nn
@@ -41,12 +41,6 @@ class GeneralJEPAv1(nn.Module):
         
         self.input_encoder = nn.Embedding(nfeat_node, nhid)
         self.edge_encoder = nn.Embedding(nfeat_edge, nhid)
-
-        # self.wdmpnns = nn.ModuleList()
-        # self.wdmpnns.append(WDNodeMPNNLayer(nhid, nfeat_edge, hidden_dim=nhid, isFirstLayer=True, shouldUseNodeWeights=False))
-        # for _ in range(nlayer_gnn-2):
-        #     self.wdmpnns.append(WDNodeMPNNLayer(nhid, nfeat_edge, hidden_dim=nhid, shouldUseNodeWeights=False))
-        # self.wdmpnns.append(WDNodeMPNNLayer(nhid, nfeat_edge, hidden_dim=nhid, isLastLayer=True, shouldUseNodeWeights=shouldUseNodeWeights))
 
         self.gnns = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
                        bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
@@ -92,7 +86,7 @@ class GeneralJEPAv1(nn.Module):
             )
 
 
-    def forward(self, data, epoch=0):
+    def forward(self, data):
         # Embed node features and edge attributes
         x = self.input_encoder(data.x).squeeze()
         
@@ -103,7 +97,6 @@ class GeneralJEPAv1(nn.Module):
         x += self.rw_encoder(data.rw_pos_enc)
 
         ### Patch Encoder ###
-        # x = torch.cat([data.x, data.rw_pos_enc], dim=1) # add node PE to the node initial embeddings
         x = x[data.subgraphs_nodes_mapper]
         edge_index = data.combined_subgraphs # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices       
         edge_attr = edge_attr[data.subgraphs_edges_mapper] # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph

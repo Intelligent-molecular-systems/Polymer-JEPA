@@ -1,41 +1,29 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from src.model_utils.hyperbolic_dist import hyperbolic_dist
+from src.JEPA_models.model_utils.hyperbolic_dist import hyperbolic_dist
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import wandb
 
 def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0, dataset='aldeghi'):
-    # check target and context parameters are the same (weight sharing)
-    # for param_q, param_k in zip(model.context_encoder.parameters(), model.target_encoder.parameters()):
-    #     if not torch.equal(param_q, param_k):
-    #         print(f"context and target are not same.")
-    #     else:
-    #         print(f"context == target !!")
-
+    
     total_loss = 0
-    all_graph_embeddings = torch.tensor([], requires_grad=False, device=device)
-    all_initial_context_embeddings = torch.tensor([], requires_grad=False, device=device)
-    all_initial_target_embeddings = torch.tensor([], requires_grad=False, device=device)
-    all_target_encoder_embeddings = torch.tensor([], requires_grad=False, device=device)
-    all_context_encoder_embeddings = torch.tensor([], requires_grad=False, device=device)
-    mon_A_type = []
-    stoichiometry = []
-    inv_losses = []
-    cov_losses = []
-    var_losses = []
-    target_embeddings_saved = None
-    predicted_target_embeddings_saved = None
+
+    # initialize lists for visualization
+    all_graph_embeddings, all_initial_context_embeddings, all_initial_target_embeddings, all_target_encoder_embeddings, all_context_encoder_embeddings = torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device)
+    mon_A_type, stoichiometry, inv_losses, cov_losses, var_losses = [], [], [], [], []
+    target_embeddings_saved, predicted_target_embeddings_saved = None, None
+  
     for i, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings = model(data, epoch)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings = model(data)
         
         if dataset == 'aldeghi':
             ### visualization ###
-            if i == 0: # save the first target_x and target_y for visualization of hyperbolic space
+            if i == 0: # save the first target_x and target_y for visualization of loss space
                 target_embeddings_saved = target_embeddings
                 predicted_target_embeddings_saved = predicted_target_embeddings
             if i % 6 == 0: # around 6k if training on 35/40k, save the embeddings for visualization of embedding space
@@ -82,7 +70,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             
 
         total_loss += loss.item()        
-        # Update weights of the network 
+
         loss.backward()
         optimizer.step()
 
@@ -136,7 +124,7 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
            
             wandb_log_dict["pretrn_val_cov_loss"] = cov_loss.item()
             wandb_log_dict["pretrn_val_var_loss"] = var_loss.item()
-            # vicReg objective
+            
             loss = inv_weight * inv_loss + var_weight * var_loss + cov_weight * cov_loss
             wandb_log_dict["pretrn_val_total_loss"] = loss.item()
         else:

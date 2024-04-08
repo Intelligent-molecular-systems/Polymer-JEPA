@@ -42,12 +42,6 @@ class GeneralJEPAv1(nn.Module):
         self.input_encoder = nn.Embedding(nfeat_node, nhid)
         self.edge_encoder = nn.Embedding(nfeat_edge, nhid)
 
-        # self.wdmpnns = nn.ModuleList()
-        # self.wdmpnns.append(WDNodeMPNNLayer(nhid, nfeat_edge, hidden_dim=nhid, isFirstLayer=True, shouldUseNodeWeights=False))
-        # for _ in range(nlayer_gnn-2):
-        #     self.wdmpnns.append(WDNodeMPNNLayer(nhid, nfeat_edge, hidden_dim=nhid, shouldUseNodeWeights=False))
-        # self.wdmpnns.append(WDNodeMPNNLayer(nhid, nfeat_edge, hidden_dim=nhid, isLastLayer=True, shouldUseNodeWeights=shouldUseNodeWeights))
-
         self.gnns = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
                        bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
                                         
@@ -92,7 +86,7 @@ class GeneralJEPAv1(nn.Module):
             )
 
 
-    def forward(self, data, epoch=0):
+    def forward(self, data):
         # Embed node features and edge attributes
         x = self.input_encoder(data.x).squeeze()
         
@@ -103,7 +97,6 @@ class GeneralJEPAv1(nn.Module):
         x += self.rw_encoder(data.rw_pos_enc)
 
         ### Patch Encoder ###
-        # x = torch.cat([data.x, data.rw_pos_enc], dim=1) # add node PE to the node initial embeddings
         x = x[data.subgraphs_nodes_mapper]
         edge_index = data.combined_subgraphs # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices       
         edge_attr = edge_attr[data.subgraphs_edges_mapper] # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
@@ -136,8 +129,8 @@ class GeneralJEPAv1(nn.Module):
         embedded_context_x = embedded_subgraph_x[context_subgraph_idx].clone() # Extract context subgraph embedding
     
         # Add its patch positional encoding
-        # context_pe = data.patch_pe[context_subgraph_idx]
-        # embedded_context_x += self.patch_rw_encoder(context_pe) #  modifying embedded_context_x after it is created from embedded_subgraph_x does not modify embedded_subgraph_x, because they do not share storage for their data.     
+        context_pe = data.patch_pe[context_subgraph_idx]
+        embedded_context_x += self.patch_rw_encoder(context_pe) #  modifying embedded_context_x after it is created from embedded_subgraph_x does not modify embedded_subgraph_x, because they do not share storage for their data.     
         vis_initial_context_embeddings = embedded_context_x.detach().clone() # for visualization
         embedded_context_x = embedded_context_x.unsqueeze(1) # # 'B d ->  B 1 d'
         

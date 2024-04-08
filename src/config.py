@@ -2,12 +2,9 @@ import os
 import argparse
 from yacs.config import CfgNode as CN
 
-# This file was copied from graph-jepa, some of the defined options are not used in the code at the moment
-
 def set_cfg(cfg):
-
     # ------------------------------------------------------------------------ #
-    # Basic options
+    # General options
     # ------------------------------------------------------------------------ #
     # Additional num of worker for data loading
     cfg.num_workers = 0
@@ -15,21 +12,21 @@ def set_cfg(cfg):
     cfg.seed = None
     # Custom log file name
     cfg.logfile = None
-
+    # Number of runs 
     cfg.runs = 5
-
+    # Whether to pretrain the model
     cfg.shouldPretrain = True
+    # Whether to finetune the model
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained
     cfg.shouldFinetuneOnPretrainedModel = True
     # name of the pretrained model, used only if shouldPretrain is False
     cfg.pretrainedModelName = 'name'
+    # whether to freeze the weights of the pretrained model when finetuning
     cfg.frozenWeights = False
-
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
     cfg.modelVersion = 'v2'
-
-    # finetuning dataset, values: 'aldeghi' or 'diblock', 'diblock' can only be finetuned on a v2 model, not v1.
+    # finetuning dataset, values: 'aldeghi' or 'diblock' or 'zinc', 'diblock' can only be finetuned on a v2 model, not v1.
     cfg.finetuneDataset = 'aldeghi'
 
     # ------------------------------------------------------------------------ #
@@ -66,14 +63,18 @@ def set_cfg(cfg):
     # this should be used only when using the vicReg objective, where sharing weights is beneficial
     cfg.pretrain.shouldShareWeights = False
     # From vicReg: we have empirically found that using very different values for λ (inv) and μ (var), or taking λ = μ with ν (cov) > μ leads to unstable training. On the other hand taking λ = μ and picking ν < μ leads to stable convergence, setting lambda = mu = 25 and nu = 1 works best
+    # invariance loss weight
     cfg.pretrain.inv_weight = 25
+    # variance loss weight
     cfg.pretrain.var_weight = 25
+    # covariance loss weight
     cfg.pretrain.cov_weight = 1
 
     
     cfg.finetune = CN()
     # Property to train (finetune) on: 'ea' or 'ip'
     cfg.finetune.property = 'ea'
+    # Number of finetuning epochs
     cfg.finetune.epochs = 100
     # Base learning rate
     cfg.finetune.lr = 0.001
@@ -85,7 +86,7 @@ def set_cfg(cfg):
     # which percentage of the full dataset should be used to pretrain
     # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
     # this value is relative to 40%: 0.01 -> 1 % = 160 graphs 0.2 * 40
-    cfg.finetune.aldeghiFTPercentage = 0.04
+    cfg.finetune.aldeghiFTPercentage = 0.1
     # diblock has around 5k graphs in total
     cfg.finetune.diblockFTPercentage = 0.06
 
@@ -145,21 +146,24 @@ def set_cfg(cfg):
     # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 1
 
-
+    # ------------------------------------------------------------------------ #
+    # Plotting options
+    # ------------------------------------------------------------------------ #
     cfg.visualize = CN()
+    # Whether to plot the 3D embedding space
     cfg.visualize.should3DPlot = False
-    cfg.visualize.shouldEmbeddingSpace = False
+    # Whether to plot the embedding space (2D)
+    cfg.visualize.shouldEmbeddingSpace = True
+    # Whether to plot the loss space
     cfg.visualize.shouldLoss = False
+    # Whether to plot the metrics (i.e RMSE, R2, PCR, ROC)
     cfg.visualize.shouldPlotMetrics = False
 
     return cfg
 
 
-# Principle means that if an option is defined in a YACS config object,
-# then your program should set that configuration option using cfg.merge_from_list(opts) and not by defining,
-# for example, --train-scales as a command line argument that is then used to set cfg.pretrain.SCALES.
 
-
+# Update cfg from command line
 def update_cfg(cfg, args_str=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default="",
@@ -185,7 +189,6 @@ def update_cfg(cfg, args_str=None):
     cfg.merge_from_list(args.opts)
 
     return cfg
-
 
 """
     Global variable

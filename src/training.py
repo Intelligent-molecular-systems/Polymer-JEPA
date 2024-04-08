@@ -19,7 +19,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     for i, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings = model(data, epoch)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings = model(data)
         
         if dataset == 'aldeghi':
             ### visualization ###

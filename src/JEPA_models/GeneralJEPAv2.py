@@ -113,7 +113,7 @@ class GeneralJEPAv2(nn.Module):
         embedded_subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling) # pool each subgraph node embeddings to obtain an embedding for each subgraph/patch
 
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
-        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y.device) # [TODO]: adapt this to work with different ys
+        batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y.device)
 
         context_subgraph_idx = data.context_subgraph_idx + batch_indexer
         embedded_context_x = embedded_subgraph_x[context_subgraph_idx] # Extract context subgraph embedding
@@ -162,7 +162,7 @@ class GeneralJEPAv2(nn.Module):
             full_graph_nodes_embedding = x
 
         with torch.no_grad():
-            vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
+            vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding.detach().clone(), data.batch)
 
         # map it as we do for x at the beginning
         full_graph_nodes_embedding = full_graph_nodes_embedding[data.subgraphs_nodes_mapper]
@@ -202,14 +202,14 @@ class GeneralJEPAv2(nn.Module):
 
     def encode(self, data):
         full_x = self.input_encoder(data.x).squeeze()
+        full_x += self.rw_encoder(data.rw_pos_enc)
 
-        if hasattr(data, 'rw_pos_enc'):
-            full_x += self.rw_encoder(data.rw_pos_enc)
+        edge_attr = self.edge_encoder(data.edge_attr)
        
         node_embeddings = self.target_encoder(
             full_x, 
             data.edge_index, 
-            data.edge_attr, 
+            edge_attr, 
             data.edge_weight, 
             data.node_weight
         )

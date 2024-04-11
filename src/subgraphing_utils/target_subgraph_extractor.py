@@ -14,20 +14,17 @@ from src.visualize import plot_subgraphs
 
 # motif-based target subgraphing
 
-# motif based subgraphing
-def motifTargets(graph, n_targets, n_patches, drop_rate=0.0, cliques_used=[]):
-    # consider only the cliques that are not used (for the context)
-    cliques = {tuple(clique) for clique in graph.motifs[0]}
+def motifTargets(graph, n_targets, n_patches, cliques_used):
+    cliques = {tuple(clique) for clique in graph.motifs[0].copy()}
     cliques_used_set = {tuple(clique) for clique in cliques_used}
     cliques = cliques - cliques_used_set
     cliques = [sorted(clique) for clique in cliques]
 
     # do a 1-hop expansion for each clique with less than 3 nodes
-    for i, clique in enumerate(cliques):
-        if len(clique) < 3:
-            cliques[i] = list(expand_one_hop(to_networkx(graph, to_undirected=True), set(clique)))
+    # for i, clique in enumerate(cliques):
+    #     if len(clique) < 3:
+    #         cliques[i] = list(expand_one_hop(to_networkx(graph, to_undirected=True), set(clique)))
         
-
     g = to_networkx(graph)
     # print(cliques)
     # expand cliques of size 2
@@ -59,15 +56,18 @@ def motifTargets(graph, n_targets, n_patches, drop_rate=0.0, cliques_used=[]):
     edge_mask = torch.zeros((n_patches, graph.num_edges), dtype=torch.bool)
 
     for clique in cliques_used:
+        # append the context cliques at the the beginning of the list of all cliques, so that they we can skip them when selecting the target subgraphs by using the index
+        cliques.insert(0, clique)
+
+    for clique in cliques:
         for bond in graph.intermonomers_bonds:
+            # for all cliques that have an intermonomer bond, add the other node to the clique, to prevent intermonomer edge loss
             if bond[0] in clique and bond[1] not in clique:
                 clique.append(bond[1])
             elif bond[1] in clique and bond[0] not in clique:
                 clique.append(bond[0])
             else:
                 continue
-
-        cliques.insert(0, clique)
 
     idx = n_patches - len(cliques)
 
@@ -129,6 +129,7 @@ def rwTargets(graph, n_targets, n_patches, rw1, rw2):
     node_mask = torch.zeros((n_patches, graph.num_nodes), dtype=torch.bool)
     edge_mask = torch.zeros((n_patches, graph.num_edges), dtype=torch.bool)
 
+    # insert the context random walks at the beginning of the list of all random walks, so that they we can skip them when selecting the target subgraphs by using the index
     rw_walks.insert(0, rw1)
     rw_walks.insert(0, rw2)
 

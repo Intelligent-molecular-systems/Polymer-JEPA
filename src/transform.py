@@ -33,7 +33,7 @@ def combine_subgraphs(edge_index, subgraphs_nodes, subgraphs_edges, num_selected
 
 
     node_label_mapper[subgraphs_nodes[0], subgraphs_nodes[1]] = torch.arange(len(subgraphs_nodes[1])) 
-    node_label_mapper = node_label_mapper.reshape(-1) 
+    node_label_mapper = node_label_mapper.reshape(-1)
 
     inc = torch.arange(num_selected)*num_nodes 
     combined_subgraphs += inc[subgraphs_edges[0]]
@@ -67,9 +67,6 @@ def RWSE(edge_index, pos_enc_dim, num_nodes):
             edge_index, max_num_nodes=num_nodes)[0]
         PE = random_walk(A, pos_enc_dim)
     return PE
-
-
-
 
 
 class SubgraphsData(Data):
@@ -106,7 +103,7 @@ class PositionalEncodingTransform(object):
                 data.edge_index, self.rw_dim, data.num_nodes)
         return data
 
-# !!! 
+
 class GraphJEPAPartitionTransform(object):
     def __init__(
             self, 
@@ -150,23 +147,9 @@ class GraphJEPAPartitionTransform(object):
             if self.subgraphing_type == 0: # motif
                 context_subgraphs_used = motifContext(data, sizeContext=self.context_size)
                 node_masks, edge_masks = motifTargets(data, n_targets=self.num_targets, n_patches=self.n_patches, cliques_used=context_subgraphs_used)
-                # node_masks = torch.cat([context_node_masks, node_masks], dim=0)
-                # edge_masks = torch.cat([context_edge_masks, edge_masks], dim=0)
+            else:
+                raise ValueError('Invalid subgraphing type')     
 
-
-            # elif self.subgraphing_type == 1: # metis
-            #     # context_node_masks, context_edge_masks = metisContext(data, sizeContext=self.context_size)
-            #     # node_masks, edge_masks = metisTargets(data, n_patches=self.n_patches-1, drop_rate=self.drop_rate, num_hops=1, is_directed=False)
-            #     node_masks, edge_masks, context_subgraphs_used = metis2subgraphs(data, sizeContext=self.context_size, n_patches=self.n_patches, min_targets=self.num_targets)
-            
-            # elif self.subgraphing_type == 2: # random walk
-            #     context_node_masks, context_edge_masks, rw1, rw2 = rwContext(data, sizeContext=self.context_size)
-            #     node_masks, edge_masks = rwTargets(data, n_patches=self.n_patches-1, n_targets=self.num_targets, rw1=rw1, rw2=rw2)
-            #     node_masks = torch.cat([context_node_masks, node_masks], dim=0)
-            #     edge_masks = torch.cat([context_edge_masks, edge_masks], dim=0)
-            #     context_subgraphs_used = [rw1, rw2]
-            # else:
-            #     raise ValueError('Invalid subgraphing type')     
             
         if self.dataset == 'zinc':   
             if self.subgraphing_type == 0:
@@ -199,16 +182,13 @@ class GraphJEPAPartitionTransform(object):
         mask = torch.zeros(self.n_patches).bool() # if say we have two patches then [False, False]
         mask[subgraphs_batch] = True # if subgraphs_batch = [0, 0, 1, 1] then [True, True]
 
-        # mask[0] = False # dont use the context subgraph, so we set it to False since it s always the first, this way the transformer wont attend to it
         n_context_subgraphs = len(context_subgraphs_used)
         data.n_context = n_context_subgraphs
         context_mask = torch.zeros(self.n_patches).bool()
         context_mask[subgraphs_batch[0]:subgraphs_batch[0]+n_context_subgraphs] = True
         data.context_mask = context_mask.unsqueeze(0)
 
-
-        data.subgraphs_batch = subgraphs_batch
-        
+        data.subgraphs_batch = subgraphs_batch        
         data.subgraphs_nodes_mapper = subgraphs_nodes[1] # this is the node idxs [0, 2, 1, 3] (original node idxs)
         data.subgraphs_edges_mapper = subgraphs_edges[1] # this is the edge idxs [0, 1, 2] (original edge idxs)
         data.combined_subgraphs = combined_subgraphs # this is the edge index of th combined subgraph made of disconnected subgraphs, where each subgraph has its own unique node ids

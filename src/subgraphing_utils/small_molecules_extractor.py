@@ -27,14 +27,14 @@ def zincSubgraphs(data, sizeContext, n_patches, n_targets):
 
     # 1-hop exp of all cliques with less than 3 nodes
     for i, clique in enumerate(cliques):
-        if len(clique) < 3:
+        if len(clique) < 2:
             cliques[i] = expand_one_hop(G, clique)
 
 
     cliques_used = []
     context_nodes = set()
     
-    all_cliques = cliques
+    all_cliques = cliques.copy()
     # select random cliques untl we have enough for context
     while len(context_nodes) / data.num_nodes < sizeContext and all_cliques:
         clique = random.choice(all_cliques)
@@ -98,7 +98,15 @@ def metisZinc(data, n_patches, sizeContext, n_targets):
         g.edge_index, g.num_nodes, 1, False)
     node_mask.index_add_(0, subgraphs_batch,
                              k_hop_node_mask[subgraphs_node_mapper])
-
+        
+    context_size = math.ceil(sizeContext * g.num_nodes)
+    context_subgraph = set()
+    context_subgraphs_used = []
+    for idx in range(n_patches-max_patch_id, n_patches):
+        context_subgraph.update(subgraphs_node_mapper[node_mask[idx]])
+        context_subgraphs_used.append(subgraphs_node_mapper[node_mask[idx]])
+        if len(context_subgraph) >= context_size:
+            break
     
     # count total n of non empty subgraphs
     nValidSubgraphs = 0
@@ -123,7 +131,8 @@ def metisZinc(data, n_patches, sizeContext, n_targets):
         # print(context_nodes)
 
     edge_mask = node_mask[:, g.edge_index[0]] & node_mask[:, g.edge_index[1]]
-    return node_mask, edge_mask, context_subgraphs
+
+    return node_mask, edge_mask, context_subgraphs_used
 
 
 def expand_one_hop(fullG, subgraph_nodes):
@@ -136,9 +145,6 @@ def expand_one_hop(fullG, subgraph_nodes):
 def create_masks(graph, context_subgraph, target_subgraphs, n_of_nodes, n_patches):#
     # create always a fixed number of patches, the non existing patches will have all the nodes masked
     node_mask = torch.zeros((n_patches, n_of_nodes), dtype=torch.bool)
-    # actual subgraphs 
-    valid_subgraphs = target_subgraphs
-    start_idx = n_patches - len(valid_subgraphs) # 20 - 9 = 11: 11, 12, 13, 14, 15, 16, 17, 18, 19 (index range is 0-19, so we are good)
     # context mask
     # for node in context_subgraph:
     #     node_mask[start_idx, node] = True
@@ -146,6 +152,9 @@ def create_masks(graph, context_subgraph, target_subgraphs, n_of_nodes, n_patche
     context_mask[context_subgraph] = True
     node_mask[0] = context_mask
     
+    # actual subgraphs 
+    valid_subgraphs = target_subgraphs
+    start_idx = n_patches - len(valid_subgraphs) # 20 - 9 = 11: 11, 12, 13, 14, 15, 16, 17, 18, 19 (index range is 0-19, so we are good)
     # target masks
     idx = start_idx 
     for target_subgraph in target_subgraphs:

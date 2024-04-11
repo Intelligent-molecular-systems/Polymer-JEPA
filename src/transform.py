@@ -148,13 +148,11 @@ class GraphJEPAPartitionTransform(object):
                 context_subgraphs_used = motifContext(data, sizeContext=self.context_size)
                 node_masks, edge_masks = motifTargets(data, n_targets=self.num_targets, n_patches=self.n_patches, cliques_used=context_subgraphs_used)
             else:
-                raise ValueError('Invalid subgraphing type')     
+                raise ValueError('Invalid subgraphing type')
 
             
         if self.dataset == 'zinc':   
-            if self.subgraphing_type == 0:
-                node_masks, edge_masks, context_subgraphs_used = zincSubgraphs(data, sizeContext=self.context_size, n_patches=self.n_patches, n_targets=self.num_targets)
-            elif self.subgraphing_type == 1:
+            if self.subgraphing_type == 1:
                 node_masks, edge_masks, context_subgraphs_used = metisZinc(data, sizeContext=self.context_size, n_patches=self.n_patches, n_targets=self.num_targets)
             else:
                 raise ValueError('Invalid subgraphing type')   
@@ -185,6 +183,7 @@ class GraphJEPAPartitionTransform(object):
         n_context_subgraphs = len(context_subgraphs_used)
         data.n_context = n_context_subgraphs
         context_mask = torch.zeros(self.n_patches).bool()
+        # set the context subgraphs to True, context subgraphs are the first n_context_subgraphs valid subgraphs
         context_mask[subgraphs_batch[0]:subgraphs_batch[0]+n_context_subgraphs] = True
         data.context_mask = context_mask.unsqueeze(0)
 

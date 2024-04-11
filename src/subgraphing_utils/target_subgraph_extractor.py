@@ -77,8 +77,6 @@ def motifTargets(graph, n_targets, n_patches, cliques_used):
         node_mask[idx] = target_mask
         idx += 1
 
-    # print(len(cliques_used))
-    # print(len(cliques))
     # plot_subgraphs(g, cliques)
 
     edge_mask = node_mask[:, graph.edge_index[0]] & node_mask[:, graph.edge_index[1]]

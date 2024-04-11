@@ -95,9 +95,6 @@ def rwContext(graph, sizeContext=0.85):
 
 # motif-based context subgraphing
 def motifContext(graph, sizeContext=0.7, n_targets=4):
-    if sizeContext == 1:
-        # return all nodes and edges
-        return torch.ones((1, graph.num_nodes), dtype=torch.bool), torch.ones((1, graph.num_edges), dtype=torch.bool)
     
     cliques, intermonomers_bonds, monomer_mask = graph.motifs[0].copy(), graph.intermonomers_bonds.copy(), graph.monomer_mask.clone()
     cliques_used = []
@@ -131,8 +128,6 @@ def motifContext(graph, sizeContext=0.7, n_targets=4):
     context_nodes.update(monomerA_clique)
     context_nodes.update(monomerB_clique)
 
-    # context subgraph: join 2 cliques such that they belong to different monomers and they are connected by an intermonomer bond
-    context_subgraph = monomerA_clique + monomerB_clique
     # while length of context subgraph is less than context size % of the total nodes, add a random clique if any is available
     cliques.remove(monomerA_clique)
     cliques.remove(monomerB_clique)

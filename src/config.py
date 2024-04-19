@@ -47,7 +47,7 @@ def set_cfg(cfg):
     # learning rate decay factor
     cfg.pretrain.lr_decay = 0.5
     # L2 regularization, weight decay
-    cfg.pretrain.wd = 0.
+    cfg.pretrain.wd = 3e-3
     # Dropout rate
     cfg.pretrain.dropout = 0.1
     # Dropout rate for MLPMixer

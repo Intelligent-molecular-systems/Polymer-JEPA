@@ -96,8 +96,8 @@ class PolymerJEPAv2(nn.Module):
         embedded_context_x = embedded_subgraph_x[context_subgraph_idx] # Extract context subgraph embedding
         
         # Add its patch positional encoding
-        context_pe = data.patch_pe[context_subgraph_idx]
-        embedded_context_x += self.patch_rw_encoder(context_pe) #  modifying embedded_context_x after it is created from embedded_subgraph_x does not modify embedded_subgraph_x, because they do not share storage for their data.     
+        # context_pe = data.patch_pe[context_subgraph_idx]
+        # embedded_context_x += self.patch_rw_encoder(context_pe) #  modifying embedded_context_x after it is created from embedded_subgraph_x does not modify embedded_subgraph_x, because they do not share storage for their data.     
         vis_context_embedding = embedded_context_x.detach().clone() # for visualization
         embedded_context_x = embedded_context_x.unsqueeze(1)
 

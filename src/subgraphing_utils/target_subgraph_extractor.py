@@ -19,9 +19,9 @@ def motifTargets(graph, n_targets, n_patches, cliques_used):
     cliques = [list(clique) for clique in cliques]
 
     # do a 1-hop expansion for each clique with less than 3 nodes
-    # for i, clique in enumerate(cliques):
-    #     if len(clique) < 3:
-    #         cliques[i] = list(expand_one_hop(to_networkx(graph, to_undirected=True), set(clique)))
+    for i, clique in enumerate(cliques):
+        if len(clique) < 3:
+            cliques[i] = list(expand_one_hop(to_networkx(graph, to_undirected=True), set(clique)))
         
     g = to_networkx(graph)
     while len(cliques) < n_targets:
@@ -38,9 +38,6 @@ def motifTargets(graph, n_targets, n_patches, cliques_used):
 
     for clique in cliques_used:
         # append the context cliques at the the beginning of the list of all cliques, so that they we can skip them when selecting the target subgraphs by using the index
-        cliques.insert(0, clique)
-
-    for clique in cliques:
         for bond in graph.intermonomers_bonds:
             # for all cliques that have an intermonomer bond, add the other node to the clique, to prevent intermonomer edge loss
             if bond[0] in clique and bond[1] not in clique:
@@ -49,6 +46,7 @@ def motifTargets(graph, n_targets, n_patches, cliques_used):
                 clique.append(bond[0])
             else:
                 continue
+        cliques.insert(0, clique)
 
     idx = n_patches - len(cliques)
     for target_subgraph in cliques:

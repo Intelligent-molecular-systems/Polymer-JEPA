@@ -174,15 +174,19 @@ if __name__ == '__main__':
                 train_dataset = full_aldeghi_dataset[train_index].copy()
 
                 if cfg.shouldPretrain:
-                    pretrn_trn_dataset = train_dataset[:len(train_dataset)//2] # half of the train dataset for pretraining
+                    # keep 12.5% of the train dataset for finetuning, corresponding to 10% of the full dataset
+                    pretrn_trn_dataset = train_dataset[:int((len(train_dataset)/100)*87.5)] # half of the train dataset for pretraining
+
+                    # pretrn_trn_dataset = train_dataset[:len(train_dataset)//2] # half of the train dataset for pretraining
                     pretrn_trn_dataset.transform = train_transform
 
+                
                 pretrn_val_dataset = full_aldeghi_dataset[test_index].copy()
                 pretrn_val_dataset.transform = val_transform
                 pretrn_val_dataset = [x for x in pretrn_val_dataset] # apply transform only once
                 ft_val_dataset = pretrn_val_dataset # use same val dataset for pretraining and finetuning
-
-                ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
+                ft_trn_dataset = train_dataset[int((len(train_dataset)/100)*87.5):] # half of the train dataset for finetuning
+                # ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
                 ft_trn_dataset.transform = train_transform
                 #ft_data = getMaximizedVariedData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))) #ft_dataset[:int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))]
                 #ft_data = getLabData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset)))

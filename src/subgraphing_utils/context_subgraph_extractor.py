@@ -47,7 +47,7 @@ def rwContext(graph, sizeContext=0.85):
     lastM2Node = monomer2root
     
 
-    while len(context_rw_walk)/total_nodes <= sizeContext:
+    while len(context_rw_walk)/total_nodes < sizeContext:
         if len(context_rw_walk) % 2 == 0:  # Even steps, expand from monomer1
             next_node = random_walk_step(fullGraph=monomer1G, current_node=lastM1Node, exclude_nodes=context_rw_walk)
         else: # Odd steps, expand from monomer2

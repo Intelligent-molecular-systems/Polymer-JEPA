@@ -8,10 +8,6 @@ def set_cfg(cfg):
     # ------------------------------------------------------------------------ #
     # Additional num of worker for data loading
     cfg.num_workers = 0
-    # Whether fix the running seed to remove randomness
-    cfg.seed = None
-    # Custom log file name
-    cfg.logfile = None
     # Number of runs 
     cfg.runs = 5
     # Whether to pretrain the model
@@ -37,12 +33,9 @@ def set_cfg(cfg):
     cfg.pretrain.batch_size = 128
     # Maximal number of epochs
     cfg.pretrain.epochs = 10
-    # Number of runs with random init
-    cfg.pretrain.runs = 4
     # Base learning rate
     cfg.pretrain.lr = 0.0005
-    # number of steps before 
-    # reduce learning rate
+    # number of steps before reduce learning rate
     cfg.pretrain.lr_patience = 20
     # learning rate decay factor
     cfg.pretrain.lr_decay = 0.5
@@ -55,9 +48,7 @@ def set_cfg(cfg):
     # A lower bound on the learning rate.
     cfg.pretrain.min_lr = 1e-5
     # optimizer
-    cfg.pretrain.optimizer = 'Adam'
-    # Multiscale training
-    cfg.pretrain.multiscale = False    
+    cfg.pretrain.optimizer = 'Adam'   
     # Regularization (vcReg), between 0 and 1, tell the weight of the regularization loss, if 0 then no regularization
     cfg.pretrain.regularization = False
     # this should be used only when using the vicReg objective, where sharing weights is beneficial
@@ -86,8 +77,8 @@ def set_cfg(cfg):
     # which percentage of the full dataset should be used to pretrain
     # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
     # this value is relative to 40%: 0.01 -> 1 % = 160 graphs 0.2 * 40
-    cfg.finetune.aldeghiFTPercentage = 0.04
-    # diblock has around 5k graphs in total
+    cfg.finetune.aldeghiFTPercentage = 0.01
+    # diblock has around 4800 graphs in total
     cfg.finetune.diblockFTPercentage = 0.06
 
     # ------------------------------------------------------------------------ #

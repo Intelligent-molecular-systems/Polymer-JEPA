@@ -338,12 +338,12 @@ def getLabData(ft_data, size):
     return dataset
 
 
-def getRandomData(ft_data, size):
+def getRandomData(ft_data, size, seed=None):
     # select 'size' number of random data points from ft_data
     # randomly set torch seed based on the current time
     # torch.manual_seed(int(time.time()))
     # set random seed for python
-    random.seed(int(time.time()))
+    random.seed(seed)
     dataset = ft_data #.shuffle()
     if not isinstance(dataset, list):
         dataset = [x for x in dataset]

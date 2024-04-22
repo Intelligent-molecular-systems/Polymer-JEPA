@@ -50,6 +50,9 @@ class PolymerJEPAv2(nn.Module):
             nn.Linear(nhid, nhid),
             nn.LayerNorm(nhid),
             nn.ReLU(),
+            nn.Linear(nhid, nhid),
+            nn.LayerNorm(nhid),
+            nn.ReLU(),
             nn.Linear(nhid, 2 if self.shouldUse2dHyperbola else nhid)
         )
   
@@ -153,7 +156,7 @@ class PolymerJEPAv2(nn.Module):
             input_context_x = embedded_context_x.reshape(-1, self.nhid)
             expanded_context_embeddings = self.context_expander(input_context_x)
 
-            input_target_x = embedded_target_x[:, 0, :].reshape(-1, self.nhid) # take only the first patch to avoid overweighting the target embeddings
+            input_target_x = embedded_target_x.reshape(-1, self.nhid) # take only the first patch to avoid overweighting the target embeddings
             expanded_target_embeddings = self.target_expander(input_target_x)
 
         if self.shouldUse2dHyperbola:

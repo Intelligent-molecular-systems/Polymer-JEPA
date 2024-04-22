@@ -47,6 +47,7 @@ def start_WB_log_hyperparameters(cfg):
                 "n_patches": cfg.subgraphing.n_patches,
                 "type": cfg.subgraphing.type,
                 "context_size": cfg.subgraphing.context_size,
+                'target_size': cfg.subgraphing.target_size,
             },
             "jepa": {
                 "num_targets": cfg.jepa.num_targets,

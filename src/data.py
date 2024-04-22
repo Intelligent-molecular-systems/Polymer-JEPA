@@ -119,6 +119,7 @@ def create_data(cfg):
         patch_num_diff=cfg.pos_enc.patch_num_diff,
         drop_rate=cfg.subgraphing.drop_rate,
         context_size=cfg.subgraphing.context_size,
+        target_size=cfg.subgraphing.target_size,
         dataset=cfg.finetuneDataset
     )
 
@@ -131,6 +132,7 @@ def create_data(cfg):
         patch_num_diff=cfg.pos_enc.patch_num_diff,
         drop_rate=0.0, 
         context_size=cfg.subgraphing.context_size,
+        target_size=cfg.subgraphing.target_size,
         dataset=cfg.finetuneDataset
     )
     

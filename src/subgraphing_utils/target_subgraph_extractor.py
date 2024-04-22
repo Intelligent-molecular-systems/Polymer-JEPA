@@ -64,12 +64,12 @@ def motifTargets(graph, n_targets, n_patches, cliques_used):
 
 
 # random-walk-based target subgraphing
-def rwTargets(graph, n_targets, n_patches, rw1, rw2):
+def rwTargets(graph, n_targets, n_patches, rw1, rw2, target_size):
     def random_walk_step(fullGraph, current_node, exclude_nodes):
         neighbors = list(set(fullGraph.neighbors(current_node)) - exclude_nodes)
         return random.choice(neighbors) if neighbors else None
     
-    def random_walk_from_node(fullGraph, start_node, exclude_nodes, total_nodes, size=0.15):
+    def random_walk_from_node(fullGraph, start_node, exclude_nodes, total_nodes, size=target_size):
         walk = [start_node]
         while len(walk) / total_nodes < size:
             next_node = random_walk_step(fullGraph=fullGraph, current_node=walk[-1], exclude_nodes=exclude_nodes)

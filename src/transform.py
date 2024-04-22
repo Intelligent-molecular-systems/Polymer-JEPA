@@ -114,6 +114,7 @@ class GraphJEPAPartitionTransform(object):
             patch_num_diff=0,
             drop_rate=0,
             context_size=0.7,
+            target_size=0.15,
             dataset='aldeghi'
         ):
 
@@ -125,6 +126,7 @@ class GraphJEPAPartitionTransform(object):
         self.patch_num_diff = patch_num_diff
         self.drop_rate = drop_rate
         self.context_size = context_size
+        self.target_size = target_size
         self.dataset = dataset
         
     def _diffuse(self, A):
@@ -158,7 +160,7 @@ class GraphJEPAPartitionTransform(object):
             elif self.subgraphing_type == 2: # random walk
                 context_node_masks, context_edge_masks, rw1, rw2 = rwContext(data, sizeContext=self.context_size)
                 context_subgraphs_used = [rw1, rw2]
-                node_masks, edge_masks = rwTargets(data, n_patches=self.n_patches-1, n_targets=self.num_targets, rw1=rw1, rw2=rw2)
+                node_masks, edge_masks = rwTargets(data, n_patches=self.n_patches-1, n_targets=self.num_targets, rw1=rw1, rw2=rw2, target_size=self.target_size)
                 node_masks = torch.cat([context_node_masks, node_masks], dim=0)
                 edge_masks = torch.cat([context_edge_masks, edge_masks], dim=0)
             else:

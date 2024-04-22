@@ -152,6 +152,8 @@ if __name__ == '__main__':
     trn_losses = []
     val_losses = []
     metrics = collections.defaultdict(list)
+    # generate a random seed for each run, always the same for reproducibility
+    seeds = [42, 123, 777, 888, 999]
 
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
         full_aldeghi_dataset, train_transform, val_transform = create_data(cfg)
@@ -190,7 +192,7 @@ if __name__ == '__main__':
                 ft_trn_dataset.transform = train_transform
                 #ft_data = getMaximizedVariedData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))) #ft_dataset[:int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))]
                 #ft_data = getLabData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset)))
-                ft_trn_dataset = getRandomData(ft_trn_dataset, int(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)))
+                ft_trn_dataset = getRandomData(ft_trn_dataset, int(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)), seeds[run_idx])
                 #ft_data = getTammoData(pretrn_dataset + ft_dataset)
                 
             elif cfg.finetuneDataset == 'diblock':
@@ -204,7 +206,7 @@ if __name__ == '__main__':
                 if run_idx == 0: # load the dataset only once
                     diblock_dataset = torch.load('Data/diblock_graphs_list.pt') 
                 random.seed(time.time())
-                diblock_dataset = random.sample(diblock_dataset, len(diblock_dataset))
+                diblock_dataset = random.sample(diblock_dataset, len(diblock_dataset), seeds[run_idx])
                 ft_trn_dataset = diblock_dataset[:int(cfg.finetune.diblockFTPercentage*len(diblock_dataset))].copy()
                 ft_val_dataset = diblock_dataset[int(cfg.finetune.diblockFTPercentage*len(diblock_dataset)):].copy()
 

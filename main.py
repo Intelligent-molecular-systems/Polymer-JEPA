@@ -205,8 +205,8 @@ if __name__ == '__main__':
 
                 if run_idx == 0: # load the dataset only once
                     diblock_dataset = torch.load('Data/diblock_graphs_list.pt') 
-                random.seed(time.time())
-                diblock_dataset = random.sample(diblock_dataset, len(diblock_dataset), seeds[run_idx])
+                random.seed(seeds[run_idx])
+                diblock_dataset = random.sample(diblock_dataset, len(diblock_dataset))
                 ft_trn_dataset = diblock_dataset[:int(cfg.finetune.diblockFTPercentage*len(diblock_dataset))].copy()
                 ft_val_dataset = diblock_dataset[int(cfg.finetune.diblockFTPercentage*len(diblock_dataset)):].copy()
 

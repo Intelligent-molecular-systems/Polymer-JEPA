@@ -24,6 +24,8 @@ def set_cfg(cfg):
     cfg.modelVersion = 'v2'
     # finetuning dataset, values: 'aldeghi' or 'diblock' or 'zinc', 'diblock' can only be finetuned on a v2 model, not v1.
     cfg.finetuneDataset = 'aldeghi'
+    # name fo the experiment to track on wandb
+    cfg.experimentName = 'default'
 
     # ------------------------------------------------------------------------ #
     # Training options

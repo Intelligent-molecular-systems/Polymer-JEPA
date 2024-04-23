@@ -216,13 +216,13 @@ def printStats(graphs):
 
 
 def getFullAtomsList():
-    with open('full_atoms_list.txt', 'r') as f:
-        full_atoms_list = f.read()
-    f.close()
+    # with open('full_atoms_list.txt', 'r') as f:
+    #     full_atoms_list = f.read()
+    # f.close()
 
-    full_atoms_list = set(full_atoms_list.split(','))
+    # full_atoms_list = set(full_atoms_list.split(','))
 
-    return full_atoms_list
+    return {'8', '0', '16', '17', '7', '35', '9', '53', '6'}
 
 
 def getMaximizedVariedData(ft_data, size):

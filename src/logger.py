@@ -47,6 +47,7 @@ def start_WB_log_hyperparameters(cfg):
                 "n_patches": cfg.subgraphing.n_patches,
                 "type": cfg.subgraphing.type,
                 "context_size": cfg.subgraphing.context_size,
+                'target_size': cfg.subgraphing.target_size,
             },
             "jepa": {
                 "num_targets": cfg.jepa.num_targets,
@@ -88,10 +89,14 @@ def start_WB_log_hyperparameters(cfg):
         config["finetune"].update({
             "diblockFTPercentage": cfg.finetune.diblockFTPercentage
         })
-
+    
+    if cfg.experimentName != 'default':
+        groupName = cfg.experimentName
+    else:
+        groupName = f'{cfg.finetuneDataset}_v2_{percentage}'
     wandb.init(
         project='polymer-jepa',
-        group=f'{cfg.finetuneDataset}_v2_{percentage}', # v2 by default, but it could be v1, its just to keep consistency with old naming and grouping in wandb
+        group=groupName, # v2 by default, but it could be v1, its just to keep consistency with old naming and grouping in wandb
         tags=tags,
         config=config
     )

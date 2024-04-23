@@ -24,6 +24,8 @@ def set_cfg(cfg):
     cfg.modelVersion = 'v2'
     # finetuning dataset, values: 'aldeghi' or 'diblock' or 'zinc', 'diblock' can only be finetuned on a v2 model, not v1.
     cfg.finetuneDataset = 'aldeghi'
+    # name fo the experiment to track on wandb
+    cfg.experimentName = 'default'
 
     # ------------------------------------------------------------------------ #
     # Training options
@@ -118,11 +120,13 @@ def set_cfg(cfg):
     # The number of partitions we want (upper bound) some subgraphs could be empty
     cfg.subgraphing.n_patches = 32
     # 0 = motif, 1 = metis, 2 = random walk
-    cfg.subgraphing.type = 0
+    cfg.subgraphing.type = 2
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph
     cfg.subgraphing.context_size=0.5
+    # The size of the target subgraph in percentage of the original graph
+    cfg.subgraphing.target_size=0.15
 
 
     # ------------------------------------------------------------------------ #

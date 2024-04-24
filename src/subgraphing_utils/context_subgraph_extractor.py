@@ -156,33 +156,38 @@ def metis2subgraphs(graph, n_patches, sizeContext, min_targets):
     G = to_networkx(graph, to_undirected=True)
 
     # Create the line graph from G
-    line_G = nx.line_graph(G)
+    # line_G = nx.line_graph(G)
 
     # Partition the line graph
-    nparts = len(line_G) // 3
-    _, edge_parts = metis.part_graph(line_G, nparts=nparts, contig=True)
+    # nparts = len(line_G) // 3
+    # _, edge_parts = metis.part_graph(line_G, nparts=nparts, contig=True)
 
-    # Map line graph edges (which are nodes in the line graph) back to original graph edges
-    original_edges = list(line_G.nodes)
+    # # Map line graph edges (which are nodes in the line graph) back to original graph edges
+    # original_edges = list(line_G.nodes)
 
-    # Group edges by partition
-    edges_by_partition = {}
-    for edge_index, part in enumerate(edge_parts):
-        if part not in edges_by_partition:
-            edges_by_partition[part] = []
-        edges_by_partition[part].append(original_edges[edge_index])
+    # # Group edges by partition
+    # edges_by_partition = {}
+    # for edge_index, part in enumerate(edge_parts):
+    #     if part not in edges_by_partition:
+    #         edges_by_partition[part] = []
+    #     edges_by_partition[part].append(original_edges[edge_index])
 
-    # Create subgraphs from these groups of edges
-    subgraphs = []
-    for part, edges in edges_by_partition.items():
-        # Initialize an empty subgraph for this partition
-        subgraph = nx.Graph()
+    # # Create subgraphs from these groups of edges
+    # subgraphs = []
+    # for part, edges in edges_by_partition.items():
+    #     # Initialize an empty subgraph for this partition
+    #     subgraph = nx.Graph()
         
-        # Add edges (and consequently the nodes) to the subgraph
-        for edge in edges:
-            subgraph.add_edge(*edge)
+    #     # Add edges (and consequently the nodes) to the subgraph
+    #     for edge in edges:
+    #         subgraph.add_edge(*edge)
         
-        subgraphs.append(set(subgraph.nodes))
+    #     subgraphs.append(set(subgraph.nodes))
+
+    # use metis ot find subgraphs
+    nparts = 7 # arbitrary choice, 6 seems a good number for the dataset considered
+    parts = metis.part_graph(G, nparts=nparts, contig=True)[1]
+    subgraphs = [set(node for node, part in enumerate(parts) if part == i) for i in range(nparts)]
 
     # eliminate empty subgraphs
     subgraphs = [sg for sg in subgraphs if sg]

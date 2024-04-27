@@ -225,8 +225,8 @@ def getFullAtomsList():
     return {'8', '0', '16', '17', '7', '35', '9', '53', '6'}
 
 
-def getMaximizedVariedData(ft_data, size):
-    torch.manual_seed(int(time.time()))
+def getMaximizedVariedData(ft_data, size, seed=None):
+    torch.manual_seed(seed)
     # shuffle the dataset randomly
     ft_data.shuffle()
     current_size = 0
@@ -288,8 +288,8 @@ def getMaximizedVariedData(ft_data, size):
 
 
 # include the least possible number of different monomerA and monomerB while making sure that all possible atoms are present in the dataset
-def getLabData(ft_data, size):
-    torch.manual_seed(int(time.time()))
+def getLabData(ft_data, size, seed=None):
+    torch.manual_seed(seed)
     ft_data.shuffle()
     current_size = 0
     i = 0
@@ -345,12 +345,15 @@ def getRandomData(ft_data, size, seed=None):
     # randomly set torch seed based on the current time
     # torch.manual_seed(int(time.time()))
     # set random seed for python
-    random.seed(seed)
+    
     dataset = ft_data #.shuffle()
     if not isinstance(dataset, list):
         dataset = [x for x in dataset]
 
+    random.seed(seed)
     dataset = random.sample(dataset, size)
+    # print first 10 elements of the dataset
+    # print(dataset[:10])
     # # print dataset stats as in getMaximizedVariedData
     # monomerADict = collections.defaultdict(int)
     # # stoichiometry and chain architecture dict (same as monomer A), but ratios here are 1/3

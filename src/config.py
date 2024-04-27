@@ -124,7 +124,7 @@ def set_cfg(cfg):
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph
-    cfg.subgraphing.context_size=0.5
+    cfg.subgraphing.context_size=0.8
     # The size of the target subgraph in percentage of the original graph
     cfg.subgraphing.target_size=0.15
 

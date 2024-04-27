@@ -48,10 +48,10 @@ class PolymerJEPAv2(nn.Module):
         
         self.target_predictor = nn.Sequential(
             nn.Linear(nhid, nhid),
-            nn.LayerNorm(nhid),
+            nn.BatchNorm1d(nhid),
             nn.ReLU(),
             nn.Linear(nhid, nhid),
-            nn.LayerNorm(nhid),
+            nn.BatchNorm1d(nhid),
             nn.ReLU(),
             nn.Linear(nhid, 2 if self.shouldUse2dHyperbola else nhid)
         )
@@ -156,8 +156,8 @@ class PolymerJEPAv2(nn.Module):
             input_context_x = embedded_context_x.reshape(-1, self.nhid)
             expanded_context_embeddings = self.context_expander(input_context_x)
 
-            input_target_x = embedded_target_x.reshape(-1, self.nhid) # take only the first patch to avoid overweighting the target embeddings
-            expanded_target_embeddings = self.target_expander(input_target_x)
+            input_target_x = embedded_target_x[:, 0, :].reshape(-1, self.nhid) # take only the first patch to avoid overweighting the target embeddings
+            expanded_target_embeddings = self.target_expander(input_target_x) # self.target_expander(input_target_x)
 
         if self.shouldUse2dHyperbola:
             x_coord = torch.cosh(embedded_target_x.mean(-1).unsqueeze(-1))
@@ -168,7 +168,11 @@ class PolymerJEPAv2(nn.Module):
         encoded_tpatch_pes = self.patch_rw_encoder(target_pes)
 
         embedded_context_x_pe_conditioned = embedded_context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # B n_targets d
+        # convert to B n_targets * d for batch norm
+        embedded_context_x_pe_conditioned = embedded_context_x_pe_conditioned.reshape(-1, self.nhid)
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
+        # convert back to B n_targets d
+        predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, self.nhid)
         return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings,torch.tensor([], requires_grad=False, device=data.y_EA.device), torch.tensor([], requires_grad=False, device=data.y_EA.device), vis_context_embedding, vis_target_embeddings, vis_graph_embedding
 
 

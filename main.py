@@ -190,8 +190,8 @@ if __name__ == '__main__':
                 ft_trn_dataset = train_dataset[int((len(train_dataset)/100)*50):] # half of the train dataset for finetuning
                 # ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
                 ft_trn_dataset.transform = train_transform
-                #ft_data = getMaximizedVariedData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))) #ft_dataset[:int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))]
-                #ft_data = getLabData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset)))
+                #ft_data = getMaximizedVariedData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset)), seeds[run_idx]) #ft_dataset[:int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))]
+                #ft_data = getLabData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset)), seeds[run_idx])
                 ft_trn_dataset = getRandomData(ft_trn_dataset, int(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)), seeds[run_idx])
                 #ft_data = getTammoData(pretrn_dataset + ft_dataset)
                 
@@ -225,8 +225,9 @@ if __name__ == '__main__':
             wandb.finish()
 
             # if we are not pretraining and we are finetuning on a pretrained model, we only need to run once
-            if not cfg.shouldPretrain and cfg.shouldFinetuneOnPretrainedModel:
-                break
+            # if not cfg.shouldPretrain and cfg.shouldFinetuneOnPretrainedModel:
+            #     break
+
             
             # if we are not pretraining and we are finetuning on a pretrained model, we only need to run once
             if not cfg.shouldPretrain and cfg.shouldFinetuneOnPretrainedModel:

@@ -82,6 +82,8 @@ def set_cfg(cfg):
     cfg.finetune.aldeghiFTPercentage = 0.01
     # diblock has around 4800 graphs in total
     cfg.finetune.diblockFTPercentage = 0.06
+    # 0 for random, 1 for lab data, 2 for maximizied variation, works only for aldeghi
+    cfg.finetune.dataScenario = 0
 
     # ------------------------------------------------------------------------ #
     # Model options
@@ -124,9 +126,9 @@ def set_cfg(cfg):
     # Whether to randomly drop a set of edges before each metis partition
     cfg.subgraphing.drop_rate = 0.3
     # The size of the context subgraph in percentage of the original graph
-    cfg.subgraphing.context_size=0.8
+    cfg.subgraphing.context_size=0.6
     # The size of the target subgraph in percentage of the original graph
-    cfg.subgraphing.target_size=0.15
+    cfg.subgraphing.target_size=0.10
 
 
     # ------------------------------------------------------------------------ #

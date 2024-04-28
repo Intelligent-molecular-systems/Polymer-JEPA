@@ -66,28 +66,32 @@ class PolymerJEPA(nn.Module):
         self.shouldUse2dHyperbola = shouldUse2dHyperbola
         self.shouldShareWeights = should_share_weights
 
+        nhidd = nhid // 2
         self.target_predictor = nn.Sequential(
-            nn.Linear(nhid, nhid),
-            nn.BatchNorm1d(nhid),
+            nn.Linear(nhid, nhidd),
+            nn.BatchNorm1d(nhidd),
             nn.ReLU(),
-            nn.Linear(nhid, nhid),
-            nn.BatchNorm1d(nhid),
+            nn.Linear(nhidd, nhidd),
+            nn.BatchNorm1d(nhidd),
             nn.ReLU(),
-            nn.Linear(nhid, 2 if self.shouldUse2dHyperbola else nhid)
+            nn.Linear(nhidd, nhidd),
+            nn.BatchNorm1d(nhidd),
+            nn.ReLU(),
+            nn.Linear(nhidd, 2 if self.shouldUse2dHyperbola else nhid)
         )
 
         if self.regularization: 
             self.expander_dim = 256
             self.context_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
             self.target_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )

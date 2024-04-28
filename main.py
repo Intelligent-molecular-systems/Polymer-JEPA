@@ -1,5 +1,6 @@
 import collections
 import os
+import math
 import random
 from sklearn.model_selection import KFold
 from src.config import cfg, update_cfg
@@ -190,11 +191,17 @@ if __name__ == '__main__':
                 ft_trn_dataset = train_dataset[int((len(train_dataset)/100)*50):] # half of the train dataset for finetuning
                 # ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
                 ft_trn_dataset.transform = train_transform
-                #ft_data = getMaximizedVariedData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset)), seeds[run_idx]) #ft_dataset[:int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))]
-                #ft_data = getLabData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset)), seeds[run_idx])
-                ft_trn_dataset = getRandomData(ft_trn_dataset, int(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)), seeds[run_idx])
-                #ft_data = getTammoData(pretrn_dataset + ft_dataset)
-                
+                # use math.ceil in order to get the same exact amount of data used by Tammo in his code
+                dataset_size = int(math.ceil(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)/64)*64)
+                # dataset_size = int(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset))
+
+                if cfg.finetune.dataScenario == 0:
+                    ft_trn_dataset = getRandomData(ft_trn_dataset, dataset_size, seeds[run_idx])
+                elif cfg.finetune.dataScenario == 1:
+                    ft_trn_dataset = getLabData(ft_trn_dataset, dataset_size, seeds[run_idx])
+                elif cfg.finetune.dataScenario == 2:
+                    ft_trn_dataset = getMaximizedVariedData(ft_trn_dataset, dataset_size, seeds[run_idx])
+                                
             elif cfg.finetuneDataset == 'diblock':
                 if cfg.shouldPretrain: # only compute pretrain datasets if we are pretraining, it's an expensive operation
                     pretrn_trn_dataset = full_aldeghi_dataset[train_index].copy()

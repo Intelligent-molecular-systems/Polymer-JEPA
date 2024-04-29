@@ -19,7 +19,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     for i, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings = model(data)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings, pseudoLabelPrediction = model(data)
         
         if dataset == 'aldeghi':
             ### visualization ###
@@ -40,7 +40,12 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings) # https://pytorch.org/docs/stable/generated/torch.nn.functional.smooth_l1_loss.html
         elif criterion_type == 1:
-            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings)
+            data.M_ensemble = data.M_ensemble.view(-1, 1)
+            # now unsqueeze dim to get it to shape (batch_size, 1, 1)
+            data.M_ensemble = data.M_ensemble.unsqueeze(1)
+            # now repeat the tensor to get it to shape (batch_size, 3, 1) repeat along dim 1
+            data.M_ensemble = data.M_ensemble.repeat(1, 3, 1)
+            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) + F.mse_loss(pseudoLabelPrediction, data.M_ensemble) * 0.00001
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:
@@ -102,12 +107,18 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
     for data in loader:
         data = data.to(device)
         model.eval()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, _, _, _, _, _ = model(data)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, _, _, _, _, _, pseudoLabelPrediction = model(data)
 
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings)
         elif criterion_type == 1:
-            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings)
+            # print(pseudoLabelPrediction.shape)
+            data.M_ensemble = data.M_ensemble.view(-1, 1)
+            # now unsqueeze dim to get it to shape (batch_size, 1, 1)
+            data.M_ensemble = data.M_ensemble.unsqueeze(1)
+            # now repeat the tensor to get it to shape (batch_size, 3, 1) repeat along dim 1
+            data.M_ensemble = data.M_ensemble.repeat(1, 3, 1)
+            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) + F.mse_loss(pseudoLabelPrediction, data.M_ensemble) * 0.00001
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:

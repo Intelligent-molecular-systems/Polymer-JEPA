@@ -78,6 +78,15 @@ class PolymerJEPAv2(nn.Module):
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
+        self.psuedoLabelPredictor = nn.Sequential(
+            nn.Linear(nhid, 50),
+            nn.ReLU(),
+            nn.Linear(50, 50),
+            nn.ReLU(),
+            nn.Linear(50, 1)
+        )
+        
+
 
     def forward(self, data):
         # Embed node features and edge attributes
@@ -126,7 +135,13 @@ class PolymerJEPAv2(nn.Module):
         with torch.no_grad():
             # pool the node embeddings to get the full graph embedding
             vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding.detach().clone(), data.batch)
-            
+
+        # with torch.no_grad():
+        # pool the node embeddings to get the full graph embedding
+        # graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch) # .detach().clone()
+        # vis_graph_embedding = graph_embedding.detach().clone() # for visualization
+        # pseudoLabelPrediction = self.psuedoLabelPredictor(graph_embedding)
+
         # map it as we do for x at the beginning
         full_graph_nodes_embedding = full_graph_nodes_embedding[data.subgraphs_nodes_mapper]
 
@@ -177,7 +192,8 @@ class PolymerJEPAv2(nn.Module):
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
         # convert back to B n_targets d
         predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, self.nhid)
-        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings,torch.tensor([], requires_grad=False, device=data.y_EA.device), torch.tensor([], requires_grad=False, device=data.y_EA.device), vis_context_embedding, vis_target_embeddings, vis_graph_embedding
+        pseudoLabelPrediction = self.psuedoLabelPredictor(predicted_target_embeddings)
+        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings,torch.tensor([], requires_grad=False, device=data.y_EA.device), torch.tensor([], requires_grad=False, device=data.y_EA.device), vis_context_embedding, vis_target_embeddings, vis_graph_embedding, pseudoLabelPrediction
 
 
     def encode(self, data):

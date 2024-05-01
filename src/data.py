@@ -83,6 +83,7 @@ def get_graphs(dataset='aldeghi'):
                 sphere_values = df.loc[i, 'sphere']
                 gyroid_values = df.loc[i, 'gyroid']
                 disordered_values = df.loc[i, 'disordered']
+                phase1 = df.loc[i, 'phase1']
                 # given the input polymer string, this function returns a pyg data object
                 graph = poly_smiles_to_graph(
                     poly_strings=poly_strings, 
@@ -91,7 +92,8 @@ def get_graphs(dataset='aldeghi'):
                     y_cylinder=cylinder_values,
                     y_sphere=sphere_values, 
                     y_gyroid=gyroid_values,
-                    y_disordered=disordered_values
+                    y_disordered=disordered_values,
+                    phase1=phase1
                 ) 
                 all_graphs.append(graph)
         else:

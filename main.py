@@ -1,7 +1,8 @@
 import collections
 import os
+import math
 import random
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedShuffleSplit
 from src.config import cfg, update_cfg
 from src.data import create_data, getMaximizedVariedData, getLabData, getRandomData, getTammoData
 from src.finetune import finetune
@@ -152,6 +153,8 @@ if __name__ == '__main__':
     trn_losses = []
     val_losses = []
     metrics = collections.defaultdict(list)
+    # generate a random seed for each run, always the same for reproducibility
+    seeds = [42, 123, 777, 888, 999]
 
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
         full_aldeghi_dataset, train_transform, val_transform = create_data(cfg)
@@ -174,21 +177,31 @@ if __name__ == '__main__':
                 train_dataset = full_aldeghi_dataset[train_index].copy()
 
                 if cfg.shouldPretrain:
-                    pretrn_trn_dataset = train_dataset[:len(train_dataset)//2] # half of the train dataset for pretraining
+                    # keep 12.5% of the train dataset for finetuning, corresponding to 10% of the full dataset
+                    pretrn_trn_dataset = train_dataset[:int((len(train_dataset)/100)*50)] # half of the train dataset for pretraining
+
+                    # pretrn_trn_dataset = train_dataset[:len(train_dataset)//2] # half of the train dataset for pretraining
                     pretrn_trn_dataset.transform = train_transform
 
+                
                 pretrn_val_dataset = full_aldeghi_dataset[test_index].copy()
                 pretrn_val_dataset.transform = val_transform
                 pretrn_val_dataset = [x for x in pretrn_val_dataset] # apply transform only once
                 ft_val_dataset = pretrn_val_dataset # use same val dataset for pretraining and finetuning
-
-                ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
+                ft_trn_dataset = train_dataset[int((len(train_dataset)/100)*50):] # half of the train dataset for finetuning
+                # ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
                 ft_trn_dataset.transform = train_transform
-                #ft_data = getMaximizedVariedData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))) #ft_dataset[:int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset))]
-                #ft_data = getLabData(ft_dataset.copy(), int(cfg.finetune.aldeghiFTPercentage*len(ft_dataset)))
-                ft_trn_dataset = getRandomData(ft_trn_dataset, int(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)))
-                #ft_data = getTammoData(pretrn_dataset + ft_dataset)
-                
+                # use math.ceil in order to get the same exact amount of data used by Tammo in his code
+                dataset_size = int(math.ceil(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)/64)*64)
+                # dataset_size = int(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset))
+
+                if cfg.finetune.dataScenario == 0:
+                    ft_trn_dataset = getRandomData(ft_trn_dataset, dataset_size, seeds[run_idx])
+                elif cfg.finetune.dataScenario == 1:
+                    ft_trn_dataset = getLabData(ft_trn_dataset, dataset_size, seeds[run_idx])
+                elif cfg.finetune.dataScenario == 2:
+                    ft_trn_dataset = getMaximizedVariedData(ft_trn_dataset, dataset_size, seeds[run_idx])
+                                
             elif cfg.finetuneDataset == 'diblock':
                 if cfg.shouldPretrain: # only compute pretrain datasets if we are pretraining, it's an expensive operation
                     pretrn_trn_dataset = full_aldeghi_dataset[train_index].copy()
@@ -199,10 +212,15 @@ if __name__ == '__main__':
 
                 if run_idx == 0: # load the dataset only once
                     diblock_dataset = torch.load('Data/diblock_graphs_list.pt') 
-                random.seed(time.time())
-                diblock_dataset = random.sample(diblock_dataset, len(diblock_dataset))
-                ft_trn_dataset = diblock_dataset[:int(cfg.finetune.diblockFTPercentage*len(diblock_dataset))].copy()
-                ft_val_dataset = diblock_dataset[int(cfg.finetune.diblockFTPercentage*len(diblock_dataset)):].copy()
+                random.seed(seeds[run_idx])
+
+                phase1_labels = [graph.phase1 for graph in diblock_dataset]
+
+                sss = StratifiedShuffleSplit(n_splits=1, test_size=1-cfg.finetune.diblockFTPercentage, random_state=seeds[run_idx])
+
+                for train_index, test_index in sss.split(diblock_dataset, phase1_labels):
+                    ft_trn_dataset = [diblock_dataset[i] for i in train_index]
+                    ft_val_dataset = [diblock_dataset[i] for i in test_index]
 
             ft_trn_loss, ft_val_loss, metric = run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset)
             print(f"losses_{run_idx}:", ft_trn_loss.item(), ft_val_loss.item())
@@ -219,8 +237,9 @@ if __name__ == '__main__':
             wandb.finish()
 
             # if we are not pretraining and we are finetuning on a pretrained model, we only need to run once
-            if not cfg.shouldPretrain and cfg.shouldFinetuneOnPretrainedModel:
-                break
+            # if not cfg.shouldPretrain and cfg.shouldFinetuneOnPretrainedModel:
+            #     break
+
             
     elif cfg.finetuneDataset == 'zinc':
         # for zinc, create_data returns directly the datasets, not the trasforms

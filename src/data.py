@@ -83,6 +83,7 @@ def get_graphs(dataset='aldeghi'):
                 sphere_values = df.loc[i, 'sphere']
                 gyroid_values = df.loc[i, 'gyroid']
                 disordered_values = df.loc[i, 'disordered']
+                phase1 = df.loc[i, 'phase1']
                 # given the input polymer string, this function returns a pyg data object
                 graph = poly_smiles_to_graph(
                     poly_strings=poly_strings, 
@@ -91,7 +92,8 @@ def get_graphs(dataset='aldeghi'):
                     y_cylinder=cylinder_values,
                     y_sphere=sphere_values, 
                     y_gyroid=gyroid_values,
-                    y_disordered=disordered_values
+                    y_disordered=disordered_values,
+                    phase1=phase1
                 ) 
                 all_graphs.append(graph)
         else:
@@ -119,6 +121,7 @@ def create_data(cfg):
         patch_num_diff=cfg.pos_enc.patch_num_diff,
         drop_rate=cfg.subgraphing.drop_rate,
         context_size=cfg.subgraphing.context_size,
+        target_size=cfg.subgraphing.target_size,
         dataset=cfg.finetuneDataset
     )
 
@@ -131,6 +134,7 @@ def create_data(cfg):
         patch_num_diff=cfg.pos_enc.patch_num_diff,
         drop_rate=0.0, 
         context_size=cfg.subgraphing.context_size,
+        target_size=cfg.subgraphing.target_size,
         dataset=cfg.finetuneDataset
     )
     
@@ -214,17 +218,17 @@ def printStats(graphs):
 
 
 def getFullAtomsList():
-    with open('full_atoms_list.txt', 'r') as f:
-        full_atoms_list = f.read()
-    f.close()
+    # with open('full_atoms_list.txt', 'r') as f:
+    #     full_atoms_list = f.read()
+    # f.close()
 
-    full_atoms_list = set(full_atoms_list.split(','))
+    # full_atoms_list = set(full_atoms_list.split(','))
 
-    return full_atoms_list
+    return {'8', '0', '16', '17', '7', '35', '9', '53', '6'}
 
 
-def getMaximizedVariedData(ft_data, size):
-    torch.manual_seed(int(time.time()))
+def getMaximizedVariedData(ft_data, size, seed=None):
+    torch.manual_seed(seed)
     # shuffle the dataset randomly
     ft_data.shuffle()
     current_size = 0
@@ -286,8 +290,8 @@ def getMaximizedVariedData(ft_data, size):
 
 
 # include the least possible number of different monomerA and monomerB while making sure that all possible atoms are present in the dataset
-def getLabData(ft_data, size):
-    torch.manual_seed(int(time.time()))
+def getLabData(ft_data, size, seed=None):
+    torch.manual_seed(seed)
     ft_data.shuffle()
     current_size = 0
     i = 0
@@ -338,17 +342,20 @@ def getLabData(ft_data, size):
     return dataset
 
 
-def getRandomData(ft_data, size):
+def getRandomData(ft_data, size, seed=None):
     # select 'size' number of random data points from ft_data
     # randomly set torch seed based on the current time
     # torch.manual_seed(int(time.time()))
     # set random seed for python
-    random.seed(int(time.time()))
+    
     dataset = ft_data #.shuffle()
     if not isinstance(dataset, list):
         dataset = [x for x in dataset]
 
+    random.seed(seed)
     dataset = random.sample(dataset, size)
+    # print first 10 elements of the dataset
+    # print(dataset[:10])
     # # print dataset stats as in getMaximizedVariedData
     # monomerADict = collections.defaultdict(int)
     # # stoichiometry and chain architecture dict (same as monomer A), but ratios here are 1/3

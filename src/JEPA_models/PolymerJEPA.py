@@ -68,7 +68,10 @@ class PolymerJEPA(nn.Module):
 
         self.target_predictor = nn.Sequential(
             nn.Linear(nhid, nhid),
-            nn.LayerNorm(nhid),
+            nn.BatchNorm1d(nhid),
+            nn.ReLU(),
+            nn.Linear(nhid, nhid),
+            nn.BatchNorm1d(nhid),
             nn.ReLU(),
             nn.Linear(nhid, 2 if self.shouldUse2dHyperbola else nhid)
         )
@@ -77,14 +80,14 @@ class PolymerJEPA(nn.Module):
             self.expander_dim = 256
             self.context_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
             self.target_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
@@ -211,8 +214,11 @@ class PolymerJEPA(nn.Module):
 
         # condition (by adding) context embedding with positional encoding
         embedded_context_x_pe_conditioned = embedded_context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # B n_targets d
+        # convert to B n_targets * d for batch norm
+        embedded_context_x_pe_conditioned = embedded_context_x_pe_conditioned.reshape(-1, self.nhid)
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
-
+        # convert back to B n_targets d
+        predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, self.nhid)
         return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, vis_initial_context_embeddings, vis_initial_target_embedding, vis_context_embedding, vis_target_embeddings, vis_graph_embedding
 
     

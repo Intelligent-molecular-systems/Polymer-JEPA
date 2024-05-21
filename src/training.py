@@ -13,7 +13,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
 
     # initialize lists for visualization
     all_graph_embeddings, all_initial_context_embeddings, all_initial_target_embeddings, all_target_encoder_embeddings, all_context_encoder_embeddings = torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device)
-    mon_A_type, stoichiometry, inv_losses, cov_losses, var_losses = [], [], [], [], []
+    mon_A_type, stoichiometry, chain_arch, inv_losses, cov_losses, var_losses = [], [], [], [], [], []
     target_embeddings_saved, predicted_target_embeddings_saved = None, None
   
     for i, data in enumerate(train_loader):
@@ -34,6 +34,10 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
                 all_context_encoder_embeddings = torch.cat((all_context_encoder_embeddings, context_embeddings.detach().clone()), dim=0)
                 mon_A_type.extend(data.mon_A_type)
                 stoichiometry.extend(data.stoichiometry)
+
+                for graph in data.to_data_list():
+                    chain_arch.append(str(graph.full_input_string.split("|")[-1]).split(":")[1])
+                
             ### End visualization ### 
             
         # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
@@ -88,7 +92,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         print(f'\ninv_loss: {avg_inv_loss:.5f}, cov_loss: {avg_cov_loss:.5f}, var_loss: {avg_var_loss:.5f}')        
         print(f'Weighted values: inv_loss: {inv_weight*avg_inv_loss:.5f}, cov_loss: {cov_weight*avg_cov_loss:.5f}, var_loss: {var_weight*avg_var_loss:.5f}\n')
 
-    embeddings_data = (all_initial_context_embeddings, all_initial_target_embeddings, all_target_encoder_embeddings, all_graph_embeddings, all_context_encoder_embeddings, mon_A_type, stoichiometry)
+    embeddings_data = (all_initial_context_embeddings, all_initial_target_embeddings, all_target_encoder_embeddings, all_graph_embeddings, all_context_encoder_embeddings, mon_A_type, stoichiometry, chain_arch)
 
     loss_data = (target_embeddings_saved, predicted_target_embeddings_saved)
     wandb_log_dict["pretrain_epoch"] = epoch

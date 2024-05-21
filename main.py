@@ -2,7 +2,7 @@ import collections
 import os
 import math
 import random
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedShuffleSplit
 from src.config import cfg, update_cfg
 from src.data import create_data, getMaximizedVariedData, getLabData, getRandomData, getTammoData
 from src.finetune import finetune
@@ -213,9 +213,14 @@ if __name__ == '__main__':
                 if run_idx == 0: # load the dataset only once
                     diblock_dataset = torch.load('Data/diblock_graphs_list.pt') 
                 random.seed(seeds[run_idx])
-                diblock_dataset = random.sample(diblock_dataset, len(diblock_dataset))
-                ft_trn_dataset = diblock_dataset[:int(cfg.finetune.diblockFTPercentage*len(diblock_dataset))].copy()
-                ft_val_dataset = diblock_dataset[int(cfg.finetune.diblockFTPercentage*len(diblock_dataset)):].copy()
+
+                phase1_labels = [graph.phase1 for graph in diblock_dataset]
+
+                sss = StratifiedShuffleSplit(n_splits=1, test_size=1-cfg.finetune.diblockFTPercentage, random_state=seeds[run_idx])
+
+                for train_index, test_index in sss.split(diblock_dataset, phase1_labels):
+                    ft_trn_dataset = [diblock_dataset[i] for i in train_index]
+                    ft_val_dataset = [diblock_dataset[i] for i in test_index]
 
             ft_trn_loss, ft_val_loss, metric = run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset)
             print(f"losses_{run_idx}:", ft_trn_loss.item(), ft_val_loss.item())

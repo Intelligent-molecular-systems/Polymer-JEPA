@@ -149,12 +149,14 @@ def visualize_loss_space(target_embeddings, predicted_target_embeddings, model_n
     plt.close(fig)
 
 
-def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999, isFineTuning=False, should3DPlot=False, type="FT"): 
+def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', epoch=999, isFineTuning=False, should3DPlot=False, type="FT", chain_architecture=None): 
     mon_A_type = np.array(mon_A_type)
     stoichiometry = np.array(stoichiometry)
+    chain_architecture = np.array(chain_architecture)    
 
     embeddings = embeddings.detach().cpu().clone().numpy()
 
+     # for each embedding, assign a color based on the chain architecture, the chain architecture is determined by the chain_architecture string, if it has a 0.5, 0.375, or 0.25 as value
     # Calculate mean and standard deviation statistics
     means = np.mean(embeddings, axis=0)
     stds = np.std(embeddings, axis=0)
@@ -170,6 +172,7 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
         embeddings = embeddings[indices]
         mon_A_type = mon_A_type[indices]
         stoichiometry = stoichiometry[indices]
+        chain_architecture = chain_architecture[indices]
     
     # UMAP for 2D visualization with deterministic results
     umap_2d = UMAP(n_components=2, init='random', random_state=0)
@@ -188,16 +191,20 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
     for df in [df_umap, df_tsne, df_pca]:
         df['Monomer A Type'] = mon_A_type
         df['Stoichiometry'] = stoichiometry
+        df['Chain Architecture'] = chain_architecture
 
     # Plotting
     plots_monA = []
     plots_stoich = []
+    plots_chain = []
     monA_colors=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
     for df, name in zip([df_umap, df_tsne, df_pca], ['UMAP', 't-SNE', 'PCA']):
-        fig_monA = px.scatter(df, x='Dimension 1', y='Dimension 2',  color='Monomer A Type', color_discrete_sequence=monA_colors, title=f'{name} by Monomer A Type - Epoch: {epoch}', labels={'Monomer A Type': 'Monomer A Type'}, category_orders={'Monomer A Type': ['[*:1]c1cc(F)c([*:2])cc1F', '[*:1]c1cc2ccc3cc([*:2])cc4ccc(c1)c2c34', '[*:1]c1ccc(-c2ccc([*:2])s2)s1', '[*:1]c1ccc([*:2])cc1', '[*:1]c1ccc2c(c1)[nH]c1cc([*:2])ccc12', '[*:1]c1ccc([*:2])c2nsnc12', '[*:1]c1ccc2c(c1)C(C)(C)c1cc([*:2])ccc1-2', '[*:1]c1cc2cc3sc([*:2])cc3cc2s1', '[*:1]c1ccc2c(c1)S(=O)(=O)c1cc([*:2])ccc1-2']}, opacity=0.85)
-        fig_stoich = px.scatter(df, x='Dimension 1', y='Dimension 2', color='Stoichiometry', color_discrete_sequence=px.colors.qualitative.Set1, title=f'{name} by Stoichiometry - Epoch: {epoch}', category_orders={'Stoichiometry': ['1:1', '3:1', '1:3']}, opacity=0.85)
+        fig_monA = px.scatter(df, x='Dimension 1', y='Dimension 2',  color='Monomer A Type', color_discrete_sequence=px.colors.qualitative.T10, title=f'{name} by Monomer A Type - Epoch: {epoch}', labels={'Monomer A Type': 'Monomer A Type'}, category_orders={'Monomer A Type': ['[*:1]c1cc(F)c([*:2])cc1F', '[*:1]c1cc2ccc3cc([*:2])cc4ccc(c1)c2c34', '[*:1]c1ccc(-c2ccc([*:2])s2)s1', '[*:1]c1ccc([*:2])cc1', '[*:1]c1ccc2c(c1)[nH]c1cc([*:2])ccc12', '[*:1]c1ccc([*:2])c2nsnc12', '[*:1]c1ccc2c(c1)C(C)(C)c1cc([*:2])ccc1-2', '[*:1]c1cc2cc3sc([*:2])cc3cc2s1', '[*:1]c1ccc2c(c1)S(=O)(=O)c1cc([*:2])ccc1-2']}, opacity=0.85)
+        fig_stoich = px.scatter(df, x='Dimension 1', y='Dimension 2', color='Stoichiometry', color_discrete_sequence=px.colors.qualitative.Plotly, title=f'{name} by Stoichiometry - Epoch: {epoch}', category_orders={'Stoichiometry': ['1:1', '3:1', '1:3']}, opacity=0.85)
+        fig_chain = px.scatter(df, x='Dimension 1', y='Dimension 2', color='Chain Architecture', color_discrete_sequence=px.colors.qualitative.Set2, title=f'{name} by Chain Architecture - Epoch: {epoch}', category_orders={'Chain Architecture': ['0.5', '0.375', '0.25']}, opacity=0.85)
         fig_monA.update_layout(width=800, height=600)
         fig_stoich.update_layout(width=800, height=600)
+        fig_chain.update_layout(width=800, height=600)
         fig_monA.update_layout(
             title_font_size=20,
             legend_title_font_size=12,
@@ -208,21 +215,28 @@ def visualeEmbeddingSpace(embeddings, mon_A_type, stoichiometry, model_name='', 
             yaxis_tickfont_size=10
         )
 
+        new_names = {'0.5': 'Alternating', '0.375': 'Block', '0.25': 'Random'}
+        fig_chain.for_each_trace(lambda t: t.update(name = new_names[t.name]))
+
         plots_monA.append(fig_monA)
         plots_stoich.append(fig_stoich)
+        plots_chain.append(fig_chain)
 
     save_folder_base = f'Results/{model_name}/{"FineTuningEmbeddingSpace" if isFineTuning else "PretrainingEmbeddingSpace"}/{type}'
-    for i, (fig_monA, fig_stoich) in enumerate(zip(plots_monA, plots_stoich)):
+    for i, (fig_monA, fig_stoich, fig_chain) in enumerate(zip(plots_monA, plots_stoich, plots_chain)):
         name = ['UMAP', 't-SNE', 'PCA'][i]
         save_folder = os.path.join(save_folder_base, name)
         os.makedirs(save_folder, exist_ok=True)
         fig_file_path_monA = os.path.join(save_folder, f"{name}_Mon_A_{epoch}{'_FT' if isFineTuning else ''}.png")
         fig_file_path_stoich = os.path.join(save_folder, f"{name}_Stoichiometry_{epoch}{'_FT' if isFineTuning else ''}.png")
+        fig_file_path_chain = os.path.join(save_folder, f"{name}_Chain_Architecture_{epoch}{'_FT' if isFineTuning else ''}.png")
         fig_monA.write_image(fig_file_path_monA)
         fig_stoich.write_image(fig_file_path_stoich)
+        fig_chain.write_image(fig_file_path_chain)
        
         wandb.log({f"{type}_{name}_Mon_A": wandb.Image(fig_file_path_monA)}, commit=False)
         wandb.log({f"{type}_{name}_Stoichiometry": wandb.Image(fig_file_path_stoich)}, commit=False)
+        wandb.log({f"{type}_{name}_Chain_Architecture": wandb.Image(fig_file_path_chain)}, commit=False)
 
 
 

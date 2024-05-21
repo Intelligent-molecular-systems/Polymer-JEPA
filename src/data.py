@@ -83,6 +83,7 @@ def get_graphs(dataset='aldeghi'):
                 sphere_values = df.loc[i, 'sphere']
                 gyroid_values = df.loc[i, 'gyroid']
                 disordered_values = df.loc[i, 'disordered']
+                phase1 = df.loc[i, 'phase1']
                 # given the input polymer string, this function returns a pyg data object
                 graph = poly_smiles_to_graph(
                     poly_strings=poly_strings, 
@@ -91,7 +92,8 @@ def get_graphs(dataset='aldeghi'):
                     y_cylinder=cylinder_values,
                     y_sphere=sphere_values, 
                     y_gyroid=gyroid_values,
-                    y_disordered=disordered_values
+                    y_disordered=disordered_values,
+                    phase1=phase1
                 ) 
                 all_graphs.append(graph)
         else:
@@ -474,3 +476,36 @@ def getTammoData(full_dataset):
     #     '[*:3]c1cc([*:4])cnc1CC',
     #     '[*:3]c1cc(N)cc([*:4])c1C' 
     # }
+
+
+def analyzeDiblockDataset():
+    csv_file = 'Data/diblock_copolymer_dataset.csv'
+    df = pd.read_csv(csv_file)
+    
+    # check how many differen entries for the 'poly_chemprop_input' column
+    poly_strings = df.loc[:, 'poly_chemprop_input']
+    for i in range(len(poly_strings)):
+        poly_strings[i] = poly_strings[i].split('|')[0]
+    poly_set = set()
+    for p in poly_strings:
+        poly_set.add(p)
+    print(poly_set)
+    print('Number of different polymer strings:', len(poly_set))
+
+    # for each polymer string, check how many different monomers are present (sepeartead by a dot)
+    n_of_monomers = []
+    for p in poly_set:
+        n_of_monomers.append(len(p.split('.')))
+    print('Number of monomers:', n_of_monomers)
+    # count how many times each number of monomers appears
+    monomer_dict = collections.defaultdict(int)
+    for n in n_of_monomers:
+        monomer_dict[n] += 1
+    print('Monomer dict:', monomer_dict)
+
+    # use rdkit to plot randomly 9 polymer strings
+    for i in range(9):
+        m = Chem.MolFromSmiles(poly_strings[i])
+        Chem.Draw.MolToImage(m).show()
+    
+

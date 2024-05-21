@@ -26,8 +26,7 @@ class GeneralJEPAv1(nn.Module):
                  num_target_patches=4,
                  should_share_weights=False,
                  regularization=False,
-                 shouldUse2dHyperbola=False,
-                 shouldUseNodeWeights=False
+                 shouldUse2dHyperbola=False
         ):
 
         super().__init__()
@@ -42,7 +41,7 @@ class GeneralJEPAv1(nn.Module):
         self.input_encoder = nn.Embedding(nfeat_node, nhid)
         self.edge_encoder = nn.Embedding(nfeat_edge, nhid)
 
-        self.gnns = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
+        self.gnns = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=nlayer_gnn, gnn_type="GINEConv",
                        bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
                                         
         self.U = nn.ModuleList(
@@ -64,7 +63,10 @@ class GeneralJEPAv1(nn.Module):
 
         self.target_predictor = nn.Sequential(
             nn.Linear(nhid, nhid),
-            nn.LayerNorm(nhid),
+            nn.BatchNorm1d(nhid),
+            nn.ReLU(),
+            nn.Linear(nhid, nhid),
+            nn.BatchNorm1d(nhid),
             nn.ReLU(),
             nn.Linear(nhid, 2 if self.shouldUse2dHyperbola else nhid)
         )
@@ -73,14 +75,14 @@ class GeneralJEPAv1(nn.Module):
             self.expander_dim = 256
             self.context_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
             self.target_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
@@ -162,16 +164,6 @@ class GeneralJEPAv1(nn.Module):
         embedded_target_x = embedded_target_x.reshape(-1, self.num_target_patches, self.nhid) # (B * n_targets) d ->  B n_targets d
         vis_target_embeddings = embedded_target_x[:, 0, :].detach().clone()  # take a single target for each graph for visualization, so element [0] at position 1 (n_targets)
 
-        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
-        # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
-
-        # # Example for target subgraphs; adjust according to actual data structure
-        # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
-        # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
-
-        # for graph in data.to_data_list():
-        #     plot_from_transform_attributes(graph)
-
         expanded_context_embeddings = torch.tensor([]) # save the embeddings for regularization
         expanded_target_embeddings = torch.tensor([])
         if self.regularization: 
@@ -191,10 +183,11 @@ class GeneralJEPAv1(nn.Module):
         encoded_tpatch_pes = self.patch_rw_encoder(target_pes)
 
         embedded_context_x_pe_conditioned = embedded_context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # B n_targets d
-        
+        # convert to B n_targets * d for batch norm
+        embedded_context_x_pe_conditioned = embedded_context_x_pe_conditioned.reshape(-1, self.nhid)
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
-
-
+        # convert back to B n_targets d
+        predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, self.nhid)
         return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, vis_initial_context_embeddings, vis_initial_target_embedding, vis_context_embedding, vis_target_embeddings, vis_graph_embedding
     
 
@@ -206,7 +199,6 @@ class GeneralJEPAv1(nn.Module):
         x += self.rw_encoder(data.rw_pos_enc)
 
         ### Patch Encoder ###
-        # x = torch.cat([data.x, data.rw_pos_enc], dim=1) # add node PE to the node initial embeddings
         x = x[data.subgraphs_nodes_mapper]
         edge_index = data.combined_subgraphs
         edge_attr = edge_attr[data.subgraphs_edges_mapper]

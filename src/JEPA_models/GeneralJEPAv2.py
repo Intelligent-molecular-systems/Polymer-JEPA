@@ -43,7 +43,7 @@ class GeneralJEPAv2(nn.Module):
         self.contextU = nn.ModuleList(
                 [MLP(nhid, nhid, nlayer=1, with_final_activation=True) for _ in range(nlayer_gnn-1)])
         
-        # put the above two in a unique module, like create a GNN class i can use.
+        # useful for EMA in training.py
         self.context_encoder = nn.ModuleList([self.contextGNNs, self.contextU])
         
         if regularization and should_share_weights:
@@ -76,14 +76,14 @@ class GeneralJEPAv2(nn.Module):
             self.expander_dim = 256
             self.context_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
             self.target_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
@@ -210,11 +210,20 @@ class GeneralJEPAv2(nn.Module):
 
         edge_attr = self.edge_encoder(data.edge_attr)
        
-        node_embeddings = self.target_encoder(
-            full_x, 
-            data.edge_index, 
-            edge_attr
-        )
+        parameters = (full_x, data.edge_index, edge_attr)
+
+        for i, gnn in enumerate(self.targetGNNs):
+            if i > 0:
+                graphEmbedding = global_mean_pool(full_x, data.batch)[data.batch]
+                full_x = full_x + self.targetU[i-1](graphEmbedding)
+                
+            if i == 0:
+                full_x = gnn(*parameters)
+            else:
+                full_x = gnn(full_x, data.edge_index, edge_attr)
+
+        node_embeddings = full_x
+
 
         graph_embedding = global_mean_pool(node_embeddings, data.batch)
         return graph_embedding

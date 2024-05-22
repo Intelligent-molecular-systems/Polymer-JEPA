@@ -139,7 +139,7 @@ def set_cfg(cfg):
     # Number of patches to use as context
     cfg.jepa.num_context = 1
     # Number of patches to use as targets
-    cfg.jepa.num_targets = 3
+    cfg.jepa.num_targets = 1
     # loss/criterion/Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
     cfg.jepa.dist = 1
 

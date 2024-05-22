@@ -44,12 +44,11 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings) # https://pytorch.org/docs/stable/generated/torch.nn.functional.smooth_l1_loss.html
         elif criterion_type == 1:
-            data.M_ensemble = data.M_ensemble.view(-1, 1)
-            # now unsqueeze dim to get it to shape (batch_size, 1, 1)
-            data.M_ensemble = data.M_ensemble.unsqueeze(1)
-            # now repeat the tensor to get it to shape (batch_size, 3, 1) repeat along dim 1
-            data.M_ensemble = data.M_ensemble.repeat(1, 3, 1)
-            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) + F.mse_loss(pseudoLabelPrediction, data.M_ensemble) * 0.00001
+            jepa_loss = F.mse_loss(predicted_target_embeddings, target_embeddings)
+            # normalize the M_ensemble
+            data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
+            pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * 0.35
+            inv_loss = jepa_loss + pseudolabel_loss
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:
@@ -116,13 +115,11 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings)
         elif criterion_type == 1:
-            # print(pseudoLabelPrediction.shape)
-            data.M_ensemble = data.M_ensemble.view(-1, 1)
-            # now unsqueeze dim to get it to shape (batch_size, 1, 1)
-            data.M_ensemble = data.M_ensemble.unsqueeze(1)
-            # now repeat the tensor to get it to shape (batch_size, 3, 1) repeat along dim 1
-            data.M_ensemble = data.M_ensemble.repeat(1, 3, 1)
-            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) + F.mse_loss(pseudoLabelPrediction, data.M_ensemble) * 0.00001
+            jepa_loss = F.mse_loss(predicted_target_embeddings, target_embeddings)
+            # normalize the M_ensemble
+            data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
+            pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * 0.35
+            inv_loss = jepa_loss + pseudolabel_loss
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:

@@ -47,11 +47,11 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
 
     # if the model has a predictor head, load the weights (only the first two layers)
     if cfg.shouldFinetuneOnPretrainedModel:
-        if hasattr(model, 'psuedoLabelPredictor'):
-            predictor[0].weight = nn.parameter.Parameter(model.psuedoLabelPredictor[0].weight.clone().detach())
-            predictor[0].bias = nn.parameter.Parameter(model.psuedoLabelPredictor[0].bias.clone().detach())
-            predictor[2].weight = nn.parameter.Parameter(model.psuedoLabelPredictor[2].weight.clone().detach())
-            predictor[2].bias = nn.parameter.Parameter(model.psuedoLabelPredictor[2].bias.clone().detach())
+        if hasattr(model, 'pseudoLabelPredictor'):
+            predictor[0].weight = nn.parameter.Parameter(model.pseudoLabelPredictor[0].weight.clone().detach())
+            predictor[0].bias = nn.parameter.Parameter(model.pseudoLabelPredictor[0].bias.clone().detach())
+            predictor[2].weight = nn.parameter.Parameter(model.pseudoLabelPredictor[2].weight.clone().detach())
+            predictor[2].bias = nn.parameter.Parameter(model.pseudoLabelPredictor[2].bias.clone().detach())
     
     if cfg.frozenWeights:
         print(f'Finetuning while freezing the weights of the model {model_name}')

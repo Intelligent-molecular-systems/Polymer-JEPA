@@ -20,8 +20,7 @@ class GeneralJEPAv2(nn.Module):
         num_target_patches=4,
         should_share_weights=False,
         regularization=False,
-        shouldUse2dHyperbola=False,
-        shouldUseNodeWeights=False
+        shouldUse2dHyperbola=False
     ):
         
         super().__init__()
@@ -38,19 +37,19 @@ class GeneralJEPAv2(nn.Module):
         self.edge_encoder = nn.Embedding(nfeat_edge, nhid)
 
         
-        self.contextGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
+        self.contextGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=nlayer_gnn, gnn_type="GINEConv",
                         bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
                                             
         self.contextU = nn.ModuleList(
                 [MLP(nhid, nhid, nlayer=1, with_final_activation=True) for _ in range(nlayer_gnn-1)])
         
-        # put the above two in a unique module, like create a GNN class i can use.
+        # useful for EMA in training.py
         self.context_encoder = nn.ModuleList([self.contextGNNs, self.contextU])
         
         if regularization and should_share_weights:
             self.target_encoder = self.context_encoder
         else:
-            self.targetGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
+            self.targetGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=nlayer_gnn, gnn_type="GINEConv",
                         bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
                                             
             self.targetU = nn.ModuleList(
@@ -62,7 +61,10 @@ class GeneralJEPAv2(nn.Module):
         
         self.target_predictor = nn.Sequential(
             nn.Linear(nhid, nhid),
-            nn.LayerNorm(nhid),
+            nn.BatchNorm1d(nhid),
+            nn.ReLU(),
+            nn.Linear(nhid, nhid),
+            nn.BatchNorm1d(nhid),
             nn.ReLU(),
             nn.Linear(nhid, 2 if self.shouldUse2dHyperbola else nhid)
         )
@@ -74,26 +76,25 @@ class GeneralJEPAv2(nn.Module):
             self.expander_dim = 256
             self.context_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
             self.target_expander = nn.Sequential(
                 nn.Linear(nhid, self.expander_dim),
-                nn.LayerNorm(self.expander_dim),
+                nn.BatchNorm1d(self.expander_dim),
                 nn.ReLU(),
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
 
-    def forward(self, data, epoch=0):
+    def forward(self, data):
         # Embed node features and edge attributes
         x = self.input_encoder(data.x).squeeze()
         edge_attr = self.edge_encoder(data.edge_attr)
 
         x += self.rw_encoder(data.rw_pos_enc)
-        # x = torch.cat([data.x, data.rw_pos_enc], dim=1)
         x = x[data.subgraphs_nodes_mapper]
         edge_index = data.combined_subgraphs # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices       
         edge_attr = edge_attr[data.subgraphs_edges_mapper] # edge attributes again based on the subgraphs_edges_mapper, so we have the correct edge attributes for each subgraph
@@ -126,7 +127,6 @@ class GeneralJEPAv2(nn.Module):
 
         ### JEPA - Target Encoder ###
         # full graph nodes embedding (original full graph)
-        # full_x = torch.cat([data.x, data.rw_pos_enc], dim=1)
         full_x = self.input_encoder(data.x).squeeze()
         edge_attr = self.edge_encoder(data.edge_attr)
         full_x += self.rw_encoder(data.rw_pos_enc)
@@ -196,7 +196,11 @@ class GeneralJEPAv2(nn.Module):
         encoded_tpatch_pes = self.patch_rw_encoder(target_pes)
 
         embedded_context_x_pe_conditioned = embedded_context_x + encoded_tpatch_pes.reshape(-1, self.num_target_patches, self.nhid) # B n_targets d
+        # convert to B x n_targets x d for batch norm
+        embedded_context_x_pe_conditioned = embedded_context_x_pe_conditioned.reshape(-1, self.nhid)
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
+        # convert back to B x n_targets x d
+        predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, self.nhid)
         return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, torch.tensor([]), torch.tensor([]), vis_context_embedding, vis_target_embeddings, vis_graph_embedding
 
 
@@ -206,13 +210,20 @@ class GeneralJEPAv2(nn.Module):
 
         edge_attr = self.edge_encoder(data.edge_attr)
        
-        node_embeddings = self.target_encoder(
-            full_x, 
-            data.edge_index, 
-            edge_attr, 
-            data.edge_weight, 
-            data.node_weight
-        )
+        parameters = (full_x, data.edge_index, edge_attr)
+
+        for i, gnn in enumerate(self.targetGNNs):
+            if i > 0:
+                graphEmbedding = global_mean_pool(full_x, data.batch)[data.batch]
+                full_x = full_x + self.targetU[i-1](graphEmbedding)
+                
+            if i == 0:
+                full_x = gnn(*parameters)
+            else:
+                full_x = gnn(full_x, data.edge_index, edge_attr)
+
+        node_embeddings = full_x
+
 
         graph_embedding = global_mean_pool(node_embeddings, data.batch)
         return graph_embedding

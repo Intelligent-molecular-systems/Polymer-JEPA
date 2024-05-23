@@ -4,7 +4,7 @@ from src.JEPA_models.WDNodeMPNN import WDNodeMPNN
 from src.visualize import plot_from_transform_attributes
 import torch
 import torch.nn as nn
-from torch_geometric.nn import global_mean_pool
+from torch_geometric.nn import global_mean_pool, global_max_pool
 from torch_scatter import scatter
 
 
@@ -74,12 +74,20 @@ class PolymerJEPAv2(nn.Module):
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
+        self.pseudoLabelPredictor = nn.Sequential(
+            nn.Linear(nhid, 50),
+            nn.ReLU(),
+            nn.Linear(50, 50),
+            nn.ReLU(),
+            nn.Linear(50, 1)
+        )
+        
+
 
     def forward(self, data):
         # Embed node features and edge attributes
         x = self.input_encoder(data.x).squeeze()
         x += self.rw_encoder(data.rw_pos_enc)
-        # x = torch.cat([data.x, data.rw_pos_enc], dim=1)
         x = x[data.subgraphs_nodes_mapper]
         node_weights = data.node_weight[data.subgraphs_nodes_mapper]
         edge_index = data.combined_subgraphs # the new edge index is the one that consider the graph of disconnected subgraphs, with unique node indices       
@@ -122,7 +130,11 @@ class PolymerJEPAv2(nn.Module):
         with torch.no_grad():
             # pool the node embeddings to get the full graph embedding
             vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding.detach().clone(), data.batch)
-            
+
+        # pool the node embeddings to get the full graph embedding
+        graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
+        pseudoLabelPrediction = self.pseudoLabelPredictor(graph_embedding)
+
         # map it as we do for x at the beginning
         full_graph_nodes_embedding = full_graph_nodes_embedding[data.subgraphs_nodes_mapper]
 
@@ -132,16 +144,6 @@ class PolymerJEPAv2(nn.Module):
         # Compute the target indexes to find the target subgraphs embeddings
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
-
-        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
-        # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
-
-        # # Example for target subgraphs; adjust according to actual data structure
-        # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
-        # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
-
-        # for graph in data.to_data_list():
-        #     plot_from_transform_attributes(graph)
 
         # target subgraphs nodes embedding
         # Construct context and target PEs frome the node pes of each subgraph
@@ -173,14 +175,12 @@ class PolymerJEPAv2(nn.Module):
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
         # convert back to B n_targets d
         predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, self.nhid)
-        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings,torch.tensor([], requires_grad=False, device=data.y_EA.device), torch.tensor([], requires_grad=False, device=data.y_EA.device), vis_context_embedding, vis_target_embeddings, vis_graph_embedding
+        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings,torch.tensor([], requires_grad=False, device=data.y_EA.device), torch.tensor([], requires_grad=False, device=data.y_EA.device), vis_context_embedding, vis_target_embeddings, vis_graph_embedding, pseudoLabelPrediction
 
 
     def encode(self, data):
         full_x = self.input_encoder(data.x).squeeze()
-
-        if hasattr(data, 'rw_pos_enc'):
-            full_x += self.rw_encoder(data.rw_pos_enc)
+        full_x += self.rw_encoder(data.rw_pos_enc)
        
         node_embeddings = self.target_encoder(
             full_x, 
@@ -192,69 +192,3 @@ class PolymerJEPAv2(nn.Module):
 
         graph_embedding = global_mean_pool(node_embeddings, data.batch)
         return graph_embedding
-    
-
-     # torch.set_printoptions(threshold=10_000)
-        # print(data.subgraphs_batch.shape)
-        # print(data.subgraphs_nodes_mapper.shape)
-        # quit()
-        # x = data.x
-        # with torch.no_grad():
-        #     x = self.linearTry(x)
-        # print('x before:', x.shape)
-        # for i, row in enumerate(x):
-        #     # Round each element in the row to 2 decimal places
-        #     rounded_row = [round(element, 2) for element in row.tolist()]
-        #     print(i, rounded_row)
-
-        # print('data.subgraphs_nodes_mapper:', data.subgraphs_nodes_mapper)    
-        # x = x[data.subgraphs_nodes_mapper]
-        # print('x after:', x.shape)
-        # for i, row in enumerate(x):
-        #     # Again, round each element in the row to 2 decimal places
-        #     rounded_row = [round(element, 2) for element in row.tolist()]
-        #     print(i, rounded_row)
-
-
-# from collections import Counter
-
-        # # Step 1: Count the occurrences of each node in the mapper
-        # node_occurrences = Counter(data.subgraphs_nodes_mapper.tolist())
-
-        # # Step 2: Identify nodes that are repeated (appear more than once)
-        # repeated_nodes = {node: count for node, count in node_occurrences.items() if count > 1}
-
-        # print("Repeated Nodes and their counts:", repeated_nodes)
-
-        # node_to_subgraphs = {node: [] for node in repeated_nodes.keys()}
-        # for idx, node in enumerate(data.subgraphs_nodes_mapper.tolist()):
-        #     if node in node_to_subgraphs:
-        #         subgraph_idx = data.subgraphs_batch[idx].item()
-        #         node_to_subgraphs[node].append(subgraph_idx)
-        # i = 0
-        # for node, subgraphs in node_to_subgraphs.items():
-        #     if i < 4:
-        #         print(f"Node {node} belongs to subgraphs: {subgraphs}")
-        #     i += 1
-        # print('target_subgraphs_idx:', target_subgraphs_idx)
-        # # Debug print n of nodes in the context and target subgraphs (already with the new index keeping the batch
-        # # indexer into account) they always match with the n of nodes
-        # # we can see in the plot from the original datat
-        # n_context_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx in context_subgraph_idx]
-        # print('n of nodes in the context_subgraph_idx:', n_context_nodes)
-
-        # # # Example for target subgraphs; adjust according to actual data structure
-        # n_target_nodes = [torch.sum(data.subgraphs_batch == idx).item() for idx_list in target_subgraphs_idx for idx in idx_list]
-        # print('n of nodes in the target_subgraphs_idx:', n_target_nodes)
-        # for graph in data.to_data_list():
-        #     # plot_from_transform_attributes(graph)
-        #     # graph = data[0]
-        #     import networkx as nx
-        #     edge_index = graph.combined_subgraphs
-        #     # plot 
-        #     G_context = nx.Graph()
-        #     G_context.add_edges_from(edge_index.T.cpu().numpy())
-        #     nx.draw(G_context, with_labels=True, node_color='skyblue')
-        #     import matplotlib.pyplot as plt
-        #     plt.show()
-        # print("\n\n")

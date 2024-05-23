@@ -145,7 +145,9 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
             var_weight=cfg.pretrain.var_weight, 
             cov_weight=cfg.pretrain.cov_weight,
             epoch=epoch,
-            dataset=cfg.finetuneDataset
+            dataset=cfg.finetuneDataset,
+            jepa_weight = cfg.pseudolabel.jepa_weight,
+            m_w_weight = cfg.pseudolabel.m_w_weight
         )
 
         model.eval()
@@ -158,7 +160,9 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
             regularization=cfg.pretrain.regularization,
             inv_weight=cfg.pretrain.inv_weight, 
             var_weight=cfg.pretrain.var_weight, 
-            cov_weight=cfg.pretrain.cov_weight
+            cov_weight=cfg.pretrain.cov_weight,
+            jepa_weight = cfg.pseudolabel.jepa_weight,
+            m_w_weight = cfg.pseudolabel.m_w_weight
         )
 
         # save model weights at each epoch
@@ -182,8 +186,9 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                     # visualize initial context embeddings (wdmpnn output)
                     visualeEmbeddingSpace(
                         embeddings=embedding_data[0], 
-                        mon_A_type=embedding_data[-2], 
-                        stoichiometry=embedding_data[-1],
+                        mon_A_type=embedding_data[-3], 
+                        stoichiometry=embedding_data[-2],
+                        chain_architecture=embedding_data[-1],
                         model_name=model_name, 
                         epoch=epoch,
                         should3DPlot=cfg.visualize.should3DPlot,
@@ -193,8 +198,9 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                     # visualize initial target embeddings (wdmpnn output)
                     visualeEmbeddingSpace(
                         embeddings=embedding_data[1], 
-                        mon_A_type=embedding_data[-2], 
-                        stoichiometry=embedding_data[-1],
+                        mon_A_type=embedding_data[-3], 
+                        stoichiometry=embedding_data[-2],
+                        chain_architecture=embedding_data[-1],
                         model_name=model_name, 
                         epoch=epoch,
                         should3DPlot=cfg.visualize.should3DPlot,
@@ -204,8 +210,9 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 # visualize target embeddings (output of the target encoder for the full graph)
                 visualeEmbeddingSpace(
                     embeddings=embedding_data[2], 
-                    mon_A_type=embedding_data[-2], 
-                    stoichiometry=embedding_data[-1],
+                    mon_A_type=embedding_data[-3], 
+                    stoichiometry=embedding_data[-2],
+                    chain_architecture=embedding_data[-1],
                     model_name=model_name, 
                     epoch=epoch,
                     should3DPlot=cfg.visualize.should3DPlot,
@@ -215,8 +222,9 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 # visualize graph embeddings (output of the target encoder for the full graph)
                 visualeEmbeddingSpace(
                     embeddings=embedding_data[3], 
-                    mon_A_type=embedding_data[-2], 
-                    stoichiometry=embedding_data[-1],
+                    mon_A_type=embedding_data[-3], 
+                    stoichiometry=embedding_data[-2],
+                    chain_architecture=embedding_data[-1],
                     model_name=model_name, 
                     epoch=epoch,
                     should3DPlot=cfg.visualize.should3DPlot,
@@ -226,8 +234,9 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 # visualize context encoder embeddings
                 visualeEmbeddingSpace(
                     embeddings=embedding_data[4], 
-                    mon_A_type=embedding_data[-2], 
-                    stoichiometry=embedding_data[-1],
+                    mon_A_type=embedding_data[-3], 
+                    stoichiometry=embedding_data[-2],
+                    chain_architecture=embedding_data[-1],
                     model_name=model_name, 
                     epoch=epoch,
                     should3DPlot=cfg.visualize.should3DPlot,

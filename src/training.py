@@ -7,19 +7,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 import wandb
 
-def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0, dataset='aldeghi'):
+def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0, dataset='aldeghi', jepa_weight=0.5, m_w_weight=0.5):
     
     total_loss = 0
 
     # initialize lists for visualization
     all_graph_embeddings, all_initial_context_embeddings, all_initial_target_embeddings, all_target_encoder_embeddings, all_context_encoder_embeddings = torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device), torch.tensor([], requires_grad=False, device=device)
-    mon_A_type, stoichiometry, inv_losses, cov_losses, var_losses = [], [], [], [], []
+    mon_A_type, stoichiometry, chain_arch, inv_losses, cov_losses, var_losses = [], [], [], [], [], []
     target_embeddings_saved, predicted_target_embeddings_saved = None, None
   
     for i, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings = model(data)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings, pseudoLabelPrediction = model(data)
         
         if dataset == 'aldeghi':
             ### visualization ###
@@ -34,13 +34,21 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
                 all_context_encoder_embeddings = torch.cat((all_context_encoder_embeddings, context_embeddings.detach().clone()), dim=0)
                 mon_A_type.extend(data.mon_A_type)
                 stoichiometry.extend(data.stoichiometry)
+
+                for graph in data.to_data_list():
+                    chain_arch.append(str(graph.full_input_string.split("|")[-1]).split(":")[1])
+                
             ### End visualization ### 
             
         # Distance function: 0 = 2d Hyper, 1 = Euclidean, 2 = Hyperbolic
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings) # https://pytorch.org/docs/stable/generated/torch.nn.functional.smooth_l1_loss.html
         elif criterion_type == 1:
-            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings)
+            jepa_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) * jepa_weight
+            # normalize the M_ensemble
+            data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
+            pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * m_w_weight
+            inv_loss = jepa_loss + pseudolabel_loss
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:
@@ -88,7 +96,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         print(f'\ninv_loss: {avg_inv_loss:.5f}, cov_loss: {avg_cov_loss:.5f}, var_loss: {avg_var_loss:.5f}')        
         print(f'Weighted values: inv_loss: {inv_weight*avg_inv_loss:.5f}, cov_loss: {cov_weight*avg_cov_loss:.5f}, var_loss: {var_weight*avg_var_loss:.5f}\n')
 
-    embeddings_data = (all_initial_context_embeddings, all_initial_target_embeddings, all_target_encoder_embeddings, all_graph_embeddings, all_context_encoder_embeddings, mon_A_type, stoichiometry)
+    embeddings_data = (all_initial_context_embeddings, all_initial_target_embeddings, all_target_encoder_embeddings, all_graph_embeddings, all_context_encoder_embeddings, mon_A_type, stoichiometry, chain_arch)
 
     loss_data = (target_embeddings_saved, predicted_target_embeddings_saved)
     wandb_log_dict["pretrain_epoch"] = epoch
@@ -97,17 +105,23 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
 
 
 @ torch.no_grad()
-def test(loader, model, device, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1):
+def test(loader, model, device, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, jepa_weight=0.5, m_w_weight=0.5):
     total_loss = 0
-    for data in loader:
+    for idx, data in enumerate(loader):
         data = data.to(device)
         model.eval()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, _, _, _, _, _ = model(data)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, _, _, _, _, _, pseudoLabelPrediction = model(data)
 
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings)
         elif criterion_type == 1:
-            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings)
+            jepa_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) * jepa_weight
+            # normalize the M_ensemble
+            data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
+            pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * m_w_weight
+            if idx == 0:
+                print(f'jepa_loss: {jepa_loss.item()}, pseudolabel_loss: {pseudolabel_loss.item()}')
+            inv_loss = jepa_loss + pseudolabel_loss
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:

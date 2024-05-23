@@ -129,10 +129,10 @@ class PolymerJEPAv2(nn.Module):
 
         with torch.no_grad():
             # pool the node embeddings to get the full graph embedding
-            vis_graph_embedding = global_max_pool(full_graph_nodes_embedding.detach().clone(), data.batch)
+            vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding.detach().clone(), data.batch)
 
         # pool the node embeddings to get the full graph embedding
-        graph_embedding = global_max_pool(full_graph_nodes_embedding, data.batch)
+        graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
         pseudoLabelPrediction = self.pseudoLabelPredictor(graph_embedding)
 
         # map it as we do for x at the beginning

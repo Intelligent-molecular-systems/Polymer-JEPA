@@ -27,6 +27,9 @@ def set_cfg(cfg):
     # name fo the experiment to track on wandb
     cfg.experimentName = 'default'
 
+    cfg.pseudolabel = CN()
+    cfg.pseudolabel.jepa_weight = 1.0
+    cfg.pseudolabel.m_w_weight = 0.1
     # ------------------------------------------------------------------------ #
     # Training options
     # ------------------------------------------------------------------------ #

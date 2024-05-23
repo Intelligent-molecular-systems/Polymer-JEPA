@@ -52,6 +52,10 @@ def start_WB_log_hyperparameters(cfg):
             "jepa": {
                 "num_targets": cfg.jepa.num_targets,
                 "dist": cfg.jepa.dist,
+            },
+            "pseudolabel": {
+                "jepa_weight": cfg.pseudolabel.jepa_weight,
+                "m_w_weight": cfg.pseudolabel.m_w_weight,
             }
         }
 

@@ -185,6 +185,8 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
                 )
                 metrics['prc_mean'] = prc_mean
                 metrics['roc_mean'] = roc_mean
+            elif cfg.finetuneDataset == 'zinc':
+                print(f'Val Loss: {val_loss}')
             else:
                 raise ValueError('Invalid dataset name')
     

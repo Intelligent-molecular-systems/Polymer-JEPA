@@ -78,8 +78,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
                 regularization=cfg.pretrain.regularization,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0,
-                shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
+                shouldUse2dHyperbola=cfg.jepa.dist == 0
             ).to(device)
 
         elif cfg.modelVersion == 'v2':
@@ -94,8 +93,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
                 regularization=cfg.pretrain.regularization,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0,
-                shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
+                shouldUse2dHyperbola=cfg.jepa.dist == 0
             ).to(device)
         else:
             raise ValueError('Invalid model version')

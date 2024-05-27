@@ -37,7 +37,7 @@ class GeneralJEPAv2(nn.Module):
         self.edge_encoder = nn.Embedding(nfeat_edge, nhid)
 
         
-        self.contextGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=nlayer_gnn, gnn_type="GINEConv",
+        self.contextGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
                         bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
                                             
         self.contextU = nn.ModuleList(
@@ -49,7 +49,7 @@ class GeneralJEPAv2(nn.Module):
         if regularization and should_share_weights:
             self.target_encoder = self.context_encoder
         else:
-            self.targetGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=nlayer_gnn, gnn_type="GINEConv",
+            self.targetGNNs = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
                         bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
                                             
             self.targetU = nn.ModuleList(

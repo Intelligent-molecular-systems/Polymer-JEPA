@@ -97,8 +97,8 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
 
     lin_mae = mean_absolute_error(y_val, y_pred_val)
     trn_r2 = predictor.score(X_train, y_train)
-    # print(f'Train R2.: {trn_r2}')
-    # print(f'Val MAE.: {lin_mae}')
+    print(f'Train R2.: {trn_r2}')
+    print(f'Val MAE.: {lin_mae}')
 
     metrics = {'train_r2': trn_r2, 'val_mae': lin_mae}
     return metrics

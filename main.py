@@ -190,7 +190,10 @@ if __name__ == '__main__':
                 # ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
                 ft_trn_dataset.transform = train_transform
                 # use math.ceil in order to get the same exact amount of data used by Tammo in his code
-                dataset_size = int(math.ceil(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)/64)*64)
+                if cfg.finetune.aldeghiFTPercentage == 1:
+                    dataset_size = len(ft_trn_dataset)
+                else:
+                    dataset_size = int(math.ceil(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset)/64)*64)
                 # dataset_size = int(cfg.finetune.aldeghiFTPercentage*len(ft_trn_dataset))
 
                 if cfg.finetune.dataScenario == 0:
@@ -221,7 +224,8 @@ if __name__ == '__main__':
                     ft_val_dataset = [diblock_dataset[i] for i in test_index]
 
             ft_trn_loss, ft_val_loss, metric = run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset)
-            print(f"losses_{run_idx}:", ft_trn_loss.item(), ft_val_loss.item())
+            if not cfg.finetune.isLinear:
+                print(f"losses_{run_idx}:", ft_trn_loss.item(), ft_val_loss.item())
             wandb_dict = {'final_ft_val_loss': ft_val_loss}
             trn_losses.append(ft_trn_loss)
             val_losses.append(ft_val_loss)

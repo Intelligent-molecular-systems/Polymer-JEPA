@@ -178,7 +178,9 @@ def metisZinc(data, n_patches, sizeContext, n_targets):
     context_subgraphs_used = []
     for idx in range(n_patches-max_patch_id, n_patches):
         context_subgraph.update(subgraphs_node_mapper[node_mask[idx]])
-        context_subgraphs_used.append(subgraphs_node_mapper[node_mask[idx]])
+        # check if the subgraph is not empty
+        if len(subgraphs_node_mapper[node_mask[idx]]) > 0:
+            context_subgraphs_used.append(subgraphs_node_mapper[node_mask[idx]])
         if len(context_subgraph) >= context_size:
             break
     

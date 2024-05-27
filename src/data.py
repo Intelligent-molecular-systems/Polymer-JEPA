@@ -351,9 +351,14 @@ def getRandomData(ft_data, size, seed=None):
     dataset = ft_data #.shuffle()
     if not isinstance(dataset, list):
         dataset = [x for x in dataset]
-
+    
     random.seed(seed)
-    dataset = random.sample(dataset, size)
+    if size != len(ft_data):
+        dataset = random.sample(dataset, size)
+    else:
+        random.shuffle(dataset)
+
+        
     # print first 10 elements of the dataset
     # print(dataset[:10])
     # # print dataset stats as in getMaximizedVariedData

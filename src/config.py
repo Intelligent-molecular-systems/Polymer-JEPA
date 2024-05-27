@@ -17,7 +17,7 @@ def set_cfg(cfg):
     # in case we want to finetune on a model that was pretrained
     cfg.shouldFinetuneOnPretrainedModel = True
     # name of the pretrained model, used only if shouldPretrain is False
-    cfg.pretrainedModelName = 'name'
+    cfg.pretrainedModelName = 'name' #no rw pos 1drQ8APV W2S5rza7
     # whether to freeze the weights of the pretrained model when finetuning
     cfg.frozenWeights = False
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
@@ -27,6 +27,9 @@ def set_cfg(cfg):
     # name fo the experiment to track on wandb
     cfg.experimentName = 'default'
 
+    cfg.pseudolabel = CN()
+    cfg.pseudolabel.jepa_weight = 1.0
+    cfg.pseudolabel.m_w_weight = 0.1
     # ------------------------------------------------------------------------ #
     # Training options
     # ------------------------------------------------------------------------ #

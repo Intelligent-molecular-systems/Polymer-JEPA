@@ -1,7 +1,7 @@
 from copy import deepcopy
 from matplotlib import pyplot as plt
 from rdkit import Chem
-from rdkit.Chem import Draw
+from rdkit.Chem import Draw, Descriptors
 from src.subgraphing_utils.motif_subgraphing import get_motifs, plot_motifs
 import src.featurization_utils.featurization_helper as ft
 import torch
@@ -199,6 +199,15 @@ def poly_smiles_to_graph(poly_strings, isAldeghiDataset=True, **label_dicts):
 
     # plot_motifs(rwmol, cliques)
 
+    monomer_smiles = poly_strings.split("|")[0].split('.')
+    monomer_weights = poly_strings.split("|")[1:-1]
+
+    mol_mono_1 = ft.make_mol(monomer_smiles[0], 0, 0)
+    mol_mono_2 = ft.make_mol(monomer_smiles[1], 0, 0)
+
+    M_ensemble = float(monomer_weights[0]) * Descriptors.ExactMolWt(
+        mol_mono_1) + float(monomer_weights[1]) * Descriptors.ExactMolWt(mol_mono_2)
+    
     # -------------------------------------------
     # Make own pytroch geometric data object. Here we try follow outputs of above featurization: f_atoms, f_bonds, a2b, b2a
     # -------------------------------------------
@@ -278,7 +287,8 @@ def poly_smiles_to_graph(poly_strings, isAldeghiDataset=True, **label_dicts):
         "edge_weight": edge_weights, 
         "intermonomers_bonds": intermonomers_bonds, 
         "motifs": (cliques, clique_edges),
-        "monomer_mask": monomer_mask
+        "monomer_mask": monomer_mask,
+        'M_ensemble': M_ensemble,
         #"i_feat": i_feat
     }
 

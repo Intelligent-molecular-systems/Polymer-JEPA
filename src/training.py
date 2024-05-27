@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import wandb
 
-def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0, dataset='aldeghi'):
+def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, epoch=0, dataset='aldeghi', jepa_weight=0.5, m_w_weight=0.5):
     
     total_loss = 0
 
@@ -19,7 +19,7 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
     for i, data in enumerate(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings = model(data)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, initial_context_embeddings, initial_target_embeddings,  context_embeddings, target_encoder_embeddings, graph_embeddings, pseudoLabelPrediction = model(data)
         
         if dataset == 'aldeghi':
             ### visualization ###
@@ -44,7 +44,11 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings) # https://pytorch.org/docs/stable/generated/torch.nn.functional.smooth_l1_loss.html
         elif criterion_type == 1:
-            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings)
+            jepa_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) * jepa_weight
+            # normalize the M_ensemble
+            data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
+            pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * m_w_weight
+            inv_loss = jepa_loss + pseudolabel_loss
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:
@@ -101,17 +105,23 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
 
 
 @ torch.no_grad()
-def test(loader, model, device, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1):
+def test(loader, model, device, criterion_type=0, regularization=False, inv_weight=25, var_weight=25, cov_weight=1, jepa_weight=0.5, m_w_weight=0.5):
     total_loss = 0
-    for data in loader:
+    for idx, data in enumerate(loader):
         data = data.to(device)
         model.eval()
-        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, _, _, _, _, _ = model(data)
+        target_embeddings, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, _, _, _, _, _, pseudoLabelPrediction = model(data)
 
         if criterion_type == 0:
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings)
         elif criterion_type == 1:
-            inv_loss = F.mse_loss(predicted_target_embeddings, target_embeddings)
+            jepa_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) * jepa_weight
+            # normalize the M_ensemble
+            data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
+            pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * m_w_weight
+            if idx == 0:
+                print(f'jepa_loss: {jepa_loss.item()}, pseudolabel_loss: {pseudolabel_loss.item()}')
+            inv_loss = jepa_loss + pseudolabel_loss
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:

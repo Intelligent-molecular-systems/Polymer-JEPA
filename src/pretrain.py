@@ -143,7 +143,9 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
             var_weight=cfg.pretrain.var_weight, 
             cov_weight=cfg.pretrain.cov_weight,
             epoch=epoch,
-            dataset=cfg.finetuneDataset
+            dataset=cfg.finetuneDataset,
+            jepa_weight = cfg.pseudolabel.jepa_weight,
+            m_w_weight = cfg.pseudolabel.m_w_weight
         )
 
         model.eval()
@@ -156,7 +158,9 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
             regularization=cfg.pretrain.regularization,
             inv_weight=cfg.pretrain.inv_weight, 
             var_weight=cfg.pretrain.var_weight, 
-            cov_weight=cfg.pretrain.cov_weight
+            cov_weight=cfg.pretrain.cov_weight,
+            jepa_weight = cfg.pseudolabel.jepa_weight,
+            m_w_weight = cfg.pseudolabel.m_w_weight
         )
 
         # save model weights at each epoch

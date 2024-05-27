@@ -41,7 +41,7 @@ class GeneralJEPAv1(nn.Module):
         self.input_encoder = nn.Embedding(nfeat_node, nhid)
         self.edge_encoder = nn.Embedding(nfeat_edge, nhid)
 
-        self.gnns = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=nlayer_gnn, gnn_type="GINEConv",
+        self.gnns = nn.ModuleList([GNN(nin=nhid, nout=nhid, nlayer_gnn=1, gnn_type="GINEConv",
                        bn=True, dropout=0.1, res=True) for _ in range(nlayer_gnn)])
                                         
         self.U = nn.ModuleList(

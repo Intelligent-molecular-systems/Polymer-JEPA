@@ -182,6 +182,7 @@ def metisZinc(data, n_patches, sizeContext, n_targets):
     #     context_subgraphs_used.append(subgraphs_node_mapper[node_mask[idx]])
     #     if len(context_subgraph) >= context_size:
     #         break
+
     
     # context_mask = torch.zeros((1, node_mask.shape[1]), dtype=torch.bool)
     # context_mask[0, list(context_subgraph)] = True

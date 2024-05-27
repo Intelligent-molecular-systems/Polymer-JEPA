@@ -56,6 +56,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 regularization=cfg.pretrain.regularization,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
                 shouldUseNodeWeights=cfg.model.shouldUseNodeWeights,
+                shouldUsePseudoLabel=cfg.pseudolabel.shouldUsePseudoLabel
             ).to(device)
 
         else:
@@ -78,8 +79,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
                 regularization=cfg.pretrain.regularization,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0,
-                shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
+                shouldUse2dHyperbola=cfg.jepa.dist == 0
             ).to(device)
 
         elif cfg.modelVersion == 'v2':
@@ -94,8 +94,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
                 regularization=cfg.pretrain.regularization,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0,
-                shouldUseNodeWeights=cfg.model.shouldUseNodeWeights
+                shouldUse2dHyperbola=cfg.jepa.dist == 0
             ).to(device)
         else:
             raise ValueError('Invalid model version')
@@ -147,7 +146,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
             epoch=epoch,
             dataset=cfg.finetuneDataset,
             jepa_weight = cfg.pseudolabel.jepa_weight,
-            m_w_weight = cfg.pseudolabel.m_w_weight
+            m_w_weight = cfg.pseudolabel.m_w_weight if cfg.pseudolabel.shouldUsePseudoLabel else 0
         )
 
         model.eval()
@@ -162,7 +161,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
             var_weight=cfg.pretrain.var_weight, 
             cov_weight=cfg.pretrain.cov_weight,
             jepa_weight = cfg.pseudolabel.jepa_weight,
-            m_w_weight = cfg.pseudolabel.m_w_weight
+            m_w_weight = cfg.pseudolabel.m_w_weight if cfg.pseudolabel.shouldUsePseudoLabel else 0
         )
 
         # save model weights at each epoch

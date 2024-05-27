@@ -21,7 +21,8 @@ class PolymerJEPAv2(nn.Module):
         should_share_weights=False,
         regularization=False,
         shouldUse2dHyperbola=False,
-        shouldUseNodeWeights=False
+        shouldUseNodeWeights=False,
+        shouldUsePseudoLabel=False
     ):
         
         super().__init__()
@@ -74,13 +75,15 @@ class PolymerJEPAv2(nn.Module):
                 nn.Linear(self.expander_dim, self.expander_dim)
             )
 
-        self.pseudoLabelPredictor = nn.Sequential(
-            nn.Linear(nhid, 50),
-            nn.ReLU(),
-            nn.Linear(50, 50),
-            nn.ReLU(),
-            nn.Linear(50, 1)
-        )
+        self.shouldUsePseudoLabel = shouldUsePseudoLabel
+        if shouldUsePseudoLabel:
+            self.pseudoLabelPredictor = nn.Sequential(
+                nn.Linear(nhid, 50),
+                nn.ReLU(),
+                nn.Linear(50, 50),
+                nn.ReLU(),
+                nn.Linear(50, 1)
+            )
         
 
 
@@ -131,9 +134,11 @@ class PolymerJEPAv2(nn.Module):
             # pool the node embeddings to get the full graph embedding
             vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding.detach().clone(), data.batch)
 
-        # pool the node embeddings to get the full graph embedding
-        graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
-        pseudoLabelPrediction = self.pseudoLabelPredictor(graph_embedding)
+        pseudoLabelPrediction = torch.tensor([], requires_grad=False, device=data.y_EA.device)
+        if self.shouldUsePseudoLabel:
+            # pool the node embeddings to get the full graph embedding
+            graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
+            pseudoLabelPrediction = self.pseudoLabelPredictor(graph_embedding)
 
         # map it as we do for x at the beginning
         full_graph_nodes_embedding = full_graph_nodes_embedding[data.subgraphs_nodes_mapper]

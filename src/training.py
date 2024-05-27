@@ -46,9 +46,12 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
         elif criterion_type == 1:
             jepa_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) * jepa_weight
             # normalize the M_ensemble
-            data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
-            pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * m_w_weight
-            inv_loss = jepa_loss + pseudolabel_loss
+            if m_w_weight > 0:
+                data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
+                pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * m_w_weight
+                inv_loss = jepa_loss + pseudolabel_loss
+            else:
+                inv_loss = jepa_loss
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:
@@ -116,12 +119,14 @@ def test(loader, model, device, criterion_type=0, regularization=False, inv_weig
             inv_loss = F.smooth_l1_loss(predicted_target_embeddings, target_embeddings)
         elif criterion_type == 1:
             jepa_loss = F.mse_loss(predicted_target_embeddings, target_embeddings) * jepa_weight
-            # normalize the M_ensemble
-            data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
-            pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * m_w_weight
-            if idx == 0:
-                print(f'jepa_loss: {jepa_loss.item()}, pseudolabel_loss: {pseudolabel_loss.item()}')
-            inv_loss = jepa_loss + pseudolabel_loss
+            if m_w_weight > 0:
+                data.M_ensemble = (data.M_ensemble - torch.mean(data.M_ensemble)) / torch.std(data.M_ensemble)
+                pseudolabel_loss = F.mse_loss(pseudoLabelPrediction.squeeze(1), data.M_ensemble.float()) * m_w_weight
+                if idx == 0:
+                    print(f'jepa_loss: {jepa_loss.item()}, pseudolabel_loss: {pseudolabel_loss.item()}')
+                inv_loss = jepa_loss + pseudolabel_loss
+            else:
+                inv_loss = jepa_loss
         elif criterion_type == 2:
             inv_loss = hyperbolic_dist(predicted_target_embeddings, target_embeddings)
         else:

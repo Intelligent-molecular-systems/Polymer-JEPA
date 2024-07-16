@@ -20,7 +20,7 @@ import time
 import torch
 import wandb
 
-# os.environ["WANDB_MODE"]="offline"
+os.environ["WANDB_MODE"]="offline"
 
 def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -174,9 +174,8 @@ if __name__ == '__main__':
             print(f'Run {run_idx}/{cfg.runs-1}')
             if cfg.finetuneDataset == 'aldeghi': # pretrain and finetune on same dataset (aldeghi), pretrain and finetune val dataset are the same.
                 train_dataset = full_aldeghi_dataset[train_index].copy()
-
                 if cfg.shouldPretrain:
-                    # keep 12.5% of the train dataset for finetuning, corresponding to 10% of the full dataset
+                    # keep 50% of the train dataset for finetuning, corresponding to 40% of the full dataset
                     pretrn_trn_dataset = train_dataset[:int((len(train_dataset)/100)*50)] # half of the train dataset for pretraining
 
                     # pretrn_trn_dataset = train_dataset[:len(train_dataset)//2] # half of the train dataset for pretraining

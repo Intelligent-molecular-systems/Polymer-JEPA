@@ -185,7 +185,9 @@ class PolymerJEPAv2(nn.Module):
 
     def encode(self, data):
         full_x = self.input_encoder(data.x).squeeze()
-        full_x += self.rw_encoder(data.rw_pos_enc)
+
+        if hasattr(data, 'rw_pos_enc'):
+            full_x += self.rw_encoder(data.rw_pos_enc)
        
         node_embeddings = self.target_encoder(
             full_x, 

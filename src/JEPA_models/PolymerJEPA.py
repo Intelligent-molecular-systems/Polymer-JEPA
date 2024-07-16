@@ -204,7 +204,8 @@ class PolymerJEPA(nn.Module):
     def encode(self, data):
         x = self.input_encoder(data.x).squeeze()
         # add node PE to the node initial embeddings
-        x += self.rw_encoder(data.rw_pos_enc)
+        if hasattr(data, 'rw_pos_enc'):
+            x += self.rw_encoder(data.rw_pos_enc)
 
         ### Patch Encoder ###
         x = x[data.subgraphs_nodes_mapper]

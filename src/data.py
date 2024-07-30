@@ -171,8 +171,10 @@ def create_data(cfg):
         val_dataset = ZINC(root, subset=True, split='val',
                            pre_transform=pre_transform, transform=transform_val, smiles=smiles_dict)
         
-        pretrn_dataset = train_dataset.copy() # [:int(0.5*len(train_dataset))]
-        ft_dataset = train_dataset.copy() # [int(0.5*len(train_dataset)):]
+        pretrn_dataset = train_dataset.copy()[:int(0.7*len(train_dataset))]
+        ft_dataset = train_dataset.copy()[int(0.7*len(train_dataset)):]
+        # pretrn_dataset = train_dataset.copy() # [:int(0.5*len(train_dataset))]
+        # ft_dataset = train_dataset.copy() # [int(0.5*len(train_dataset)):]
     else:
         raise ValueError('Invalid dataset name')
     

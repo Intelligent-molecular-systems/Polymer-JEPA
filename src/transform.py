@@ -2,7 +2,7 @@ import numpy as np
 import re
 from src.subgraphing_utils.context_subgraph_extractor import rwContext, motifContext, metis2subgraphs
 from src.subgraphing_utils.target_subgraph_extractor import rwTargets, motifTargets
-from src.subgraphing_utils.small_molecules_extractor import zincSubgraphs, metisZinc
+from src.subgraphing_utils.small_molecules_extractor import zincSubgraphs, metisZinc, rwZincContext, rwZincTargets
 from src.visualize import plot_from_transform_attributes
 import torch
 import torch_geometric
@@ -171,6 +171,12 @@ class GraphJEPAPartitionTransform(object):
                 node_masks, edge_masks, context_subgraphs_used = zincSubgraphs(data, sizeContext=self.context_size, n_patches=self.n_patches, n_targets=self.num_targets)
             elif self.subgraphing_type == 1:
                 node_masks, edge_masks, context_subgraphs_used = metisZinc(data, sizeContext=self.context_size, n_patches=self.n_patches, n_targets=self.num_targets)
+            elif self.subgraphing_type == 2:
+                context_node_masks, context_edge_masks, contextRw = rwZincContext(data, sizeContext=self.context_size)
+                context_subgraphs_used = [contextRw]
+                node_masks, edge_masks = rwZincTargets(data, n_patches=self.n_patches-1, n_targets=self.num_targets, contextRw=contextRw, target_size=self.target_size)
+                node_masks = torch.cat([context_node_masks, node_masks], dim=0)
+                edge_masks = torch.cat([context_edge_masks, edge_masks], dim=0)
             else:
                 raise ValueError('Invalid subgraphing type')   
             

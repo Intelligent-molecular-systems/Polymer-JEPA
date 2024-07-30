@@ -246,6 +246,8 @@ if __name__ == '__main__':
     elif cfg.finetuneDataset == 'zinc':
         # for zinc, create_data returns directly the datasets, not the trasforms
         pretrn_trn_dataset, ft_dataset, val_dataset = create_data(cfg) 
+        # take only 1 % of the dataset for finetuning
+        ft_dataset = ft_dataset[:int(len(ft_dataset)*0.08)]
 
         for i in range(cfg.runs):
             print("----------------------------------------")

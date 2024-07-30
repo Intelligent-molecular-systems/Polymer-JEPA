@@ -172,7 +172,8 @@ class GeneralJEPAv2(nn.Module):
 
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y.device)
         target_subgraphs_idx += batch_indexer.unsqueeze(1)
-
+        
+        # extract from all pooled subgraph embeddings (from full graph) only the target subgraphs embeddings
         embedded_target_x = subgraphs_x_from_full[target_subgraphs_idx.flatten()]
 
         embedded_target_x = embedded_target_x.reshape(-1, self.num_target_patches, self.nhid) # batch_size x num_target_patches x nhid
@@ -201,8 +202,7 @@ class GeneralJEPAv2(nn.Module):
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
         # convert back to B x n_targets x d
         predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, self.nhid)
-        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, torch.tensor([]), torch.tensor([]), vis_context_embedding, vis_target_embeddings, vis_graph_embedding
-
+        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, torch.tensor([]), torch.tensor([]), vis_context_embedding, vis_target_embeddings, vis_graph_embedding, torch.tensor([], requires_grad=False, device=data.y.device)
 
     def encode(self, data):
         full_x = self.input_encoder(data.x).squeeze()

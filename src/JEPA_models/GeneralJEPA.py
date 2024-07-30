@@ -188,7 +188,7 @@ class GeneralJEPAv1(nn.Module):
         predicted_target_embeddings = self.target_predictor(embedded_context_x_pe_conditioned)
         # convert back to B n_targets d
         predicted_target_embeddings = predicted_target_embeddings.reshape(-1, self.num_target_patches, self.nhid)
-        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, vis_initial_context_embeddings, vis_initial_target_embedding, vis_context_embedding, vis_target_embeddings, vis_graph_embedding
+        return embedded_target_x, predicted_target_embeddings, expanded_context_embeddings, expanded_target_embeddings, vis_initial_context_embeddings, vis_initial_target_embedding, vis_context_embedding, vis_target_embeddings, vis_graph_embedding, torch.tensor([], requires_grad=False, device=data.y.device)
     
 
     def encode(self, data):

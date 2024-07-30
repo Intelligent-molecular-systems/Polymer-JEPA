@@ -194,6 +194,104 @@ def metisZinc(data, n_patches, sizeContext, n_targets):
     return node_mask, edge_mask, context_subgraphs_used
 
 
+def rwZincContext(data, sizeContext):
+    if sizeContext == 1:
+        return torch.ones((1, data.num_nodes), dtype=torch.bool), torch.ones((1, data.num_edges), dtype=torch.bool)
+    
+    # Function to perform a single random walk step from a given node
+    def random_walk_step(fullGraph, current_node, exclude_nodes):
+        neighbors = list(set(fullGraph.neighbors(current_node)) - exclude_nodes)
+        return random.choice(neighbors) if neighbors else None
+    
+    contextRw = set()
+    total_nodes = data.num_nodes
+
+    # Perform a random walk from a random node
+    start_node = random.choice(list(range(total_nodes)))
+    contextRw.add(start_node)
+    current_node = start_node
+    graph = to_networkx(data, to_undirected=True)
+    while len(contextRw) / total_nodes < sizeContext:
+        next_node = random_walk_step(graph, current_node, contextRw)
+        if next_node is None:
+            break
+        contextRw.add(next_node)
+        current_node = next_node
+
+    # add random nodes until we reach the context size
+    counter = 0
+    while len(contextRw) / total_nodes < sizeContext:
+        random_node = random.choice(list(contextRw))
+        next_node = random_walk_step(fullGraph=graph, current_node=random_node, exclude_nodes=contextRw)
+        if next_node is not None:
+            contextRw.add(next_node)
+            counter = 0
+        else:
+            counter += 1
+            if counter > 30:
+                break
+
+    node_mask = torch.zeros((1, total_nodes), dtype=torch.bool)
+    node_mask[0, list(contextRw)] = True
+    edge_mask = node_mask[:, data.edge_index[0]] & node_mask[:, data.edge_index[1]]
+    return node_mask, edge_mask, contextRw
+    
+
+
+def rwZincTargets(data, n_patches, n_targets, contextRw, target_size):
+    def random_walk_step(fullGraph, current_node, exclude_nodes):
+        neighbors = list(set(fullGraph.neighbors(current_node)) - exclude_nodes)
+        return random.choice(neighbors) if neighbors else None
+    
+    def random_walk_from_node(fullGraph, start_node, exclude_nodes, total_nodes, size=target_size):
+        walk = [start_node]
+        while len(walk) / total_nodes < size:
+            next_node = random_walk_step(fullGraph=fullGraph, current_node=walk[-1], exclude_nodes=exclude_nodes)
+            if next_node:
+                walk.append(next_node)
+            else:
+                break
+        return walk
+    
+    visited_nodes = set()
+    visited_nodes.update(contextRw)
+
+    rw_walks = []
+
+    # does not guarantee 100% to avoid edge loss, but its unlikely that it will happen, and at each epoch the subgraphs are different so it should be fine, its also a form of data augmentation
+    while len(visited_nodes) < data.num_nodes:
+        # pick a random node from the remaining nodes
+        remaining_nodes = list(set(range(data.num_nodes)) - visited_nodes)
+        start_node = random.choice(remaining_nodes)
+        rw_subgraph = random_walk_from_node(fullGraph=to_networkx(data, to_undirected=True), start_node=start_node, exclude_nodes=visited_nodes, total_nodes=data.num_nodes)
+        rw_expanded = expand_one_hop(to_networkx(data, to_undirected=True), rw_subgraph)
+        visited_nodes.update(rw_expanded)
+        rw_walks.append(rw_expanded)
+
+    while len(rw_walks) < n_targets:
+        # create a subgraph from a random node and 1-hop expansion
+        random_node = random.choice(list(visited_nodes))
+        subgraph = set([random_node])
+        subgraph = expand_one_hop(to_networkx(data, to_undirected=True), subgraph)
+        rw_walks.append(subgraph)
+    
+    node_mask = torch.zeros((n_patches, data.num_nodes), dtype=torch.bool)
+    edge_mask = torch.zeros((n_patches, data.num_edges), dtype=torch.bool)
+
+    rw_walks.insert(0, contextRw)
+
+    idx = n_patches - len(rw_walks)
+    for target_subgraph in rw_walks:
+        target_mask = torch.zeros(node_mask.shape[1], dtype=torch.bool)
+        target_mask[list(target_subgraph)] = True
+        node_mask[idx] = target_mask
+        idx += 1
+    
+    edge_mask = node_mask[:, data.edge_index[0]] & node_mask[:, data.edge_index[1]]
+                                                             
+    return node_mask, edge_mask
+
+
 def expand_one_hop(fullG, subgraph_nodes):
     expanded_nodes = set(subgraph_nodes)
     for node in subgraph_nodes:

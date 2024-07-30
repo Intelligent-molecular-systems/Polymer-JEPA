@@ -4,7 +4,7 @@ from src.JEPA_models.WDNodeMPNN import WDNodeMPNN
 from src.visualize import plot_from_transform_attributes
 import torch
 import torch.nn as nn
-from torch_geometric.nn import global_mean_pool, global_max_pool
+from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
 from torch_scatter import scatter
 
 
@@ -137,7 +137,7 @@ class PolymerJEPAv2(nn.Module):
         pseudoLabelPrediction = torch.tensor([], requires_grad=False, device=data.y_EA.device)
         if self.shouldUsePseudoLabel:
             # pool the node embeddings to get the full graph embedding
-            graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
+            graph_embedding = global_add_pool(full_graph_nodes_embedding, data.batch)
             pseudoLabelPrediction = self.pseudoLabelPredictor(graph_embedding)
 
         # map it as we do for x at the beginning

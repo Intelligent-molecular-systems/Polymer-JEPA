@@ -23,7 +23,7 @@ def set_cfg(cfg):
     # v1 for PolymerJEPA, v2 for PolymerJEPAv2
     cfg.modelVersion = 'v2'
     # finetuning dataset, values: 'aldeghi' or 'diblock' or 'zinc', 'diblock' can only be finetuned on a v2 model, not v1.
-    cfg.finetuneDataset = 'aldeghi'
+    cfg.finetuneDataset = 'zinc'
     # name fo the experiment to track on wandb
     cfg.experimentName = 'default'
 
@@ -98,9 +98,9 @@ def set_cfg(cfg):
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
     cfg.model.gMHA_type = 'Hadamard' # Hadamard is the default one for all datasets (yaml files) in original code
     # Hidden size of the model, I should use 300 for v2, 128 for v1
-    cfg.model.hidden_size = 300 # make it a power of 2 if using the default model with transformer attention heads
+    cfg.model.hidden_size = 96 # make it a power of 2 if using the default model with transformer attention heads
     # Number of GNN layers
-    cfg.model.nlayer_gnn = 3
+    cfg.model.nlayer_gnn = 2
     # Number of mlp mixer layers
     cfg.model.nlayer_mlpmixer = 2
     # Pooling type for generaating graph/subgraph embedding from node embeddings

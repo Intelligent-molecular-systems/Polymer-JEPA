@@ -156,7 +156,7 @@ if __name__ == '__main__':
     seeds = [42, 123, 777, 888, 999]
 
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
-        full_aldeghi_dataset, train_transform, val_transform = create_data(cfg)
+        full_aldeghi_dataset, augmented_dataset, train_transform, val_transform = create_data(cfg)
         
         # !! setting folds = runs is risky, they shouldn't be used as done here !!
         kf = KFold(n_splits=cfg.runs, shuffle=True, random_state=12345)
@@ -178,9 +178,23 @@ if __name__ == '__main__':
                     # keep 50% of the train dataset for finetuning, corresponding to 40% of the full dataset
                     pretrn_trn_dataset = train_dataset[:int((len(train_dataset)/100)*50)] # half of the train dataset for pretraining
 
+                    # Optionally there can be more augmented data added to the pretraining data
+                    if cfg.use_augmented_data:  # Check if augmented data should be used
+                        # Shuffle augmented data
+                        num_aug_samples = int(cfg.augmented_data_fraction * len(augmented_dataset))
+                        shuffled_indices = torch.randperm(len(augmented_dataset))  # Random permutation
+                        aug_subset = augmented_dataset[shuffled_indices][:num_aug_samples]  # Select fraction
+
+                        # Extract data objects
+                        data_list = pretrn_trn_dataset[:].copy() + aug_subset[:].copy()
+
+                        # Instead of modifying a sliced dataset, create a new dataset instance, root=None -> in memory only 
+                        pretrn_trn_dataset = train_dataset.__class__(root=None, data_list=data_list)
+                        print(f"Using augmented data with {num_aug_samples} samples.")
+                    else:
+                        print("Augmented data is not used for pretraining.")
                     # pretrn_trn_dataset = train_dataset[:len(train_dataset)//2] # half of the train dataset for pretraining
                     pretrn_trn_dataset.transform = train_transform
-
                 
                 pretrn_val_dataset = full_aldeghi_dataset[test_index].copy()
                 pretrn_val_dataset.transform = val_transform

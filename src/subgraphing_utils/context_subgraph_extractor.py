@@ -1,7 +1,7 @@
 from copy import deepcopy
 import math
 from matplotlib import pyplot as plt
-import metis
+#import metis
 import networkx as nx
 import numpy as np
 import random

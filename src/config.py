@@ -24,6 +24,10 @@ def set_cfg(cfg):
     cfg.modelVersion = 'v2'
     # finetuning dataset, values: 'aldeghi' or 'diblock' or 'zinc', 'diblock' can only be finetuned on a v2 model, not v1.
     cfg.finetuneDataset = 'aldeghi'
+    # Whether to use augmented data (only for pretraining) as well
+    cfg.use_augmented_data = True
+    # If use_augmented_data is True the following controls the fraction of added augmented datapoints (total ca. 100k, thus e.g. 0.5 would be additional 50k pretraining points) 
+    cfg.augmented_data_fraction = 0.1
     # name fo the experiment to track on wandb
     cfg.experimentName = 'default'
 
@@ -98,7 +102,7 @@ def set_cfg(cfg):
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
     cfg.model.gMHA_type = 'Hadamard' # Hadamard is the default one for all datasets (yaml files) in original code
     # Hidden size of the model, I should use 300 for v2, 128 for v1
-    cfg.model.hidden_size = 300 # make it a power of 2 if using the default model with transformer attention heads
+    cfg.model.hidden_size = 100 # make it a power of 2 if using the default model with transformer attention heads
     # Number of GNN layers
     cfg.model.nlayer_gnn = 3
     # Number of mlp mixer layers

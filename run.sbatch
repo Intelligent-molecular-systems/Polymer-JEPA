@@ -1,15 +1,11 @@
 #!/bin/sh
-
 #SBATCH --partition=general   # Request partition. Default is 'general' 
 #SBATCH --qos=medium           # Request Quality of Service. Default is 'short' (maximum run time: 4 hours)
-#SBATCH --time=4:59:00        # Request run time (wall-clock). Default is 1 minute
-#SBATCH --ntasks=4            # Request number of parallel tasks per job. Default is 1
+#SBATCH --time=10:00:00        # Request run time (wall-clock). Default is 1 minute
+#SBATCH --ntasks=1            # Request number of parallel tasks per job. Default is 1
 #SBATCH --cpus-per-task=2     # Request number of CPUs (threads) per task. Default is 1 (note: CPUs are always allocated to jobs per 2).
-#SBATCH --mem-per-cpu=4000     # Request memory (MB) per node. Default is 1024MB (1GB). For multiple tasks, specify --mem-per-cpu instead
-#SBATCH --mail-type=NONE      # Set mail type to 'END' to receive a mail when the job finishes. 
-#SBATCH --output=./log/slurm_%j.out # Set name of output log. %j is the Slurm jobId
-#SBATCH --error=./log/slurm_%j.err  # Set name of error log. %j is the Slurm jobId
-#SBATCH --gres=gpu:1 # Request 1 GPU
+#SBATCH --mem-per-cpu=8000     # Request memory (MB) per node. Default is 1024MB (1GB). For multiple tasks, specify --mem-per-cpu instead
+#SBATCH --mail-type=END     # Set mail type to 'END' to receive a mail when the job finishes. 
 
 
 #which python 1>&2  # Write path to Python binary to standard error
@@ -20,6 +16,7 @@
 #conda activate $HOME/.local/conda/myenv
 
 #python --version
+export APPTAINER_NAME="polymer-jepa.sif"
 
 processed_args=""
 
@@ -32,4 +29,5 @@ for arg in "$@"; do
 done
 
 echo "$processed_args"
-srun python main.py $processed_args
+
+srun apptainer exec --bind /tudelft.net:/tudelft.net --nv $APPTAINER_NAME python main.py $processed_args

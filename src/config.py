@@ -27,14 +27,14 @@ def set_cfg(cfg):
     # Whether to use augmented data (only for pretraining) as well
     cfg.use_augmented_data = True
     # If use_augmented_data is True the following controls the fraction of added augmented datapoints (total ca. 100k, thus e.g. 0.5 would be additional 50k pretraining points) 
-    cfg.augmented_data_fraction = 0.1
+    cfg.augmented_data_fraction = 0.0
     # name fo the experiment to track on wandb
     cfg.experimentName = 'default'
 
     cfg.pseudolabel = CN()
     cfg.pseudolabel.jepa_weight = 1.0
     cfg.pseudolabel.m_w_weight = 0.1
-    cfg.pseudolabel.shouldUsePseudoLabel = False
+    cfg.pseudolabel.shouldUsePseudoLabel = True
     # ------------------------------------------------------------------------ #
     # Training options
     # ------------------------------------------------------------------------ #
@@ -85,7 +85,7 @@ def set_cfg(cfg):
     cfg.finetune.batch_size = 64
     cfg.finetune.isLinear = False
     # which percentage of the full dataset should be used to pretrain
-    # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
+    # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.4%, 0.8%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
     # this value is relative to 40%: 0.01 -> 1 % = 160 graphs 0.2 * 40
     cfg.finetune.aldeghiFTPercentage = 0.01
     # diblock has around 4800 graphs in total, 0.8 should be used as max size to match same full dataset size used by Aldeghi paper, 

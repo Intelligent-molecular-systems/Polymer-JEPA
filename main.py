@@ -19,6 +19,7 @@ import string
 import time
 import torch
 import wandb
+import pandas as pd
 
 os.environ["WANDB_MODE"]="offline"
 
@@ -179,7 +180,7 @@ if __name__ == '__main__':
                     pretrn_trn_dataset = train_dataset[:int((len(train_dataset)/100)*50)] # half of the train dataset for pretraining
 
                     # Optionally there can be more augmented data added to the pretraining data
-                    if cfg.use_augmented_data:  # Check if augmented data should be used
+                    if cfg.use_augmented_data and cfg.augmented_data_fraction:  # Check if augmented data should be used
                         # Shuffle augmented data
                         num_aug_samples = int(cfg.augmented_data_fraction * len(augmented_dataset))
                         shuffled_indices = torch.randperm(len(augmented_dataset))  # Random permutation
@@ -256,7 +257,16 @@ if __name__ == '__main__':
             # if not cfg.shouldPretrain and cfg.shouldFinetuneOnPretrainedModel:
             #     break
 
-            
+        # Save the metrics 
+        # Save results as excel
+        df = pd.DataFrame(dict(metrics))  # Convert defaultdict to DataFrame
+        if cfg.use_augmented_data:
+            df.to_pickle("metrics_frac_augmented_"+str(cfg.augmented_data_fraction)+"use_PL"+".pkl")  # Save as pkl
+            df.to_csv("metrics_frac_augmented_"+str(cfg.augmented_data_fraction)+"use_PL"+".csv", index=False)  # Save as csv
+        else: 
+            df.to_pickle("metrics.pkl")  # Save as pkl
+            df.to_csv("metrics.csv", index=False)  # Save as csv
+    
     elif cfg.finetuneDataset == 'zinc':
         # for zinc, create_data returns directly the datasets, not the trasforms
         pretrn_trn_dataset, ft_dataset, val_dataset = create_data(cfg) 

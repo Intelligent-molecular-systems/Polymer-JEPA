@@ -177,7 +177,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
 
         print(f'Epoch: {epoch:03d}, Train Loss: {trn_loss:.5f}' f' Test Loss:{val_loss:.5f}')
 
-        if epoch == 0 or epoch == cfg.pretrain.epochs - 1 or epoch % 5 == 0:
+        if epoch == 0 or epoch == cfg.pretrain.epochs - 1 or epoch % 2 == 0:
 
             if cfg.visualize.shouldEmbeddingSpace and cfg.finetuneDataset == 'aldeghi':
                 # model v2 does not have initial context and target embeddings, since there is no initial encoder

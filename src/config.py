@@ -50,7 +50,7 @@ def set_cfg(cfg):
     # learning rate decay factor
     cfg.pretrain.lr_decay = 0.5
     # L2 regularization, weight decay
-    cfg.pretrain.wd = 0.0
+    cfg.pretrain.wd = 0.0001
     # Dropout rate
     cfg.pretrain.dropout = 0.1
     # Dropout rate for MLPMixer
@@ -70,6 +70,8 @@ def set_cfg(cfg):
     cfg.pretrain.var_weight = 25
     # covariance loss weight
     cfg.pretrain.cov_weight = 1
+    # layer normalization after the context and target encoder to ensure embeddings stay constant in magnitude
+    cfg.pretrain.layer_norm = False
 
     
     cfg.finetune = CN()

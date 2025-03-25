@@ -44,6 +44,9 @@ class PolymerJEPAv2(nn.Module):
             self.target_encoder = self.context_encoder
         else:
             self.target_encoder = WDNodeMPNN(nhid, nfeat_edge, n_message_passing_layers=nlayer_gnn, hidden_dim=nhid, shouldUseNodeWeights=shouldUseNodeWeights)
+
+        self.context_norm = nn.LayerNorm(nhid)
+        self.target_norm = nn.LayerNorm(nhid)
         
         self.shouldUse2dHyperbola = shouldUse2dHyperbola
         
@@ -101,6 +104,8 @@ class PolymerJEPAv2(nn.Module):
         ### JEPA - Context Encoder ###
         # initial encoder, encode all the subgraphs, then consider only the context subgraphs
         x = self.context_encoder(x, edge_index, edge_attr, edge_weights, node_weights)
+        if cfg.pretrain.layer_norm:
+            x = self.context_norm(x)
         embedded_subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling) # batch_size*call_n_patches x nhid
 
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
@@ -129,6 +134,8 @@ class PolymerJEPAv2(nn.Module):
         else:
             # in case of vicReg to avoid collapse we have regularization
             full_graph_nodes_embedding = self.target_encoder(*parameters)
+            if cfg.pretrain.layer_norm:
+                full_graph_nodes_embedding = self.target_norm(full_graph_nodes_embedding)
 
         with torch.no_grad():
             # pool the node embeddings to get the full graph embedding

@@ -54,6 +54,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                 num_target_patches=cfg.jepa.num_targets,
                 should_share_weights=cfg.pretrain.shouldShareWeights,
                 regularization=cfg.pretrain.regularization,
+                layer_norm=cfg.pretrain.layer_norm,
                 shouldUse2dHyperbola=cfg.jepa.dist == 0,
                 shouldUseNodeWeights=cfg.model.shouldUseNodeWeights,
                 shouldUsePseudoLabel=cfg.pseudolabel.shouldUsePseudoLabel

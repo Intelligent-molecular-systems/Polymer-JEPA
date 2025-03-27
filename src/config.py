@@ -71,7 +71,7 @@ def set_cfg(cfg):
     # covariance loss weight
     cfg.pretrain.cov_weight = 1
     # layer normalization after the context and target encoder to ensure embeddings stay constant in magnitude
-    cfg.pretrain.layer_norm = False
+    cfg.pretrain.layer_norm = 0
 
     
     cfg.finetune = CN()

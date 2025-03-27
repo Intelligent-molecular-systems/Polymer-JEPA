@@ -69,6 +69,7 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
                     num_target_patches=cfg.jepa.num_targets,
                     should_share_weights=cfg.pretrain.shouldShareWeights,
                     regularization=cfg.pretrain.regularization,
+                    layer_norm=cfg.pretrain.layer_norm,
                     shouldUse2dHyperbola=cfg.jepa.dist == 0,
                     shouldUseNodeWeights=True,
                     shouldUsePseudoLabel=cfg.pseudolabel.shouldUsePseudoLabel

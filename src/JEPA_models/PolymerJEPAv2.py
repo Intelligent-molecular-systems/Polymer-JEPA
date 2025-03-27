@@ -107,9 +107,11 @@ class PolymerJEPAv2(nn.Module):
         ### JEPA - Context Encoder ###
         # initial encoder, encode all the subgraphs, then consider only the context subgraphs
         x = self.context_encoder(x, edge_index, edge_attr, edge_weights, node_weights)
-        if self.layer_norm:
-            x = self.context_norm(x)
+        
         embedded_subgraph_x = scatter(x, batch_x, dim=0, reduce=self.pooling) # batch_size*call_n_patches x nhid
+        # layer normalization after pooling?
+        if self.layer_norm:
+            embedded_subgraph_x = self.context_norm(embedded_subgraph_x)
 
         batch_indexer = torch.tensor(np.cumsum(data.call_n_patches)) # cumsum: return the cumulative sum of the elements along a given axis.
         batch_indexer = torch.hstack((torch.tensor(0), batch_indexer[:-1])).to(data.y_EA.device)
@@ -137,17 +139,22 @@ class PolymerJEPAv2(nn.Module):
         else:
             # in case of vicReg to avoid collapse we have regularization
             full_graph_nodes_embedding = self.target_encoder(*parameters)
-            if self.layer_norm:
-                full_graph_nodes_embedding = self.target_norm(full_graph_nodes_embedding)
+            
 
         with torch.no_grad():
             # pool the node embeddings to get the full graph embedding
             vis_graph_embedding = global_mean_pool(full_graph_nodes_embedding.detach().clone(), data.batch)
+            # layer normalization after the pooling 
+            if self.layer_norm:
+                vis_graph_embedding = self.target_norm(vis_graph_embedding)
 
         pseudoLabelPrediction = torch.tensor([], requires_grad=False, device=data.y_EA.device)
         if self.shouldUsePseudoLabel:
             # pool the node embeddings to get the full graph embedding
             graph_embedding = global_mean_pool(full_graph_nodes_embedding, data.batch)
+            # layer normalization after the pooling
+            if self.layer_norm:
+                graph_embedding = self.target_norm(graph_embedding)
             pseudoLabelPrediction = self.pseudoLabelPredictor(graph_embedding)
 
         # map it as we do for x at the beginning
@@ -155,6 +162,9 @@ class PolymerJEPAv2(nn.Module):
 
         # pool the embeddings found for the full graph, this will produce the subgraphs embeddings for all subgraphs (context and target subgraphs)
         subgraphs_x_from_full = scatter(full_graph_nodes_embedding, batch_x, dim=0, reduce=self.pooling) # batch_size*call_n_patches x nhid
+        # layer normalization after the pooling
+        if self.layer_norm:
+                subgraphs_x_from_full = self.target_norm(subgraphs_x_from_full)
 
         # Compute the target indexes to find the target subgraphs embeddings
         target_subgraphs_idx = torch.vstack([torch.tensor(dt) for dt in data.target_subgraph_idxs]).to(data.y_EA.device)

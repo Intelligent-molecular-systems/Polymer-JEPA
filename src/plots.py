@@ -94,36 +94,40 @@ import matplotlib.pyplot as plt
 
 ## ALDEGHI EA VS RANDOM FOREST IN SMALL DATASET ###
 # 0,818721716073818	0,85656229569584	0,921687052812763	0,950066061883963	0,964727926173172	0,973019307267574
+# Updated values after cross validation
+
 ft_size_aldeghi_comparison = [0.4, 0.8, 1.6, 4]  # Finetune sizes in %
 r2_wdmpnn_only_encoder_prtrn = np.array([0.67, 0.76, 0.86, 0.93])
-# r2_wdmpnn_with_mw_prtrn = np.array([0.73, 0.82, 0.87, 0.94])
+r2_wdmpnn_with_mw_prtrn = np.array([0.73, 0.82, 0.87, 0.94])
 # r2_rf_no_prtrn = np.array([0.87, 0.87, 0.88, 0.89])
 # r2_no_prtrn_ea = np.array([0.46, 0.71, 0.83, 0.94]) # , 0.96, 0.98, 0.99
-# r2_gao_prtrn_ = np.array([0.82, 0.86, 0.92, 0.99])
+r2_gao_prtrn_ = np.array([0.695654, 0.763982, 0.852779, 0.954708])
 # r2_gao_baseline = np.array([0.63, 0.69,	0.80, 0.95])
-r2_gao_prtrn_only_encoder = np.array([0.71, 0.81, 0.89, 0.96])
+r2_gao_prtrn_only_encoder = np.array([0.636246, 0.741461, 0.839005, 0.944453])
 
 std_dev_wdmpnn_only_encoder_prtrn = np.array([0.01, 0.01, 0.02, 0.005])
-# std_dev_wdmpnn_with_mw_prtrn = np.array([0.03, 0.01, 0.03, 0.01])
+std_dev_wdmpnn_with_mw_prtrn = np.array([0.03, 0.01, 0.03, 0.01])
 # std_dev_rf_no_prtrn = np.array([0.02, 0.02, 0.02, 0.02])
 # std_dev_no_prtrn_ea = np.array([0.15, 0.06, 0.05, 0.01]) # , 0.002, 0.004, 0.002
-# std_dev_gao_prtrn = np.array([0.02, 0.02, 0.01, 0.005])
+std_dev_gao_prtrn = np.array([0.039554, 0.033191, 0.030189, 0.007161])
 # std_dev_gao_baseline = np.array([0.02, 0.03, 0.02, 0.01])
-std_dev_gao_prtrn_only_encoder = np.array([0.02, 0.01, 0.01, 0.01])
+std_dev_gao_prtrn_only_encoder = np.array([0.052568, 0.048467, 0.025704, 0.020673])
 
 # Create plot for the comparison between Pretrained WDMPNN and Random Forest not pretrained
 plt.figure(figsize=(10, 6))
 # plt.title("Pretrained WDMPNN vs Random Forest on Aldeghi Dataset")
-plt.title("Our pretraining vs other SSL tasks on Aldeghi Dataset")
-plt.xlabel("Finetune dataset size (%)")
-plt.ylabel(r"$R^2$")
+#plt.title("Our pretraining vs other SSL tasks on Aldeghi Dataset")
+plt.xlabel("Finetune dataset size (%)", fontsize=20)
+plt.ylabel(r"$R^2$", fontsize=20)
+plt.xticks(rotation=45, fontsize=18)
+plt.yticks(fontsize=18)
 
 # Plotting lines with standard deviation areas
 plt.plot(ft_size_aldeghi_comparison, r2_wdmpnn_only_encoder_prtrn, label='JEPA', color='green') # - Only encoder layer transfer
 plt.fill_between(ft_size_aldeghi_comparison, r2_wdmpnn_only_encoder_prtrn - std_dev_wdmpnn_only_encoder_prtrn, r2_wdmpnn_only_encoder_prtrn + std_dev_wdmpnn_only_encoder_prtrn, color='green', alpha=0.05)
 
-# plt.plot(ft_size_aldeghi_comparison, r2_wdmpnn_with_mw_prtrn, label='JEPA & pseudolabel - All layers transfer', color='purple')
-# plt.fill_between(ft_size_aldeghi_comparison, r2_wdmpnn_with_mw_prtrn - std_dev_wdmpnn_with_mw_prtrn, r2_wdmpnn_with_mw_prtrn + std_dev_wdmpnn_with_mw_prtrn, color='purple', alpha=0.05)
+plt.plot(ft_size_aldeghi_comparison, r2_wdmpnn_with_mw_prtrn, label='JEPA & pseudolabel - All layers transfer', color='purple')
+plt.fill_between(ft_size_aldeghi_comparison, r2_wdmpnn_with_mw_prtrn - std_dev_wdmpnn_with_mw_prtrn, r2_wdmpnn_with_mw_prtrn + std_dev_wdmpnn_with_mw_prtrn, color='purple', alpha=0.05)
 
 # plt.plot(ft_size_aldeghi_comparison, r2_rf_no_prtrn, label='Random Forest - No pretraining', color='red')
 # plt.fill_between(ft_size_aldeghi_comparison, r2_rf_no_prtrn - std_dev_rf_no_prtrn, r2_rf_no_prtrn + std_dev_rf_no_prtrn, color='red', alpha=0.05)
@@ -131,8 +135,8 @@ plt.fill_between(ft_size_aldeghi_comparison, r2_wdmpnn_only_encoder_prtrn - std_
 # plt.plot(ft_size_aldeghi_comparison, r2_no_prtrn_ea, label='WDMPNN - No Pretraining', color='blue')
 # plt.fill_between(ft_size_aldeghi_comparison, r2_no_prtrn_ea - std_dev_no_prtrn_ea, r2_no_prtrn_ea + std_dev_no_prtrn_ea, color='blue', alpha=0.05)
 
-# plt.plot(ft_size_aldeghi_comparison, r2_gao_prtrn_, label='Other SSL tasks - All layers transfer', color='orange')
-# plt.fill_between(ft_size_aldeghi_comparison, r2_gao_prtrn_ - std_dev_gao_prtrn, r2_gao_prtrn_ + std_dev_gao_prtrn, color='orange', alpha=0.05)
+plt.plot(ft_size_aldeghi_comparison, r2_gao_prtrn_, label='Other SSL tasks - All layers transfer', color='orange')
+plt.fill_between(ft_size_aldeghi_comparison, r2_gao_prtrn_ - std_dev_gao_prtrn, r2_gao_prtrn_ + std_dev_gao_prtrn, color='orange', alpha=0.05)
 
 # plt.plot(ft_size_aldeghi_comparison, r2_gao_baseline, label='Gao Baseline', color='purple')
 # plt.fill_between(ft_size_aldeghi_comparison, r2_gao_baseline - std_dev_gao_baseline, r2_gao_baseline + std_dev_gao_baseline, color='purple', alpha=0.05)
@@ -144,9 +148,9 @@ plt.fill_between(ft_size_aldeghi_comparison, r2_gao_prtrn_only_encoder - std_dev
 plt.xticks(ft_size_aldeghi_comparison, [f"{size}%" for size in ft_size_aldeghi_comparison])
 
 # Add legend and show plot
-plt.legend()
+plt.legend(fontsize=18)
 plt.grid(True)
-plt.show()
+plt.savefig('aldeghi_comparison.png', dpi=300, bbox_inches='tight')
 
 # ### DIBLOCK VS RANDOM FOREST IN SMALL DATASET ###
 # ft_size_diblock = [4, 24, 48, 80]  # Feature set sizes in %

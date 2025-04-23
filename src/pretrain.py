@@ -14,6 +14,29 @@ import torch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
+class EarlyStopping:
+    def __init__(self, patience=5, delta=0):
+        self.patience = patience
+        self.delta = delta
+        self.best_score = None
+        self.early_stop = False
+        self.counter = 0
+        self.best_model_state = None
+
+    def __call__(self, val_loss, model):
+        score = -val_loss
+        if self.best_score is None:
+            self.best_score = score
+            self.best_model_state = model.state_dict()
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.best_model_state = model.state_dict()
+            self.counter = 0
+
 def pretrain(pre_trn_data, pre_val_data, cfg, device):
     print(f'Pretraining training on: {len(pre_trn_data)} graphs')
     print(f'Pretraining validation on: {len(pre_val_data)} graphs')
@@ -129,6 +152,10 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
     random.seed(time.time())
     model_name = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
     print(f"Model name: {model_name}")
+
+    if cfg.pretrain.early_stopping:
+        early_stopping = EarlyStopping(patience=cfg.pretrain.early_stopping_patience)
+
     
     # Pretraining
     for epoch in tqdm(range(cfg.pretrain.epochs), desc='Pretraining Epochs'):
@@ -164,13 +191,22 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
             jepa_weight = cfg.pseudolabel.jepa_weight,
             m_w_weight = cfg.pseudolabel.m_w_weight if cfg.pseudolabel.shouldUsePseudoLabel else 0
         )
-
-        # save model weights at each epoch
+        
         save_path = f'Models/Pretrain/{model_name}'
         os.makedirs(save_path, exist_ok=True)
-        torch.save(model.state_dict(), f'{save_path}/model.pt')
+        # Early stopping optionally
+        if cfg.pretrain.early_stopping:
+            early_stopping(val_loss, model)
+            if early_stopping.early_stop:
+                torch.save(early_stopping.best_model_state, f'{save_path}/model.pt')
+                print("Early stopping at epoch:", epoch)
+                break
+        # save model weights at each epoch if we don't use early stopping 
+        else:
+            torch.save(model.state_dict(), f'{save_path}/model.pt')
         
         if epoch == 0:
+            
             with open(f'{save_path}/hyperparams.yml', 'w') as f:
                 with redirect_stdout(f): print(cfg.dump())
 
@@ -252,7 +288,13 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
                     loss_type=cfg.jepa.dist,
                     hidden_size=cfg.model.hidden_size
                 )
-    
+    if cfg.pretrain.early_stopping:
+        if early_stopping.early_stop==False:
+            torch.save(early_stopping.best_model_state, f'{save_path}/model.pt')
+            print("No early stopping until epoch:", epoch)
+    else: 
+        torch.save(model.state_dict(), f'{save_path}/model.pt')
+
     return model, model_name
 
 

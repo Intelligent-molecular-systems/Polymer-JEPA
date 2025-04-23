@@ -2,7 +2,7 @@ import collections
 import os
 import math
 import random
-from sklearn.model_selection import KFold, StratifiedShuffleSplit
+from sklearn.model_selection import KFold, StratifiedShuffleSplit, train_test_split
 from src.config import cfg, update_cfg
 from src.data import create_data, getMaximizedVariedData, getLabData, getRandomData, getTammoData
 from src.finetune import finetune
@@ -23,13 +23,14 @@ import pandas as pd
 
 os.environ["WANDB_MODE"]="offline"
 
-def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
+def run(pretrn_trn_dataset, pretrn_val_dataset, pretrn_test_dataset, ft_trn_dataset, ft_val_dataset, ft_test_dataset):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
     model_name = None
 
     if cfg.shouldPretrain:
+        # pretraining only needs, validation set not test set (testing is done after finetuning)
         model, model_name = pretrain(pretrn_trn_dataset, pretrn_val_dataset, cfg, device)
 
     ft_trn_loss = 0.0
@@ -125,9 +126,11 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
             model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}/model.pt', map_location=device))
 
             if cfg.finetune.isLinear:
+                # TODO: Implement early stopping for linearFinetune
                 metrics = linearFinetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
             else:
-                ft_trn_loss, ft_val_loss, metrics = finetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
+                #train_loss, val_loss, test_loss, metrics, metrics_test
+                ft_trn_loss, ft_val_loss, ft_test_loss, metrics, metrics_test = finetune(ft_trn_dataset, ft_val_dataset, ft_test_dataset, model, model_name, cfg, device)
         
         else:
             # in case we are not finetuning on a pretrained model
@@ -138,14 +141,14 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
             if cfg.finetune.isLinear:
                 metrics = linearFinetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
             else:
-                ft_trn_loss, ft_val_loss, metrics = finetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
+                ft_trn_loss, ft_val_loss, ft_test_loss, metrics, metrics_test = finetune(ft_trn_dataset, ft_val_dataset, ft_test_dataset, model, model_name, cfg, device)
     
     # check if folder Results/{model_name} exists, if so, delete it to save space
     # delete this code if you want to keep the plots of each run saved in the Results folder locally
     if os.path.exists(f'Results/{model_name}'):
         os.system(f'rm -r Results/{model_name}')
 
-    return ft_trn_loss, ft_val_loss, metrics
+    return ft_trn_loss, ft_val_loss, ft_test_loss, metrics, metrics_test
 
     
 
@@ -153,9 +156,20 @@ if __name__ == '__main__':
     cfg = update_cfg(cfg) # update cfg with command line arguments
     trn_losses = []
     val_losses = []
+    test_losses = []
     metrics = collections.defaultdict(list)
+    metrics_test = collections.defaultdict(list)
     # generate a random seed for each run, always the same for reproducibility
-    seeds = [42, 123, 777, 888, 999]
+    if cfg.seeds == 0:
+        seeds = [42, 123, 777, 888, 999]
+    elif cfg.seeds == 1:
+        seeds = [421, 1231, 7771, 8881, 9991]
+    elif cfg.seeds ==2:
+        seeds = [422, 1232, 7772, 8882, 9992]
+    
+    
+    print("Used seeds:")
+    print(seeds)
 
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
         full_aldeghi_dataset, augmented_dataset, train_transform, val_transform = create_data(cfg)
@@ -198,10 +212,22 @@ if __name__ == '__main__':
                     # pretrn_trn_dataset = train_dataset[:len(train_dataset)//2] # half of the train dataset for pretraining
                     pretrn_trn_dataset.transform = train_transform
                 
-                pretrn_val_dataset = full_aldeghi_dataset[test_index].copy()
+                # split test set in val and test set, so we can do early stopping
+                val_idx, test_idx = train_test_split(test_index, test_size=0.5, random_state=12345)  # Split 50/50
+
+                pretrn_val_dataset = full_aldeghi_dataset[val_idx].copy()
+                pretrn_test_dataset = full_aldeghi_dataset[test_idx].copy()
+                
+                #pretrn_val_dataset = full_aldeghi_dataset[test_index].copy()
                 pretrn_val_dataset.transform = val_transform
                 pretrn_val_dataset = [x for x in pretrn_val_dataset] # apply transform only once
                 ft_val_dataset = pretrn_val_dataset # use same val dataset for pretraining and finetuning
+
+                pretrn_test_dataset.transform = val_transform
+                pretrn_test_dataset = [x for x in pretrn_test_dataset] # apply transform only once
+                ft_test_dataset = pretrn_test_dataset # use same test dataset for pretraining and finetuning
+
+
                 ft_trn_dataset = train_dataset[int((len(train_dataset)/100)*50):] # half of the train dataset for finetuning
                 # ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
                 ft_trn_dataset.transform = train_transform
@@ -239,18 +265,22 @@ if __name__ == '__main__':
                     ft_trn_dataset = [diblock_dataset[i] for i in train_index]
                     ft_val_dataset = [diblock_dataset[i] for i in test_index]
 
-            ft_trn_loss, ft_val_loss, metric = run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset)
+            ft_trn_loss, ft_val_loss, ft_test_loss, metric, metric_test = run(pretrn_trn_dataset, pretrn_val_dataset, pretrn_test_dataset, ft_trn_dataset, ft_val_dataset, ft_test_dataset)
             if not cfg.finetune.isLinear:
                 print(f"losses_{run_idx}:", ft_trn_loss.item(), ft_val_loss.item())
-            wandb_dict = {'final_ft_val_loss': ft_val_loss}
             trn_losses.append(ft_trn_loss)
             val_losses.append(ft_val_loss)
+            test_losses.append(ft_test_loss)
+            wandb_dict = {'final_ft_test_loss': ft_test_loss}
             print(f"metrics_{run_idx}:", end=' ')
             for k, v in metric.items():
                 metrics[k].append(v)
                 print(f"{k}={v}:", end=' ')
-            print()
+            for k, v in metric_test.items():
+                metrics_test[k].append(v)
+                print(f"{k}={v}:", end=' ')
             wandb_dict.update(metric)
+            wandb_dict.update(metric_test)
             wandb.log(wandb_dict)
             wandb.finish()
 
@@ -261,12 +291,20 @@ if __name__ == '__main__':
         # Save the metrics 
         # Save results as excel
         df = pd.DataFrame(dict(metrics))  # Convert defaultdict to DataFrame
-        if cfg.use_augmented_data:
-            df.to_pickle("metrics_frac_augmented_"+str(cfg.augmented_data_fraction)+"use_PL"+".pkl")  # Save as pkl
-            df.to_csv("metrics_frac_augmented_"+str(cfg.augmented_data_fraction)+"use_PL"+".csv", index=False)  # Save as csv
-        else: 
-            df.to_pickle("metrics.pkl")  # Save as pkl
-            df.to_csv("metrics.csv", index=False)  # Save as csv
+        df_test = pd.DataFrame(dict(metrics_test))
+        variables = {
+            "PL": cfg.pseudolabel.shouldUsePseudoLabel,
+            "layer_norm": cfg.pretrain.layer_norm,
+            "seeds": seeds[0],
+            "finetune_percentage": cfg.finetune.aldeghiFTPercentage,
+            "pretraining": cfg.shouldPretrain
+
+        }
+        csv_filename = "metrics_train_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
+        csv_filename_test = "metrics_test_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
+        df.to_csv(csv_filename, index=False)  # Save as csv
+        df_test.to_csv(csv_filename_test, index=False)  # Save as csv
+
     
     elif cfg.finetuneDataset == 'zinc':
         # for zinc, create_data returns directly the datasets, not the trasforms
@@ -302,3 +340,5 @@ if __name__ == '__main__':
     print("----------------------------------------")
     print("config used:")
     print(cfg)
+    print("Seeds used")
+    print(seeds)

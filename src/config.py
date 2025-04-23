@@ -6,16 +6,18 @@ def set_cfg(cfg):
     # ------------------------------------------------------------------------ #
     # General options
     # ------------------------------------------------------------------------ #
+    # Select seeds, 0,1,2 at the moment
+    cfg.seeds = 0
     # Additional num of worker for data loading
     cfg.num_workers = 0
     # Number of runs 
     cfg.runs = 5
     # Whether to pretrain the model
-    cfg.shouldPretrain = True
+    cfg.shouldPretrain = False
     # Whether to finetune the model
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained
-    cfg.shouldFinetuneOnPretrainedModel = True
+    cfg.shouldFinetuneOnPretrainedModel = False
     # name of the pretrained model, used only if shouldPretrain is False
     cfg.pretrainedModelName = 'name' #no rw pos 1drQ8APV W2S5rza7
     # whether to freeze the weights of the pretrained model when finetuning
@@ -25,7 +27,7 @@ def set_cfg(cfg):
     # finetuning dataset, values: 'aldeghi' or 'diblock' or 'zinc', 'diblock' can only be finetuned on a v2 model, not v1.
     cfg.finetuneDataset = 'aldeghi'
     # Whether to use augmented data (only for pretraining) as well
-    cfg.use_augmented_data = True
+    cfg.use_augmented_data = 0
     # If use_augmented_data is True the following controls the fraction of added augmented datapoints (total ca. 100k, thus e.g. 0.5 would be additional 50k pretraining points) 
     cfg.augmented_data_fraction = 0.0
     # name fo the experiment to track on wandb
@@ -33,8 +35,8 @@ def set_cfg(cfg):
 
     cfg.pseudolabel = CN()
     cfg.pseudolabel.jepa_weight = 1.0
-    cfg.pseudolabel.m_w_weight = 0.1
-    cfg.pseudolabel.shouldUsePseudoLabel = True
+    cfg.pseudolabel.m_w_weight = 1.0
+    cfg.pseudolabel.shouldUsePseudoLabel = False
     # ------------------------------------------------------------------------ #
     # Training options
     # ------------------------------------------------------------------------ #
@@ -43,6 +45,9 @@ def set_cfg(cfg):
     cfg.pretrain.batch_size = 128
     # Maximal number of epochs
     cfg.pretrain.epochs = 10
+    # Early stopping, only should be used it normalization layer is used after encoders, 0 for false, 1 for true
+    cfg.pretrain.early_stopping = 0
+    cfg.pretrain.early_stopping_patience = 2
     # Base learning rate
     cfg.pretrain.lr = 0.0005
     # number of steps before reduce learning rate
@@ -50,7 +55,7 @@ def set_cfg(cfg):
     # learning rate decay factor
     cfg.pretrain.lr_decay = 0.5
     # L2 regularization, weight decay
-    cfg.pretrain.wd = 0.0001
+    cfg.pretrain.wd = 0.0
     # Dropout rate
     cfg.pretrain.dropout = 0.1
     # Dropout rate for MLPMixer
@@ -79,6 +84,9 @@ def set_cfg(cfg):
     cfg.finetune.property = 'ea'
     # Number of finetuning epochs
     cfg.finetune.epochs = 100
+    # finetuning early stopping
+    cfg.finetune.early_stopping = 0
+    cfg.finetune.early_stopping_patience = 5
     # Base learning rate
     cfg.finetune.lr = 0.001
     # L2 regularization, weight decay
@@ -104,7 +112,7 @@ def set_cfg(cfg):
     # GraphMLPMixer or graph-based multihead attention: [MLPMixer, Hadamard, Standard, Graph, Addictive, Kernel]
     cfg.model.gMHA_type = 'Hadamard' # Hadamard is the default one for all datasets (yaml files) in original code
     # Hidden size of the model, I should use 300 for v2, 128 for v1
-    cfg.model.hidden_size = 100 # make it a power of 2 if using the default model with transformer attention heads
+    cfg.model.hidden_size = 300 # make it a power of 2 if using the default model with transformer attention heads
     # Number of GNN layers
     cfg.model.nlayer_gnn = 3
     # Number of mlp mixer layers

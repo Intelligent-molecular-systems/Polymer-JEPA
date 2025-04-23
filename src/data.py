@@ -43,7 +43,7 @@ class MyDataset(InMemoryDataset):
         torch.save(self.collate(self.data_list), self.processed_paths[0])
 
 
-def get_graphs(dataset='aldeghi', augmented=False):
+def get_graphs(dataset='aldeghi', augmented=0):
     all_graphs = []
     all_augmented_graphs = []
     # full_atoms_set = set()

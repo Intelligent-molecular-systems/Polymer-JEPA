@@ -61,30 +61,37 @@ import matplotlib.pyplot as plt
 
 
 ### DIBLOCK DATA SCENARIOS ###
+plt.figure(0, figsize=(10, 6))
+# plt.title("Pretrained WDMPNN vs Random Forest on Aldeghi Dataset")
+#plt.title("Our pretraining vs other SSL tasks on Aldeghi Dataset")
 
 # Data from the table
-# ft_size = [4, 8, 12, 16, 24, 32, 48, 80]
-# auprc_no_prtrn = np.array([0.36, 0.44, 0.50, 0.53, 0.60, 0.65, 0.68, 0.71])
-# auprc_prtrn = np.array([0.40, 0.50, 0.57, 0.61, 0.65, 0.67, 0.70, 0.72])
+ft_size = [4, 8, 12, 16, 24, 32, 48, 80]
+auprc_no_prtrn = np.array([0.36, 0.44, 0.50, 0.53, 0.60, 0.65, 0.68, 0.71])
+auprc_prtrn = np.array([0.40, 0.50, 0.57, 0.61, 0.65, 0.67, 0.70, 0.72])
 
-# std_dev_no_prtrn = np.array([0.03, 0.01, 0.03, 0.03, 0.02, 0.03, 0.02, 0.02])
-# std_dev_prtrn = np.array([0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.01, 0.03])
+std_dev_no_prtrn = np.array([0.03, 0.01, 0.03, 0.03, 0.02, 0.03, 0.02, 0.02])
+std_dev_prtrn = np.array([0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.01, 0.03])
 
 
 # # Create plot again with the updated x-axis label
-# plt.figure(figsize=(10, 6))
-# plt.title("Pretraining Performance on Diblock Dataset")
-# plt.xlabel("Finetune dataset size (%)")  # Updated label
-# plt.ylabel("AUPRC")
+plt.title("Pretraining Performance on Diblock Dataset")
+plt.xlabel("Finetune dataset size (%)", fontsize=20)
+plt.ylabel("AUPRC", fontsize=20)
 
 # # Plotting lines with standard deviation areas again
 
-# plt.plot(ft_size, auprc_no_prtrn, label='No Pretraining', color='blue')
-# plt.fill_between(ft_size, auprc_no_prtrn - std_dev_no_prtrn, auprc_no_prtrn + std_dev_no_prtrn, color='blue', alpha=0.1)
+plt.plot(ft_size, auprc_no_prtrn, label='No Pretraining', color='blue')
+plt.fill_between(ft_size, auprc_no_prtrn - std_dev_no_prtrn, auprc_no_prtrn + std_dev_no_prtrn, color='blue', alpha=0.1)
 
-# plt.plot(ft_size, auprc_prtrn, label='Pretraining', color='green')
-# plt.fill_between(ft_size, auprc_prtrn - std_dev_prtrn, auprc_prtrn + std_dev_prtrn, color='green', alpha=0.1)
-# plt.xticks(ft_size, [f"{size}%" for size in ft_size])  # Converts size to percentage strings
+plt.plot(ft_size, auprc_prtrn, label='Pretraining', color='green')
+plt.fill_between(ft_size, auprc_prtrn - std_dev_prtrn, auprc_prtrn + std_dev_prtrn, color='green', alpha=0.1)
+plt.xticks(ft_size, [f"{size}%" for size in ft_size], rotation=45, fontsize=18)  # Converts size to percentage strings
+plt.yticks(fontsize=18)
+plt.legend(fontsize=18)
+plt.grid(True)
+plt.savefig('diblock_comparison.png', dpi=300, bbox_inches='tight')
+
 
 # # Add legend and show plot
 # plt.legend()
@@ -114,7 +121,7 @@ std_dev_gao_prtrn = np.array([0.039554, 0.033191, 0.030189, 0.007161])
 std_dev_gao_prtrn_only_encoder = np.array([0.052568, 0.048467, 0.025704, 0.020673])
 
 # Create plot for the comparison between Pretrained WDMPNN and Random Forest not pretrained
-plt.figure(figsize=(10, 6))
+plt.figure(1, figsize=(10, 6))
 # plt.title("Pretrained WDMPNN vs Random Forest on Aldeghi Dataset")
 #plt.title("Our pretraining vs other SSL tasks on Aldeghi Dataset")
 plt.xlabel("Finetune dataset size (%)", fontsize=20)
@@ -217,3 +224,147 @@ plt.savefig('aldeghi_comparison.png', dpi=300, bbox_inches='tight')
 # plt.legend()
 # plt.grid(True)
 # plt.show()
+
+""" New plots with updated experiments from csv files. """
+# Load the CSV
+import pandas as pd
+df = pd.read_csv('summary_statistics.csv', sep=';')  # Replace with your actual filename
+df_other_paper = pd.read_csv('summary_statistics_Tammo.csv')
+
+# Convert 'TRUE'/'FALSE' strings to booleans if needed
+df['PL'] = df['PL'].astype(bool)
+df['pretraining'] = df['pretraining'].astype(bool)
+
+# Grouping data by percentage and a desired configuration (e.g. PL=True, pretraining=True)
+# Different subsets
+plt.figure(2,figsize=(8, 5))
+df_PL_x_PT_0_N_0 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.2) & (df['pretraining'] == False) & (df['norm'] == 0)].sort_values(by='percentage')
+df_PL_x_PT_0_N_1 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.1) & (df['pretraining'] == False) & (df['norm'] == 1)].sort_values(by='percentage')
+df_PL_1_PT_1_N_0 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.2) & (df['PL'] == True) & (df['pretraining'] == True) & (df['norm'] == 0)].sort_values(by='percentage')
+df_PL_1_PT_1_N_1 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.1) & (df['PL'] == True) & (df['pretraining'] == True) & (df['norm'] == 1)].sort_values(by='percentage')
+df_PL_0_PT_1_N_0 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.2) & (df['PL'] == False) & (df['pretraining'] == True) & (df['norm'] == 0)].sort_values(by='percentage')
+df_PL_0_PT_1_N_1 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.1) & (df['PL'] == False) & (df['pretraining'] == True) & (df['norm'] == 1)].sort_values(by='percentage')
+
+# Match subsets with desired labels and colors
+subsets = [df_PL_0_PT_1_N_0,df_PL_1_PT_1_N_0]
+labels_colors = [("Jepa - Only encoder layers transferred","green"), ("Jepa & pseudolabel - All layers transferred", "purple")]
+#labels_colors = [("Jepa - Only encoder layers transferred","green"), ("Jepa - All layers transferred", "purple"), ("Jepa - No pretraining", "blue"), ("Jepa - Pretrained", "orange"), ("Jepa - Only encoder layers transferred", "grey") ]
+#subsets = [df_PL_x_PT_0_N_0,df_PL_x_PT_0_N_1,df_PL_1_PT_1_N_0,df_PL_1_PT_1_N_1, df_PL_0_PT_1_N_0, df_PL_0_PT_1_N_1]
+
+for exp_sub, l_c in zip(subsets, labels_colors): 
+    # Extract x and y values
+    x = exp_sub['percentage']*40
+    y = exp_sub['R2_mean']
+    y_std = exp_sub['R2_std']
+    #label = 'Polymer-JEPA (PL='+str(exp_sub["PL"].iloc[0])+', PT='+str(exp_sub["pretraining"].iloc[0])+')'
+    #label = str(exp_sub["PL"].iloc[0])+str(exp_sub["pretraining"].iloc[0])+str(exp_sub["norm"].iloc[0])
+    # Plot with shaded standard deviation
+    
+    plt.plot(x, y, label=l_c[0], color=l_c[1])
+    plt.fill_between(x, y - y_std, y + y_std, alpha=0.1)
+
+
+# Results of the other paper, Only_enc_transfer
+df_no_SS = df_other_paper[df_other_paper['source'] == 'No_SS'].sort_values(by='percentage')
+df_no_SS['source'] = df_no_SS['source'].replace({'No_SS':'baseline'})
+df_only_enc_transfer = df_other_paper[df_other_paper['source'] == 'N-SSL'].sort_values(by='percentage')
+df_all_layer_transfer = df_other_paper[df_other_paper['source'] == 'NG-SSL'].sort_values(by='percentage')
+
+subsets_other_paper = [df_only_enc_transfer, df_all_layer_transfer, df_no_SS]#, df_only_enc_transfer, df_all_layer_transfer]
+labels_colors_other_paper = [("Gao et al. - Only encoder layers transferred", "grey"), ("Gao et al. - All layers transferred", "yellow"),  ("Gao et al. - Baseline", "red")]
+
+for exp_sub, l_c in zip(subsets_other_paper, labels_colors_other_paper):
+    x = exp_sub['percentage']*40
+    y = exp_sub['mean_R2']
+    y_std = exp_sub['std_R2']
+    #label = "Gao et al. ("+str(exp_sub["source"].iloc[0])+')'
+    # Plot with shaded standard deviation
+    if l_c[0] == 'Gao et al. - Baseline':
+        plt.plot(x, y, label=l_c[0], color=l_c[1], linestyle = "--")
+    else: 
+        plt.plot(x, y, label=l_c[0], color=l_c[1])
+    plt.fill_between(x, y - y_std, y + y_std, alpha=0.1)
+
+
+plt.xlabel("Finetune dataset size (%)", fontsize=20)
+plt.ylabel(r"$R^2$", fontsize=20)
+plt.xticks(rotation=45, fontsize=18)
+plt.yticks(fontsize=18)
+plt.legend()
+# Adding custom x-axis markers
+plt.xticks(x, [f"{size}%" for size in x])
+
+# Add legend and show plot
+plt.legend(fontsize=14)
+plt.grid(True)
+plt.savefig('comparison_new.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+
+# Plot all precentages of Gao et al. work 
+plt.figure(3,figsize=(8, 5))
+df_other_paper_all = pd.read_csv('summary_statistics_Tammo_all_perc.csv')
+
+df_no_SS = df_other_paper_all[(df_other_paper_all['percentage'] >= 0.01) & (df_other_paper_all['percentage'] <= 0.4) & (df_other_paper_all['source'] == 'No_SS')].sort_values(by='percentage')
+df_only_enc_transfer = df_other_paper_all[(df_other_paper_all['percentage'] >= 0.01) & (df_other_paper_all['percentage'] <= 0.4) & (df_other_paper_all['source'] == 'N-SSL')].sort_values(by='percentage')
+df_all_layer_transfer = df_other_paper_all[(df_other_paper_all['percentage'] >= 0.01) & (df_other_paper_all['percentage'] <= 0.4) & (df_other_paper_all['source'] == 'NG-SSL')].sort_values(by='percentage')
+
+subsets_other_paper = [df_no_SS, df_only_enc_transfer, df_all_layer_transfer]
+
+for exp_sub in subsets_other_paper:
+    # Extract x and y values
+    x = exp_sub['percentage']*40
+    y = exp_sub['mean_R2']
+    y_std = exp_sub['std_R2']
+    label = "Gao et al. ("+str(exp_sub["source"].iloc[0])+')'
+    # Plot with shaded standard deviation
+
+    plt.plot(x, y, label=label, linestyle='--')
+    plt.fill_between(x, y - y_std, y + y_std, alpha=0.1)
+
+
+plt.xlabel("Finetune dataset size (%)", fontsize=20)
+plt.ylabel(r"$R^2$", fontsize=20)
+plt.xticks(rotation=45, fontsize=18)
+plt.yticks(fontsize=18)
+plt.legend()
+# Adding custom x-axis markers
+plt.xticks(x, [f"{size}%" for size in x])
+
+# Add legend and show plot
+plt.legend(fontsize=16)
+plt.grid(True)
+plt.savefig('Gao_all_perc_CV.png', dpi=300, bbox_inches='tight')
+plt.close()
+
+
+# Plot only comparison of pretraining and no pretraining with pseudolabel false 
+plt.figure(4,figsize=(8, 5))
+subsets = [df_PL_x_PT_0_N_0, df_PL_0_PT_1_N_0]
+colors = ['blue', "green"]
+for exp_sub, c in zip(subsets, colors): 
+    # Extract x and y values
+    x = exp_sub['percentage']*40
+    y = exp_sub['R2_mean']
+    y_std = exp_sub['R2_std']
+    label = 'Polymer-JEPA (Pretraining='+str(exp_sub["pretraining"].iloc[0])+')'
+    #label = str(exp_sub["PL"].iloc[0])+str(exp_sub["pretraining"].iloc[0])+str(exp_sub["norm"].iloc[0])
+    # Plot with shaded standard deviation
+    
+    plt.plot(x, y, label=label, color=c)
+    plt.fill_between(x, y - y_std, y + y_std, color=c, alpha=0.05)
+
+
+plt.xlabel("Finetune dataset size (%)", fontsize=20)
+plt.ylabel(r"$R^2$", fontsize=20)
+plt.xticks(rotation=45, fontsize=18)
+plt.yticks(fontsize=18)
+plt.legend()
+# Adding custom x-axis markers
+plt.xticks(x, [f"{size}%" for size in x])
+
+# Add legend and show plot
+plt.legend(fontsize=16)
+plt.grid(True)
+plt.savefig('Pretrain_nopretrain_aldeghi_EA.png', dpi=300, bbox_inches='tight')
+plt.close()

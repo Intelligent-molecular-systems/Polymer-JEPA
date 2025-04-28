@@ -106,7 +106,7 @@ plt.savefig('diblock_comparison.png', dpi=300, bbox_inches='tight')
 ft_size_aldeghi_comparison = [0.4, 0.8, 1.6, 4]  # Finetune sizes in %
 r2_wdmpnn_only_encoder_prtrn = np.array([0.67, 0.76, 0.86, 0.93])
 r2_wdmpnn_with_mw_prtrn = np.array([0.73, 0.82, 0.87, 0.94])
-# r2_rf_no_prtrn = np.array([0.87, 0.87, 0.88, 0.89])
+r2_rf_no_prtrn = np.array([0.87, 0.87, 0.88, 0.89])
 # r2_no_prtrn_ea = np.array([0.46, 0.71, 0.83, 0.94]) # , 0.96, 0.98, 0.99
 r2_gao_prtrn_ = np.array([0.695654, 0.763982, 0.852779, 0.954708])
 # r2_gao_baseline = np.array([0.63, 0.69,	0.80, 0.95])
@@ -114,7 +114,7 @@ r2_gao_prtrn_only_encoder = np.array([0.636246, 0.741461, 0.839005, 0.944453])
 
 std_dev_wdmpnn_only_encoder_prtrn = np.array([0.01, 0.01, 0.02, 0.005])
 std_dev_wdmpnn_with_mw_prtrn = np.array([0.03, 0.01, 0.03, 0.01])
-# std_dev_rf_no_prtrn = np.array([0.02, 0.02, 0.02, 0.02])
+std_dev_rf_no_prtrn = np.array([0.02, 0.02, 0.02, 0.02])
 # std_dev_no_prtrn_ea = np.array([0.15, 0.06, 0.05, 0.01]) # , 0.002, 0.004, 0.002
 std_dev_gao_prtrn = np.array([0.039554, 0.033191, 0.030189, 0.007161])
 # std_dev_gao_baseline = np.array([0.02, 0.03, 0.02, 0.01])
@@ -229,7 +229,7 @@ plt.savefig('aldeghi_comparison.png', dpi=300, bbox_inches='tight')
 # Load the CSV
 import pandas as pd
 df = pd.read_csv('summary_statistics.csv', sep=';')  # Replace with your actual filename
-df_other_paper = pd.read_csv('summary_statistics_Tammo.csv')
+df_other_paper = pd.read_csv('summary_statistics_Gao.csv')
 
 # Convert 'TRUE'/'FALSE' strings to booleans if needed
 df['PL'] = df['PL'].astype(bool)
@@ -246,9 +246,9 @@ df_PL_0_PT_1_N_0 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.2) & (
 df_PL_0_PT_1_N_1 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.1) & (df['PL'] == False) & (df['pretraining'] == True) & (df['norm'] == 1)].sort_values(by='percentage')
 
 # Match subsets with desired labels and colors
-subsets = [df_PL_0_PT_1_N_0,df_PL_1_PT_1_N_0]
-labels_colors = [("Jepa - Only encoder layers transferred","green"), ("Jepa & pseudolabel - All layers transferred", "purple")]
-#labels_colors = [("Jepa - Only encoder layers transferred","green"), ("Jepa - All layers transferred", "purple"), ("Jepa - No pretraining", "blue"), ("Jepa - Pretrained", "orange"), ("Jepa - Only encoder layers transferred", "grey") ]
+subsets = [df_PL_1_PT_1_N_0, df_PL_0_PT_1_N_0]
+#labels_colors = [("Jepa - pretrained","green"), ("Jepa - no pretraining (Baseline)","blue")]#, ("Jepa & pseudolabel - All layers transferred", "purple")]
+labels_colors = [("Jepa - PL","green"), ("Jepa - No PL", "green")]# ("Jepa - No pretraining", "blue"), ("Jepa - Pretrained", "orange"), ("Jepa - Only encoder layers transferred", "grey") ]
 #subsets = [df_PL_x_PT_0_N_0,df_PL_x_PT_0_N_1,df_PL_1_PT_1_N_0,df_PL_1_PT_1_N_1, df_PL_0_PT_1_N_0, df_PL_0_PT_1_N_1]
 
 for exp_sub, l_c in zip(subsets, labels_colors): 
@@ -259,9 +259,12 @@ for exp_sub, l_c in zip(subsets, labels_colors):
     #label = 'Polymer-JEPA (PL='+str(exp_sub["PL"].iloc[0])+', PT='+str(exp_sub["pretraining"].iloc[0])+')'
     #label = str(exp_sub["PL"].iloc[0])+str(exp_sub["pretraining"].iloc[0])+str(exp_sub["norm"].iloc[0])
     # Plot with shaded standard deviation
-    
-    plt.plot(x, y, label=l_c[0], color=l_c[1])
-    plt.fill_between(x, y - y_std, y + y_std, alpha=0.1)
+    if "No PL" in l_c[0]:
+        plt.plot(x, y, label=l_c[0], color=l_c[1], linestyle='--')
+    else: 
+        plt.plot(x, y, label=l_c[0], color=l_c[1])
+
+    plt.fill_between(x, y - y_std, y + y_std, alpha=0.1, color=l_c[1])
 
 
 # Results of the other paper, Only_enc_transfer
@@ -270,8 +273,10 @@ df_no_SS['source'] = df_no_SS['source'].replace({'No_SS':'baseline'})
 df_only_enc_transfer = df_other_paper[df_other_paper['source'] == 'N-SSL'].sort_values(by='percentage')
 df_all_layer_transfer = df_other_paper[df_other_paper['source'] == 'NG-SSL'].sort_values(by='percentage')
 
-subsets_other_paper = [df_only_enc_transfer, df_all_layer_transfer, df_no_SS]#, df_only_enc_transfer, df_all_layer_transfer]
-labels_colors_other_paper = [("Gao et al. - Only encoder layers transferred", "grey"), ("Gao et al. - All layers transferred", "yellow"),  ("Gao et al. - Baseline", "red")]
+subsets_other_paper = [df_all_layer_transfer, df_only_enc_transfer]#, df_only_enc_transfer]#, df_only_enc_transfer, df_no_SS]#, df_only_enc_transfer, df_all_layer_transfer]
+labels_colors_other_paper = [("Gao et al. - PL", "magenta"), ("Gao et al. - No PL", "magenta")]#, ("Gao et al. - Baseline", "red")]
+#labels_colors_other_paper = [("Gao et al. - NG-SSL (best)", "magenta")]
+
 
 for exp_sub, l_c in zip(subsets_other_paper, labels_colors_other_paper):
     x = exp_sub['percentage']*40
@@ -279,11 +284,11 @@ for exp_sub, l_c in zip(subsets_other_paper, labels_colors_other_paper):
     y_std = exp_sub['std_R2']
     #label = "Gao et al. ("+str(exp_sub["source"].iloc[0])+')'
     # Plot with shaded standard deviation
-    if l_c[0] == 'Gao et al. - Baseline':
+    if "No PL" in l_c[0]:
         plt.plot(x, y, label=l_c[0], color=l_c[1], linestyle = "--")
     else: 
         plt.plot(x, y, label=l_c[0], color=l_c[1])
-    plt.fill_between(x, y - y_std, y + y_std, alpha=0.1)
+    plt.fill_between(x, y - y_std, y + y_std, alpha=0.1, color=l_c[1])
 
 
 plt.xlabel("Finetune dataset size (%)", fontsize=20)
@@ -297,13 +302,13 @@ plt.xticks(x, [f"{size}%" for size in x])
 # Add legend and show plot
 plt.legend(fontsize=14)
 plt.grid(True)
-plt.savefig('comparison_new.png', dpi=300, bbox_inches='tight')
+plt.savefig('comparison_JEPA_GaoBest_PL.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 
 # Plot all precentages of Gao et al. work 
 plt.figure(3,figsize=(8, 5))
-df_other_paper_all = pd.read_csv('summary_statistics_Tammo_all_perc.csv')
+df_other_paper_all = pd.read_csv('summary_statistics_Gao_all_perc.csv')
 
 df_no_SS = df_other_paper_all[(df_other_paper_all['percentage'] >= 0.01) & (df_other_paper_all['percentage'] <= 0.4) & (df_other_paper_all['source'] == 'No_SS')].sort_values(by='percentage')
 df_only_enc_transfer = df_other_paper_all[(df_other_paper_all['percentage'] >= 0.01) & (df_other_paper_all['percentage'] <= 0.4) & (df_other_paper_all['source'] == 'N-SSL')].sort_values(by='percentage')
@@ -340,19 +345,19 @@ plt.close()
 
 # Plot only comparison of pretraining and no pretraining with pseudolabel false 
 plt.figure(4,figsize=(8, 5))
-subsets = [df_PL_x_PT_0_N_0, df_PL_0_PT_1_N_0]
-colors = ['blue', "green"]
-for exp_sub, c in zip(subsets, colors): 
+subsets = [df_PL_0_PT_1_N_0, df_PL_x_PT_0_N_0]
+labels_colors = [("Jepa - pretrained","green"), ("No pretraining", "blue")]
+for exp_sub, l_c in zip(subsets, labels_colors): 
     # Extract x and y values
     x = exp_sub['percentage']*40
     y = exp_sub['R2_mean']
     y_std = exp_sub['R2_std']
-    label = 'Polymer-JEPA (Pretraining='+str(exp_sub["pretraining"].iloc[0])+')'
+    #label = 'Polymer-JEPA (Pretraining='+str(exp_sub["pretraining"].iloc[0])+')'
     #label = str(exp_sub["PL"].iloc[0])+str(exp_sub["pretraining"].iloc[0])+str(exp_sub["norm"].iloc[0])
     # Plot with shaded standard deviation
     
-    plt.plot(x, y, label=label, color=c)
-    plt.fill_between(x, y - y_std, y + y_std, color=c, alpha=0.05)
+    plt.plot(x, y, label=l_c[0], color=l_c[1])
+    plt.fill_between(x, y - y_std, y + y_std, alpha=0.05, color=l_c[1])
 
 
 plt.xlabel("Finetune dataset size (%)", fontsize=20)

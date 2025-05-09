@@ -13,7 +13,7 @@ def set_cfg(cfg):
     # Number of runs 
     cfg.runs = 5
     # Whether to pretrain the model
-    cfg.shouldPretrain = False
+    cfg.shouldPretrain = True
     # Whether to finetune the model
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained

@@ -189,6 +189,8 @@ def create_data(cfg):
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
         all_graphs = []
         augmented_graphs= []
+        if cfg.finetuneDataset == 'diblock' and not os.path.isfile('Data/diblock_graphs_list.pt'):
+            all_graphs, _ = get_graphs(dataset=cfg.finetuneDataset, augmented=cfg.use_augmented_data)
         if not os.path.isfile('Data/aldeghi/processed/dataset.pt'): # avoid loading the graphs, if dataset already exists
             all_graphs, _ = get_graphs(dataset=cfg.finetuneDataset, augmented=cfg.use_augmented_data)
         

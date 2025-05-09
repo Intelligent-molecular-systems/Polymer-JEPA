@@ -302,6 +302,17 @@ if __name__ == '__main__':
         }
         csv_filename = "metrics_train_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
         csv_filename_test = "metrics_test_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
+        if cfg.finetuneDataset == 'diblock':
+            variables = {
+            "PL": cfg.pseudolabel.shouldUsePseudoLabel,
+            "layer_norm": cfg.pretrain.layer_norm,
+            "seeds": seeds[0],
+            "finetune_percentage": cfg.finetune.diblockFTPercentage,
+            "pretraining": cfg.shouldPretrain
+
+        }
+        csv_filename = "metrics_diblock_train_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
+        csv_filename_test = "metrics_diblock_test_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
         df.to_csv(csv_filename, index=False)  # Save as csv
         df_test.to_csv(csv_filename_test, index=False)  # Save as csv
 

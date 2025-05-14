@@ -126,10 +126,8 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, pretrn_test_dataset, ft_trn_data
             model.load_state_dict(torch.load(f'Models/Pretrain/{model_name}/model.pt', map_location=device))
 
             if cfg.finetune.isLinear:
-                # TODO: Implement early stopping for linearFinetune
                 metrics = linearFinetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
             else:
-                #train_loss, val_loss, test_loss, metrics, metrics_test
                 ft_trn_loss, ft_val_loss, ft_test_loss, metrics, metrics_test = finetune(ft_trn_dataset, ft_val_dataset, ft_test_dataset, model, model_name, cfg, device)
         
         else:
@@ -218,7 +216,6 @@ if __name__ == '__main__':
                 pretrn_val_dataset = full_aldeghi_dataset[val_idx].copy()
                 pretrn_test_dataset = full_aldeghi_dataset[test_idx].copy()
                 
-                #pretrn_val_dataset = full_aldeghi_dataset[test_index].copy()
                 pretrn_val_dataset.transform = val_transform
                 pretrn_val_dataset = [x for x in pretrn_val_dataset] # apply transform only once
                 ft_val_dataset = pretrn_val_dataset # use same val dataset for pretraining and finetuning

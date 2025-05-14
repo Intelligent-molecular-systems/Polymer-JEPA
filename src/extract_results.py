@@ -2,10 +2,12 @@ import os
 import pandas as pd
 import re
 
-# Folder where your csv files are stored
-folder_path = './'  # Change this to your folder
+# Folder where csv files are stored
+# Run this script from ../
+folder_path = './' 
 
-# Pattern to extract values from the filename
+# Pattern to extract values from the filenames
+# Files from the training procedure in main.py
 filename_pattern = re.compile(
     r'metrics_test_PL_(?P<PL>.*?)_layer_norm_(?P<norm>\d+)_seeds_(?P<seeds>\d+)_finetune_percentage_(?P<percentage>[\d.]+)_pretraining_(?P<pretraining>.*?).csv'
 )
@@ -40,11 +42,11 @@ unwanted_metrics = ['R2', 'RMSE']
 final_df = final_df[~final_df['R2'].isin(unwanted_metrics)]
 
 # Save to CSV
-final_df.to_csv('combined_metrics.csv', sep=';', decimal='.', index=False)
+final_df.to_csv('Results/experiments_paper/aldeghi_experiments_results_combined_metrics.csv', sep=';', decimal='.', index=False)
 
 
 # Load the CSV file using semicolon as the delimiter.
-df = pd.read_csv('combined_metrics.csv', delimiter=';')
+df = pd.read_csv('Results/experiments_paper/aldeghi_experiments_results_combined_metrics.csv', delimiter=';')
 
 # Standardize column names
 df.columns = df.columns.str.strip()
@@ -80,4 +82,4 @@ summary = df.groupby(group_keys, as_index=False).agg(
 )
 
 # Save the aggregated summary to a CSV using semicolon as the delimiter.
-summary.to_csv('summary_statistics.csv', sep=';', index=False)
+summary.to_csv('Results/experiments_paper/summary_statistics.csv', sep=';', index=False)

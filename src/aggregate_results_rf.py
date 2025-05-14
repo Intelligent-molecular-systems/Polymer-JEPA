@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load regression csv
-df = pd.read_csv('RF_results_test.csv')
+df = pd.read_csv('Results/experiments_paper/RF_results_test.csv')
 
 # Group by 'finetune_percentage' and aggregate
 agg_df = df.groupby('finetune_percentage').agg(
@@ -14,10 +14,10 @@ agg_df = df.groupby('finetune_percentage').agg(
 # Add 'real_percentage' column
 agg_df['real_percentage in %'] = agg_df['finetune_percentage'] * 40
 
-agg_df.to_csv('summary_RF_aldeghi.csv')
+agg_df.to_csv('Results/experiments_paper/summary_RF_aldeghi.csv')
 
 # Load classification csv
-df_c = pd.read_csv('RF_results_diblock_test_stoich.csv')
+df_c = pd.read_csv('Results/experiments_paper/RF_results_diblock_test_stoich.csv')
 
 # Group by 'finetune_percentage' and aggregate
 agg_df_c = df_c.groupby('finetune_percentage').agg(
@@ -26,4 +26,4 @@ agg_df_c = df_c.groupby('finetune_percentage').agg(
 ).reset_index()
 
 
-agg_df_c.to_csv('summary_RF_diblock.csv')
+agg_df_c.to_csv('Results/experiments_paper/summary_RF_diblock.csv')

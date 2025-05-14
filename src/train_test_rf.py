@@ -30,7 +30,7 @@ if __name__ == '__main__':
     cfg = update_cfg(cfg)
 
     
-    with open(f'Data/dataset-poly_fps_counts_francesco.pkl', 'rb') as f:
+    with open(f'Data/dataset-poly_fps_counts.pkl', 'rb') as f:
         data = pickle.load(f)
 
     X_full = data['X']
@@ -119,6 +119,6 @@ if __name__ == '__main__':
                 metrics_test['rmse'].append(rmse_test)
 
     df = pd.DataFrame(metrics)
-    df.to_csv(f'RF_results_train.csv', index=False)
+    df.to_csv(f'Results/experiments_paper/RF_results_train.csv', index=False)
     df = pd.DataFrame(metrics_test)
-    df.to_csv(f'RF_results_test.csv', index=False)
+    df.to_csv(f'Results/experiments_paper/RF_results_test.csv', index=False)

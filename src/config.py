@@ -17,7 +17,7 @@ def set_cfg(cfg):
     # Whether to finetune the model
     cfg.shouldFinetune = True
     # in case we want to finetune on a model that was pretrained
-    cfg.shouldFinetuneOnPretrainedModel = False
+    cfg.shouldFinetuneOnPretrainedModel = True
     # name of the pretrained model, used only if shouldPretrain is False
     cfg.pretrainedModelName = 'name' #no rw pos 1drQ8APV W2S5rza7
     # whether to freeze the weights of the pretrained model when finetuning

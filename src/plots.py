@@ -27,7 +27,7 @@ plt.xticks(ft_size, [f"{size}%" for size in ft_size], rotation=45, fontsize=18) 
 plt.yticks(fontsize=18)
 plt.legend(fontsize=18)
 plt.grid(True)
-plt.savefig('diblock_comparison.png', dpi=300, bbox_inches='tight')
+plt.savefig('Results/experiments_paper/diblock_comparison.png', dpi=300, bbox_inches='tight')
 
 
 # Updated values after cross validation
@@ -155,8 +155,8 @@ plt.savefig('aldeghi_comparison.png', dpi=300, bbox_inches='tight') """
 
 """ New plots with updated experiments from csv files. """
 # Load the CSV
-df = pd.read_csv('summary_statistics.csv', sep=';')  # Replace with your actual filename
-df_other_paper = pd.read_csv('summary_statistics_Gao.csv')
+df = pd.read_csv('Results/experiments_paper/summary_statistics.csv', sep=';')  # Replace with your actual filename
+df_other_paper = pd.read_csv('Results/experiments_paper/summary_statistics_Gao.csv')
 
 # Convert 'TRUE'/'FALSE' strings to booleans if needed
 df['PL'] = df['PL'].astype(bool)
@@ -229,13 +229,13 @@ plt.xticks(x, [f"{size}%" for size in x])
 # Add legend and show plot
 plt.legend(fontsize=16)
 plt.grid(True)
-plt.savefig('comparison_JEPA_GaoBest_PL.png', dpi=300, bbox_inches='tight')
+plt.savefig('Results/experiments_paper/comparison_JEPA_GaoBest_PL.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 
 # Plot all precentages of Gao et al. work 
 plt.figure(4,figsize=(8, 5))
-df_other_paper_all = pd.read_csv('summary_statistics_Gao_all_perc.csv')
+df_other_paper_all = pd.read_csv('Results/experiments_paper/summary_statistics_Gao_all_perc.csv')
 
 df_no_SS = df_other_paper_all[(df_other_paper_all['percentage'] >= 0.01) & (df_other_paper_all['percentage'] <= 0.4) & (df_other_paper_all['source'] == 'No_SS')].sort_values(by='percentage')
 df_only_enc_transfer = df_other_paper_all[(df_other_paper_all['percentage'] >= 0.01) & (df_other_paper_all['percentage'] <= 0.4) & (df_other_paper_all['source'] == 'N-SSL')].sort_values(by='percentage')
@@ -266,7 +266,7 @@ plt.xticks(x, [f"{size}%" for size in x])
 # Add legend and show plot
 plt.legend(fontsize=16)
 plt.grid(True)
-plt.savefig('Gao_all_perc_CV.png', dpi=300, bbox_inches='tight')
+plt.savefig('Results/experiments_paper/Gao_all_perc_CV.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 
@@ -298,7 +298,7 @@ plt.xticks(x, [f"{size}%" for size in x])
 # Add legend and show plot
 plt.legend(fontsize=18)
 plt.grid(True)
-plt.savefig('Pretrain_nopretrain_aldeghi_EA.png', dpi=300, bbox_inches='tight')
+plt.savefig('Results/experiments_paper/Pretrain_nopretrain_aldeghi_EA.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 # Plot comparison of pretraining and no pretraining with pseudolabel false and the RF model 
@@ -317,7 +317,7 @@ for exp_sub, l_c in zip(subsets, labels_colors):
     plt.plot(x, y, label=l_c[0], color=l_c[1])
     plt.fill_between(x, y - y_std, y + y_std, alpha=0.05, color=l_c[1])
 
-df_RF = pd.read_csv("summary_RF_aldeghi.csv")  # Update with actual path
+df_RF = pd.read_csv("Results/experiments_paper/summary_RF_aldeghi.csv")  # Update with actual path
 # Baseline line in red
 x_RF = df_RF["percentage"] * 40
 y_RF = df_RF["R2_mean"]
@@ -337,7 +337,7 @@ plt.xticks(x, [f"{size}%" for size in x])
 # Add legend and show plot
 plt.legend(fontsize=16)
 plt.grid(True)
-plt.savefig('Pretrain_nopretrain_RF_aldeghi_EA.png', dpi=300, bbox_inches='tight')
+plt.savefig('Results/experiments_paper/Pretrain_nopretrain_RF_aldeghi_EA.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 plt.figure(7,figsize=(8, 5))
@@ -356,7 +356,7 @@ plt.fill_between(ft_size, auprc_prtrn - std_dev_prtrn, auprc_prtrn + std_dev_prt
 plt.plot(ft_size, auprc_no_prtrn, label='wD-MPNN - No pretraining', color='blue')
 plt.fill_between(ft_size, auprc_no_prtrn - std_dev_no_prtrn, auprc_no_prtrn + std_dev_no_prtrn, color='blue', alpha=0.05)
 
-df_RF = pd.read_csv("summary_RF_diblock.csv") 
+df_RF = pd.read_csv("Results/experiments_paper/summary_RF_diblock.csv") 
 # Baseline line in red
 x_RF = df_RF["finetune_percentage"] * 100
 y_RF = df_RF["prc_mean"]
@@ -371,4 +371,4 @@ plt.xticks(ft_size, [f"{size}%" for size in ft_size], rotation=45, fontsize=18) 
 plt.yticks(fontsize=18)
 plt.legend(fontsize=16)
 plt.grid(True)
-plt.savefig('diblock_comparison_RF.png', dpi=300, bbox_inches='tight')
+plt.savefig('Results/experiments_paper/diblock_comparison_RF.png', dpi=300, bbox_inches='tight')

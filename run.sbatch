@@ -30,4 +30,4 @@ done
 
 echo "$processed_args"
 
-srun apptainer exec --bind /tudelft.net:/tudelft.net --nv $APPTAINER_NAME python main.py $processed_args
+srun apptainer exec --nv $APPTAINER_NAME python main.py $processed_args

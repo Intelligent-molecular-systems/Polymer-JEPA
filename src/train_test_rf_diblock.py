@@ -102,4 +102,4 @@ if __name__ == '__main__':
                 metrics["seed_set"].append(cfg_seeds)
                 metrics["finetune_percentage"].append(ft_percentage)
     df = pd.DataFrame(metrics)
-    df.to_csv(f'RF_results_diblock_test_stoich.csv', index=False)
+    df.to_csv(f'Results/experiments_paper/RF_results_diblock_test_stoich.csv', index=False)

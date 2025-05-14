@@ -1,0 +1,48 @@
+name: __apptainer__
+channels:
+  - defaults
+dependencies:
+  - _libgcc_mutex=0.1=main
+  - _openmp_mutex=5.1=1_gnu
+  - bzip2=1.0.8=h5eee18b_6
+  - ca-certificates=2025.2.25=h06a4308_0
+  - ld_impl_linux-64=2.40=h12ee557_0
+  - libffi=3.4.4=h6a678d5_1
+  - libgcc-ng=11.2.0=h1234567_1
+  - libgomp=11.2.0=h1234567_1
+  - libstdcxx-ng=11.2.0=h1234567_1
+  - libuuid=1.41.5=h5eee18b_0
+  - ncurses=6.4=h6a678d5_0
+  - openssl=3.0.16=h5eee18b_0
+  - readline=8.2=h5eee18b_0
+  - setuptools=75.8.0=py310h06a4308_0
+  - sqlite=3.45.3=h5eee18b_0
+  - tk=8.6.14=h39e8969_0
+  - wheel=0.45.1=py310h06a4308_0
+  - xz=5.6.4=h5eee18b_1
+  - zlib=1.2.13=h5eee18b_1
+  - python=3.10
+  - pip
+  - pip:
+    - --find-links https://pytorch-geometric.com/whl/torch-2.1.0+cu121.html 
+    - torch-geometric==2.3.0 
+    - torch-sparse
+    - torch-scatter
+    - torch-cluster
+    - torch==2.1 
+    - numpy==1.26.4
+    - wandb 
+    - networkx 
+    - yacs 
+    - metis
+    - kaleido 
+    - tensorboard 
+    - einops 
+    - pillow 
+    - tqdm 
+    - pandas 
+    - rdkit 
+    - matplotlib 
+    - plotly 
+    - seaborn 
+    - umap-learn

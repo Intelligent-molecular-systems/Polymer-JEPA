@@ -89,6 +89,11 @@ def train(train_loader, model, optimizer, device, momentum_weight,sharp=None, cr
             with torch.no_grad():
                 for param_q, param_k in zip(model.context_encoder.parameters(), model.target_encoder.parameters()):
                     param_k.data.mul_(momentum_weight).add_((1.-momentum_weight) * param_q.detach().data)
+                 # Update normalization layer weights and biases as well with EMA
+                if model.layer_norm:
+                    for norm_q, norm_k in zip([model.context_norm], [model.target_norm]):
+                        norm_k.weight.data.mul_(momentum_weight).add_((1. - momentum_weight) * norm_q.weight.detach().data)
+                        norm_k.bias.data.mul_(momentum_weight).add_((1. - momentum_weight) * norm_q.bias.detach().data)
         
     
     avg_trn_loss = total_loss / len(train_loader)

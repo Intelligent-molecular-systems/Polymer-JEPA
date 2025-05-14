@@ -6,6 +6,8 @@ def set_cfg(cfg):
     # ------------------------------------------------------------------------ #
     # General options
     # ------------------------------------------------------------------------ #
+    # Select seeds, 0,1,2 at the moment
+    cfg.seeds = 0
     # Additional num of worker for data loading
     cfg.num_workers = 0
     # Number of runs 
@@ -24,12 +26,16 @@ def set_cfg(cfg):
     cfg.modelVersion = 'v2'
     # finetuning dataset, values: 'aldeghi' or 'diblock' or 'zinc', 'diblock' can only be finetuned on a v2 model, not v1.
     cfg.finetuneDataset = 'aldeghi'
+    # Whether to use augmented data (only for pretraining) as well
+    cfg.use_augmented_data = 0
+    # If use_augmented_data is True the following controls the fraction of added augmented datapoints (total ca. 100k, thus e.g. 0.5 would be additional 50k pretraining points) 
+    cfg.augmented_data_fraction = 0.0
     # name fo the experiment to track on wandb
     cfg.experimentName = 'default'
 
     cfg.pseudolabel = CN()
     cfg.pseudolabel.jepa_weight = 1.0
-    cfg.pseudolabel.m_w_weight = 0.1
+    cfg.pseudolabel.m_w_weight = 1.0
     cfg.pseudolabel.shouldUsePseudoLabel = False
     # ------------------------------------------------------------------------ #
     # Training options
@@ -39,6 +45,9 @@ def set_cfg(cfg):
     cfg.pretrain.batch_size = 128
     # Maximal number of epochs
     cfg.pretrain.epochs = 10
+    # Early stopping, only should be used it normalization layer is used after encoders, 0 for false, 1 for true
+    cfg.pretrain.early_stopping = 0
+    cfg.pretrain.early_stopping_patience = 2
     # Base learning rate
     cfg.pretrain.lr = 0.0005
     # number of steps before reduce learning rate
@@ -66,6 +75,8 @@ def set_cfg(cfg):
     cfg.pretrain.var_weight = 25
     # covariance loss weight
     cfg.pretrain.cov_weight = 1
+    # layer normalization after the context and target encoder to ensure embeddings stay constant in magnitude
+    cfg.pretrain.layer_norm = 1
 
     
     cfg.finetune = CN()
@@ -73,6 +84,9 @@ def set_cfg(cfg):
     cfg.finetune.property = 'ea'
     # Number of finetuning epochs
     cfg.finetune.epochs = 100
+    # finetuning early stopping
+    cfg.finetune.early_stopping = 0
+    cfg.finetune.early_stopping_patience = 5
     # Base learning rate
     cfg.finetune.lr = 0.001
     # L2 regularization, weight decay
@@ -81,7 +95,7 @@ def set_cfg(cfg):
     cfg.finetune.batch_size = 64
     cfg.finetune.isLinear = False
     # which percentage of the full dataset should be used to pretrain
-    # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.04%, 0.08%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
+    # (1%, 2%, 4%, 6%, 8%, 10%, 20%, 40%, 60%, 80% and 100%) of 40%, which are equivalent to 0.4%, 0.8%, 1.6%, 2.4%, 3.2%, 4%, 8%, 16%, 24%, 32%, 40% of the total dataset
     # this value is relative to 40%: 0.01 -> 1 % = 160 graphs 0.2 * 40
     cfg.finetune.aldeghiFTPercentage = 0.01
     # diblock has around 4800 graphs in total, 0.8 should be used as max size to match same full dataset size used by Aldeghi paper, 

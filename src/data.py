@@ -10,6 +10,7 @@ import torch
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.datasets import ZINC
 import tqdm
+import numpy as np
 
 
 # https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.data.Dataset.html#torch_geometric.data.Dataset
@@ -17,10 +18,14 @@ import tqdm
 class MyDataset(InMemoryDataset):
     def __init__(self, root, data_list, transform=None, pre_transform=None):
         self.data_list = data_list
-        super().__init__(root, transform, pre_transform)
+        super().__init__(root or "", transform, pre_transform)
         # self.load(self.processed_paths[0])
         # For PyG<2.4:
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        if root is not None:
+            self.data, self.slices = torch.load(self.processed_paths[0])
+        else: 
+            self.data, self.slices = self.collate(data_list)
+            
 
     @property
     def processed_file_names(self):
@@ -38,14 +43,19 @@ class MyDataset(InMemoryDataset):
         torch.save(self.collate(self.data_list), self.processed_paths[0])
 
 
-def get_graphs(dataset='aldeghi'):
+def get_graphs(dataset='aldeghi', augmented=0):
     all_graphs = []
+    all_augmented_graphs = []
     # full_atoms_set = set()
     
     file_csv='Data/aldeghi_coley_ea_ip_dataset.csv' if dataset == 'aldeghi' else 'Data/diblock_copolymer_dataset.csv'
     file_graphs_list='Data/aldeghi_graphs_list.pt' if dataset == 'aldeghi' else 'Data/diblock_graphs_list.pt'
 
-    # check if graphs_list.pt exists
+    if augmented:
+        file_csv_augmented='Data/aldeghi_coley_augmented.csv'
+        file_graphs_list_augmented='Data/aldeghi_graphs_list_augmented.pt'
+
+
     if not os.path.isfile(file_graphs_list):
         print('Creating graphs pt file...')
         df = pd.read_csv(file_csv)
@@ -98,16 +108,54 @@ def get_graphs(dataset='aldeghi'):
                 all_graphs.append(graph)
         else:
             raise ValueError('Invalid dataset name')
-        
-        random.seed(12345)
-        all_graphs = random.sample(all_graphs, len(all_graphs))
-        torch.save(all_graphs, file_graphs_list)
-        print('Graphs .pt file saved')
-    else:
-        print('Loading graphs pt file...')
+    else: 
         all_graphs = torch.load(file_graphs_list)
+                
+    # check if graphs_list.pt exists
+    if augmented:
+        if not os.path.isfile(file_graphs_list_augmented):
+            print('Creating augmented graphs pt file...')
+            df = pd.read_csv(file_csv_augmented)
+            # use tqdm to show progress bar
+            if dataset == 'aldeghi':
+                for i in tqdm.tqdm(range(len(df.loc[:, 'poly_chemprop_input']))):
+                    poly_strings = df.loc[i, 'poly_chemprop_input']
+                    ea_values = np.nan
+                    ip_values = np.nan
+                    # given the input polymer string, this function returns a pyg data object
+                    graph = poly_smiles_to_graph(
+                        poly_strings=poly_strings, 
+                        isAldeghiDataset=True,
+                        y_EA=ea_values, 
+                        y_IP=ip_values
+                    ) 
+                    # polymer_monomers = set(poly_strings.split('|')[0].split('.'))
 
-    return all_graphs
+                    # m = Chem.MolFromSmiles(graph.smiles['polymer'])
+                    # full_atoms_set.update(set([atom.GetAtomicNum() for atom in m.GetAtoms()]))
+                    # if polymer_monomers.isdisjoint(test_monomers):
+                    all_augmented_graphs.append(graph)
+                    # else:
+                    #     test_graphs.append(graph)
+                
+                # with open('full_atoms_list.txt', 'w') as f:
+                #     f.write(','.join([str(a) for a in full_atoms_set]))
+                # f.close()
+            
+            random.seed(12345)
+            all_augmented_graphs = random.sample(all_augmented_graphs, len(all_augmented_graphs))
+            torch.save(all_augmented_graphs, file_graphs_list_augmented)
+            print('Graphs .pt file saved')
+        else:
+            print('Loading graphs pt file...')
+            all_augmented_graphs = torch.load(file_graphs_list_augmented)
+        
+        return all_graphs, all_augmented_graphs
+    
+        # no augmented 
+    else: 
+        return all_graphs, None
+        
 
 
 def create_data(cfg):
@@ -140,13 +188,25 @@ def create_data(cfg):
     
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
         all_graphs = []
+        augmented_graphs= []
+        if cfg.finetuneDataset == 'diblock' and not os.path.isfile('Data/diblock_graphs_list.pt'):
+            all_graphs, _ = get_graphs(dataset=cfg.finetuneDataset, augmented=cfg.use_augmented_data)
         if not os.path.isfile('Data/aldeghi/processed/dataset.pt'): # avoid loading the graphs, if dataset already exists
-            all_graphs = get_graphs(dataset=cfg.finetuneDataset)
+            all_graphs, _ = get_graphs(dataset=cfg.finetuneDataset, augmented=cfg.use_augmented_data)
         
         dataset = MyDataset(root='Data/aldeghi', data_list=all_graphs, pre_transform=pre_transform)
 
+        # Additional augmented data
+        if cfg.use_augmented_data:
+            if not os.path.isfile('Data/aldeghi_augmented/processed/dataset.pt'): # avoid loading the graphs, if dataset already exists
+                all_graphs, augmented_graphs = get_graphs(dataset=cfg.finetuneDataset, augmented=cfg.use_augmented_data)
+        
+            augmented_dataset = MyDataset(root='Data/aldeghi_augmented', data_list=augmented_graphs, pre_transform=pre_transform)
+            # Return also 
+            return dataset, augmented_dataset, transform_train, transform_val
+
         # return full dataset and transforms, split in pretrain/finetune, train/test is done in the training script with k fold
-        return dataset, transform_train, transform_val
+        return dataset, None, transform_train, transform_val
     
     elif cfg.finetuneDataset == 'zinc':
         smiles_dict = {}

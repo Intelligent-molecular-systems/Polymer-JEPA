@@ -10,8 +10,32 @@ from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 import wandb
 
+class EarlyStopping:
+    def __init__(self, patience=5, delta=0):
+        self.patience = patience
+        self.delta = delta
+        self.best_score = None
+        self.early_stop = False
+        self.counter = 0
+        self.best_model_state = None
 
-def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
+    def __call__(self, val_loss, model):
+        score = -val_loss
+        if self.best_score is None:
+            self.best_score = score
+            self.best_model_state = model.state_dict()
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.best_model_state = model.state_dict()
+            self.counter = 0
+    def load_best_model(self, model):
+        model.load_state_dict(self.best_model_state)
+
+def finetune(ft_trn_data, ft_val_data, ft_test_data, model, model_name, cfg, device):
     print(f'Finetuning training on: {len(ft_trn_data)} graphs')
     print(f'Finetuning validating on: {len(ft_val_data)} graphs')
     
@@ -22,7 +46,10 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
 
     ft_trn_loader = DataLoader(dataset=ft_trn_data, batch_size=cfg.finetune.batch_size, shuffle=True, num_workers=cfg.num_workers)
     ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False, num_workers=cfg.num_workers)
+    ft_test_loader = DataLoader(dataset=ft_test_data, batch_size=cfg.finetune.batch_size, shuffle=False, num_workers=cfg.num_workers)
 
+    if cfg.finetune.early_stopping:
+        early_stopping = EarlyStopping(patience=cfg.finetune.early_stopping_patience)
     # dataset specific configurations
     if cfg.finetuneDataset == 'aldeghi':
         out_dim = 1 # 1 property
@@ -114,7 +141,8 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
 
         total_train_loss /= len(ft_trn_loader)
 
-        if epoch == cfg.finetune.epochs - 1: # eval only on the last epoch, computation is expensive
+        # Evaluate the model on validation data for early stopping
+        if epoch % 2 == 0: # eval only every 2 epochs, computation is expensive
             model.eval()
             predictor.eval()
             with torch.no_grad():
@@ -156,6 +184,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
 
             print(f'Epoch: {epoch+1:03d}, Train Loss: {train_loss:.5f}' f' Val Loss:{val_loss:.5f}')
 
+
             os.makedirs(f'Results/{model_name}', exist_ok=True)
 
             if not cfg.shouldFinetuneOnPretrainedModel: # if we are finetuning on a model that was not pretrained, save hyperparameters
@@ -177,7 +206,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
                     label=label, 
                     save_folder=save_folder,
                     epoch=epoch+1,
-                    shouldPlotMetrics=cfg.visualize.shouldPlotMetrics
+                    shouldPlotMetrics=False
                 )
                 metrics['R2'] = R2
                 metrics['RMSE'] = RMSE
@@ -189,7 +218,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
                     np.array(all_true_val),
                     save_folder=save_folder,
                     epoch=epoch+1,
-                    shouldPlotMetrics=cfg.visualize.shouldPlotMetrics
+                    shouldPlotMetrics=False
                 )
                 metrics['prc_mean'] = prc_mean
                 metrics['roc_mean'] = roc_mean
@@ -197,5 +226,93 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
                 print(f'Val Loss: {val_loss}')
             else:
                 raise ValueError('Invalid dataset name')
+            # Early stopping optionally
+            if cfg.finetune.early_stopping:
+                early_stopping(val_loss, model)
+                if early_stopping.early_stop:
+                    print("Early stopping at epoch:", epoch)
+                    break
+            
+    # Evaluate the model on test set for final performance estimate
+    if cfg.finetune.early_stopping:
+        early_stopping.load_best_model(model)
+    model.eval()
+    predictor.eval()
+    with torch.no_grad():
+        test_loss = 0
+        all_y_pred_test = []
+        all_true_test = []
+
+        for data in ft_test_loader:
+            data = data.to(device)
+            graph_embeddings = model.encode(data)
+            y_pred_test = predictor(graph_embeddings).squeeze()
+
+            if cfg.finetuneDataset == 'aldeghi':
+                test_loss += criterion(y_pred_test, data.y_EA.float() if cfg.finetune.property == 'ea' else data.y_IP.float())
+                all_y_pred_test.extend(y_pred_test.detach().cpu().numpy())
+                all_true_test.extend(data.y_EA.detach().cpu().numpy() if cfg.finetune.property == 'ea' else data.y_IP.detach().cpu().numpy())
+
+            elif cfg.finetuneDataset == 'diblock':
+                y_lamellar = torch.tensor(data.y_lamellar, dtype=torch.float32, device=device)
+                y_cylinder = torch.tensor(data.y_cylinder, dtype=torch.float32, device=device)
+                y_sphere = torch.tensor(data.y_sphere, dtype=torch.float32, device=device)
+                y_gyroid = torch.tensor(data.y_gyroid, dtype=torch.float32, device=device)
+                y_disordered = torch.tensor(data.y_disordered, dtype=torch.float32, device=device)
+
+                true_labels = torch.stack([y_lamellar, y_cylinder, y_sphere, y_gyroid, y_disordered], dim=1)
+
+                test_loss += criterion(y_pred_test, true_labels)
+                all_y_pred_test.extend(y_pred_test.detach().cpu().numpy())
+                all_true_test.extend(true_labels.detach().cpu().numpy())
+
+            elif cfg.finetuneDataset == 'zinc':
+                test_loss += criterion(y_pred_test, data.y.float())
+                all_y_pred_test.extend(y_pred_test.detach().cpu().numpy())
+                all_true_test.extend(data.y.detach().cpu().numpy())
+            else:
+                raise ValueError('Invalid dataset name')
+            
+    test_loss /= len(ft_test_loader)
+
+    print(f'Final epoch after early stopping: {epoch+1:03d}, Train Loss: {train_loss:.5f}' f' test Loss:{test_loss:.5f}')
+
+    os.makedirs(f'Results/{model_name}', exist_ok=True)
+
+    percentage = cfg.finetune.aldeghiFTPercentage if cfg.finetuneDataset == 'aldeghi' else cfg.finetune.diblockFTPercentage
+    save_folder = f'Results/{model_name}/{cfg.finetuneDataset}_{cfg.modelVersion}_{percentage}'
+    metrics_test = {}
+    if cfg.finetuneDataset == 'aldeghi':
+        label = 'ea' if cfg.finetune.property == 'ea' else 'ip'
+        
+        # if cfg.visualize.shouldEmbeddingSpace:
+        #     visualeEmbeddingSpace(all_embeddings, mon_A_type, stoichiometry, model_name, epoch, isFineTuning=True)
+
+        R2, RMSE = visualize_aldeghi_results(
+            np.array(all_y_pred_test), 
+            np.array(all_true_test), 
+            label=label, 
+            save_folder=save_folder,
+            epoch=epoch+1,
+            shouldPlotMetrics=cfg.visualize.shouldPlotMetrics
+        )
+        metrics_test['R2'] = R2
+        metrics_test['RMSE'] = RMSE
+        
+
+    elif cfg.finetuneDataset == 'diblock':
+        prc_mean, roc_mean = visualize_diblock_results(
+            np.array(all_y_pred_test), 
+            np.array(all_true_test),
+            save_folder=save_folder,
+            epoch=epoch+1,
+            shouldPlotMetrics=cfg.visualize.shouldPlotMetrics
+        )
+        metrics_test['prc_mean'] = prc_mean
+        metrics_test['roc_mean'] = roc_mean
+    elif cfg.finetuneDataset == 'zinc':
+        print(f'test Loss: {test_loss}')
+    else:
+        raise ValueError('Invalid dataset name')
     
-    return train_loss, val_loss, metrics
+    return train_loss, val_loss, test_loss, metrics, metrics_test

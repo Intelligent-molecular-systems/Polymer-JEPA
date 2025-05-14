@@ -19,6 +19,10 @@ runs
 *.html
 .DS_Store
 slurm*
+metrics*.csv
+summary*.csv
+*.pkl
+*.sif
 
 Models/
 Results/

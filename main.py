@@ -2,7 +2,7 @@ import collections
 import os
 import math
 import random
-from sklearn.model_selection import KFold, StratifiedShuffleSplit
+from sklearn.model_selection import KFold, StratifiedShuffleSplit, train_test_split
 from src.config import cfg, update_cfg
 from src.data import create_data, getMaximizedVariedData, getLabData, getRandomData, getTammoData
 from src.finetune import finetune
@@ -19,16 +19,18 @@ import string
 import time
 import torch
 import wandb
+import pandas as pd
 
 os.environ["WANDB_MODE"]="offline"
 
-def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
+def run(pretrn_trn_dataset, pretrn_val_dataset, pretrn_test_dataset, ft_trn_dataset, ft_val_dataset, ft_test_dataset):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
     model_name = None
 
     if cfg.shouldPretrain:
+        # pretraining only needs, validation set not test set (testing is done after finetuning)
         model, model_name = pretrain(pretrn_trn_dataset, pretrn_val_dataset, cfg, device)
 
     ft_trn_loss = 0.0
@@ -68,6 +70,7 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
                     num_target_patches=cfg.jepa.num_targets,
                     should_share_weights=cfg.pretrain.shouldShareWeights,
                     regularization=cfg.pretrain.regularization,
+                    layer_norm=cfg.pretrain.layer_norm,
                     shouldUse2dHyperbola=cfg.jepa.dist == 0,
                     shouldUseNodeWeights=True,
                     shouldUsePseudoLabel=cfg.pseudolabel.shouldUsePseudoLabel
@@ -125,7 +128,7 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
             if cfg.finetune.isLinear:
                 metrics = linearFinetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
             else:
-                ft_trn_loss, ft_val_loss, metrics = finetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
+                ft_trn_loss, ft_val_loss, ft_test_loss, metrics, metrics_test = finetune(ft_trn_dataset, ft_val_dataset, ft_test_dataset, model, model_name, cfg, device)
         
         else:
             # in case we are not finetuning on a pretrained model
@@ -136,14 +139,14 @@ def run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset):
             if cfg.finetune.isLinear:
                 metrics = linearFinetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
             else:
-                ft_trn_loss, ft_val_loss, metrics = finetune(ft_trn_dataset, ft_val_dataset, model, model_name, cfg, device)
+                ft_trn_loss, ft_val_loss, ft_test_loss, metrics, metrics_test = finetune(ft_trn_dataset, ft_val_dataset, ft_test_dataset, model, model_name, cfg, device)
     
     # check if folder Results/{model_name} exists, if so, delete it to save space
     # delete this code if you want to keep the plots of each run saved in the Results folder locally
     if os.path.exists(f'Results/{model_name}'):
         os.system(f'rm -r Results/{model_name}')
 
-    return ft_trn_loss, ft_val_loss, metrics
+    return ft_trn_loss, ft_val_loss, ft_test_loss, metrics, metrics_test
 
     
 
@@ -151,12 +154,23 @@ if __name__ == '__main__':
     cfg = update_cfg(cfg) # update cfg with command line arguments
     trn_losses = []
     val_losses = []
+    test_losses = []
     metrics = collections.defaultdict(list)
+    metrics_test = collections.defaultdict(list)
     # generate a random seed for each run, always the same for reproducibility
-    seeds = [42, 123, 777, 888, 999]
+    if cfg.seeds == 0:
+        seeds = [42, 123, 777, 888, 999]
+    elif cfg.seeds == 1:
+        seeds = [421, 1231, 7771, 8881, 9991]
+    elif cfg.seeds ==2:
+        seeds = [422, 1232, 7772, 8882, 9992]
+    
+    
+    print("Used seeds:")
+    print(seeds)
 
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
-        full_aldeghi_dataset, train_transform, val_transform = create_data(cfg)
+        full_aldeghi_dataset, augmented_dataset, train_transform, val_transform = create_data(cfg)
         
         # !! setting folds = runs is risky, they shouldn't be used as done here !!
         kf = KFold(n_splits=cfg.runs, shuffle=True, random_state=12345)
@@ -178,14 +192,39 @@ if __name__ == '__main__':
                     # keep 50% of the train dataset for finetuning, corresponding to 40% of the full dataset
                     pretrn_trn_dataset = train_dataset[:int((len(train_dataset)/100)*50)] # half of the train dataset for pretraining
 
+                    # Optionally there can be more augmented data added to the pretraining data
+                    if cfg.use_augmented_data and cfg.augmented_data_fraction:  # Check if augmented data should be used
+                        # Shuffle augmented data
+                        num_aug_samples = int(cfg.augmented_data_fraction * len(augmented_dataset))
+                        shuffled_indices = torch.randperm(len(augmented_dataset))  # Random permutation
+                        aug_subset = augmented_dataset[shuffled_indices][:num_aug_samples]  # Select fraction
+
+                        # Extract data objects
+                        data_list = pretrn_trn_dataset[:].copy() + aug_subset[:].copy()
+
+                        # Instead of modifying a sliced dataset, create a new dataset instance, root=None -> in memory only 
+                        pretrn_trn_dataset = train_dataset.__class__(root=None, data_list=data_list)
+                        print(f"Using augmented data with {num_aug_samples} samples.")
+                    else:
+                        print("Augmented data is not used for pretraining.")
                     # pretrn_trn_dataset = train_dataset[:len(train_dataset)//2] # half of the train dataset for pretraining
                     pretrn_trn_dataset.transform = train_transform
-
                 
-                pretrn_val_dataset = full_aldeghi_dataset[test_index].copy()
+                # split test set in val and test set, so we can do early stopping
+                val_idx, test_idx = train_test_split(test_index, test_size=0.5, random_state=12345)  # Split 50/50
+
+                pretrn_val_dataset = full_aldeghi_dataset[val_idx].copy()
+                pretrn_test_dataset = full_aldeghi_dataset[test_idx].copy()
+                
                 pretrn_val_dataset.transform = val_transform
                 pretrn_val_dataset = [x for x in pretrn_val_dataset] # apply transform only once
                 ft_val_dataset = pretrn_val_dataset # use same val dataset for pretraining and finetuning
+
+                pretrn_test_dataset.transform = val_transform
+                pretrn_test_dataset = [x for x in pretrn_test_dataset] # apply transform only once
+                ft_test_dataset = pretrn_test_dataset # use same test dataset for pretraining and finetuning
+
+
                 ft_trn_dataset = train_dataset[int((len(train_dataset)/100)*50):] # half of the train dataset for finetuning
                 # ft_trn_dataset = train_dataset[len(train_dataset)//2:] # half of the train dataset for finetuning
                 ft_trn_dataset.transform = train_transform
@@ -223,18 +262,22 @@ if __name__ == '__main__':
                     ft_trn_dataset = [diblock_dataset[i] for i in train_index]
                     ft_val_dataset = [diblock_dataset[i] for i in test_index]
 
-            ft_trn_loss, ft_val_loss, metric = run(pretrn_trn_dataset, pretrn_val_dataset, ft_trn_dataset, ft_val_dataset)
+            ft_trn_loss, ft_val_loss, ft_test_loss, metric, metric_test = run(pretrn_trn_dataset, pretrn_val_dataset, pretrn_test_dataset, ft_trn_dataset, ft_val_dataset, ft_test_dataset)
             if not cfg.finetune.isLinear:
                 print(f"losses_{run_idx}:", ft_trn_loss.item(), ft_val_loss.item())
-            wandb_dict = {'final_ft_val_loss': ft_val_loss}
             trn_losses.append(ft_trn_loss)
             val_losses.append(ft_val_loss)
+            test_losses.append(ft_test_loss)
+            wandb_dict = {'final_ft_test_loss': ft_test_loss}
             print(f"metrics_{run_idx}:", end=' ')
             for k, v in metric.items():
                 metrics[k].append(v)
                 print(f"{k}={v}:", end=' ')
-            print()
+            for k, v in metric_test.items():
+                metrics_test[k].append(v)
+                print(f"{k}={v}:", end=' ')
             wandb_dict.update(metric)
+            wandb_dict.update(metric_test)
             wandb.log(wandb_dict)
             wandb.finish()
 
@@ -242,7 +285,35 @@ if __name__ == '__main__':
             # if not cfg.shouldPretrain and cfg.shouldFinetuneOnPretrainedModel:
             #     break
 
-            
+        # Save the metrics 
+        # Save results as excel
+        df = pd.DataFrame(dict(metrics))  # Convert defaultdict to DataFrame
+        df_test = pd.DataFrame(dict(metrics_test))
+        variables = {
+            "PL": cfg.pseudolabel.shouldUsePseudoLabel,
+            "layer_norm": cfg.pretrain.layer_norm,
+            "seeds": seeds[0],
+            "finetune_percentage": cfg.finetune.aldeghiFTPercentage,
+            "pretraining": cfg.shouldPretrain
+
+        }
+        csv_filename = "metrics_train_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
+        csv_filename_test = "metrics_test_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
+        if cfg.finetuneDataset == 'diblock':
+            variables = {
+            "PL": cfg.pseudolabel.shouldUsePseudoLabel,
+            "layer_norm": cfg.pretrain.layer_norm,
+            "seeds": seeds[0],
+            "finetune_percentage": cfg.finetune.diblockFTPercentage,
+            "pretraining": cfg.shouldPretrain
+
+        }
+        csv_filename = "metrics_diblock_train_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
+        csv_filename_test = "metrics_diblock_test_" + "_".join(f"{k}_{v}" for k, v in variables.items()) + ".csv"
+        df.to_csv(csv_filename, index=False)  # Save as csv
+        df_test.to_csv(csv_filename_test, index=False)  # Save as csv
+
+    
     elif cfg.finetuneDataset == 'zinc':
         # for zinc, create_data returns directly the datasets, not the trasforms
         pretrn_trn_dataset, ft_dataset, val_dataset = create_data(cfg) 
@@ -277,3 +348,5 @@ if __name__ == '__main__':
     print("----------------------------------------")
     print("config used:")
     print(cfg)
+    print("Seeds used")
+    print(seeds)

@@ -337,4 +337,5 @@ def get_mon_A_type(s):
         return '[*:1]c1ccc2c(c1)S(=O)(=O)c1cc([*:2])ccc1-2'
     
     else:
-        raise ValueError(f'unknown monomer type {s}')
+        #raise ValueError(f'unknown monomer type {s}')
+        return 'Other'

@@ -173,9 +173,9 @@ df_PL_0_PT_1_N_0 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.2) & (
 df_PL_0_PT_1_N_1 = df[(df['percentage'] >= 0.01) & (df['percentage'] <= 0.1) & (df['PL'] == False) & (df['pretraining'] == True) & (df['norm'] == 1)].sort_values(by='percentage')
 
 # Match subsets with desired labels and colors
-subsets = [df_PL_1_PT_1_N_0, df_PL_0_PT_1_N_0]
-#labels_colors = [("Jepa - pretrained","green"), ("Jepa - no pretraining (Baseline)","blue")]#, ("Jepa & pseudolabel - All layers transferred", "purple")]
-labels_colors = [("Jepa - PL","green"), ("Jepa - No PL", "green")]# ("Jepa - No pretraining", "blue"), ("Jepa - Pretrained", "orange"), ("Jepa - Only encoder layers transferred", "grey") ]
+subsets = [df_PL_0_PT_1_N_0, df_PL_x_PT_0_N_0]
+labels_colors = [("Jepa - pretrained","green"), ("Jepa - no pretraining (Baseline)","blue")]#, ("Jepa & pseudolabel - All layers transferred", "purple")]
+#labels_colors = [("Jepa - PL","green"), ("Jepa - No PL", "green")]# ("Jepa - No pretraining", "blue"), ("Jepa - Pretrained", "orange"), ("Jepa - Only encoder layers transferred", "grey") ]
 #subsets = [df_PL_x_PT_0_N_0,df_PL_x_PT_0_N_1,df_PL_1_PT_1_N_0,df_PL_1_PT_1_N_1, df_PL_0_PT_1_N_0, df_PL_0_PT_1_N_1]
 
 for exp_sub, l_c in zip(subsets, labels_colors): 
@@ -193,6 +193,16 @@ for exp_sub, l_c in zip(subsets, labels_colors):
 
     plt.fill_between(x, y - y_std, y + y_std, alpha=0.1, color=l_c[1])
 
+# Arrays from your data
+new_values = np.array([0.686098, 0.794097, 0.862774, 0.930719, 0.965658])
+old_values = np.array([0.490838, 0.726818, 0.846031, 0.917842, 0.961627])
+
+# Calculate percentage improvement
+percentage_improvement = ((new_values - old_values) / old_values) * 100
+
+# Print results
+for i, pct in enumerate(percentage_improvement):
+    print(f"Improvement {i+1}: {pct:.2f}%")
 
 # Results of the other paper, Only_enc_transfer
 df_no_SS = df_other_paper[df_other_paper['source'] == 'No_SS'].sort_values(by='percentage')
@@ -319,12 +329,19 @@ for exp_sub, l_c in zip(subsets, labels_colors):
 
 df_RF = pd.read_csv("Results/experiments_paper/summary_RF_aldeghi.csv")  # Update with actual path
 # Baseline line in red
-x_RF = df_RF["percentage"] * 40
-y_RF = df_RF["R2_mean"]
-y_std_RF = df_RF["R2_std"]
+x_RF = df_RF["finetune_percentage"] * 40
+y_RF = df_RF["r2_mean"]
+y_std_RF = df_RF["r2_std"]
+# Second baseline XGBoost line in orange
+df_XGB = pd.read_csv("Results/experiments_paper/summary_XGB_aldeghi.csv")
+x_XGB = df_XGB["finetune_percentage"] * 40
+y_XGB = df_XGB["r2_mean"]
+y_std_XGB = df_XGB["r2_std"]
 
 plt.plot(x, y_RF, label="Random Forest - No pretraining", color="red", linestyle="-")
 plt.fill_between(x_RF, y_RF - y_std_RF, y_RF + y_std_RF, alpha=0.05, color="red")
+plt.plot(x, y_XGB, label="XGBoost - No pretraining", color="orange", linestyle="-.")
+plt.fill_between(x_XGB, y_XGB - y_std_XGB, y_XGB + y_std_XGB, alpha=0.05, color="orange")
 
 plt.xlabel("Finetune dataset size (%)", fontsize=20)
 plt.ylabel(r"$R^2$", fontsize=20)
@@ -337,7 +354,7 @@ plt.xticks(x, [f"{size}%" for size in x])
 # Add legend and show plot
 plt.legend(fontsize=16)
 plt.grid(True)
-plt.savefig('Results/experiments_paper/Pretrain_nopretrain_RF_aldeghi_EA.png', dpi=300, bbox_inches='tight')
+plt.savefig('Results/experiments_paper/Pretrain_nopretrain_RF_XGB_aldeghi_EA.png', dpi=300, bbox_inches='tight')
 plt.close()
 
 plt.figure(7,figsize=(8, 5))
@@ -364,6 +381,15 @@ y_std_RF = df_RF["prc_std"]
 
 plt.plot(x_RF, y_RF, label="Random Forest - No pretraining", color="red", linestyle="-")
 plt.fill_between(x_RF, y_RF - y_std_RF, y_RF + y_std_RF, alpha=0.05, color="red")
+
+# XGBoost line in orange
+df_XGB = pd.read_csv("Results/experiments_paper/summary_XGB_diblock.csv")
+x_XGB = df_XGB["finetune_percentage"] * 100
+y_XGB = df_XGB["prc_mean"]
+y_std_XGB = df_XGB["prc_std"]
+plt.plot(x_XGB, y_XGB, label="XGBoost - No pretraining", color="orange", linestyle="-.")
+plt.fill_between(x_XGB, y_XGB - y_std_XGB, y_XGB + y_std_XGB, alpha=0.05, color="orange")
+
 plt.xlabel("Finetune dataset size (%)", fontsize=20)
 plt.ylabel("AUPRC", fontsize=20)
 
@@ -371,4 +397,5 @@ plt.xticks(ft_size, [f"{size}%" for size in ft_size], rotation=45, fontsize=18) 
 plt.yticks(fontsize=18)
 plt.legend(fontsize=16)
 plt.grid(True)
-plt.savefig('Results/experiments_paper/diblock_comparison_RF.png', dpi=300, bbox_inches='tight')
+plt.savefig('Results/experiments_paper/diblock_comparison_RF_XGB.png', dpi=300, bbox_inches='tight')
+#plt.savefig('Results/experiments_paper/diblock_comparison_RF.png', dpi=300, bbox_inches='tight')

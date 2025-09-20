@@ -22,7 +22,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
     ft_val_loader = DataLoader(dataset=ft_val_data, batch_size=cfg.finetune.batch_size, shuffle=False, num_workers=cfg.num_workers)
 
     # Initialize scikit-learn models
-    if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'zinc':
+    if cfg.finetuneDataset == 'aldeghi':
         predictor = Ridge(fit_intercept=True, copy_X=True, max_iter=5000)
     elif cfg.finetuneDataset == 'diblock':
         log_reg = LogisticRegression(dual=False, fit_intercept=True, max_iter=5000)
@@ -47,8 +47,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
             # Need to convert to a format suitable for LogisticRegression
             y_labels = np.stack([data.y_lamellar, data.y_cylinder, data.y_sphere, data.y_gyroid, data.y_disordered], axis=1).argmax(axis=1)
             y_train.extend(y_labels)
-        elif cfg.finetuneDataset == 'zinc':
-            y_train.extend(data.y.detach().cpu().numpy())
+
         else:
             raise ValueError('Invalid dataset name')
 
@@ -77,8 +76,7 @@ def finetune(ft_trn_data, ft_val_data, model, model_name, cfg, device):
         elif cfg.finetuneDataset == 'diblock':
             y_labels = np.stack([data.y_lamellar, data.y_cylinder, data.y_sphere, data.y_gyroid, data.y_disordered], axis=1).argmax(axis=1)
             y_val.extend(y_labels)
-        elif cfg.finetuneDataset == 'zinc':
-            y_val.extend(data.y.detach().cpu().numpy())
+
         else:
             raise ValueError('Invalid dataset name')
 

@@ -4,9 +4,8 @@ import random
 import string
 # from PolymerJEPA_old import PolymerJEPA
 from src.JEPA_models.PolymerJEPAv2 import PolymerJEPAv2
-from src.JEPA_models.PolymerJEPA import PolymerJEPA
-from src.JEPA_models.GeneralJEPA import GeneralJEPAv1
-from src.JEPA_models.GeneralJEPAv2 import GeneralJEPAv2
+from src.JEPA_models.PolymerJEPAv1 import PolymerJEPAv1
+
 from src.training import train, test, reset_parameters
 from src.visualize import visualeEmbeddingSpace, visualize_loss_space
 import time
@@ -46,7 +45,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
 
     if cfg.finetuneDataset == 'aldeghi' or cfg.finetuneDataset == 'diblock':
         if cfg.modelVersion == 'v1':
-            model = PolymerJEPA(
+            model = PolymerJEPAv1(
                 nfeat_node=133,
                 nfeat_edge=14,
                 nhid=cfg.model.hidden_size,
@@ -86,42 +85,7 @@ def pretrain(pre_trn_data, pre_val_data, cfg, device):
         else:
             raise ValueError('Invalid model version')
     
-    elif cfg.finetuneDataset == 'zinc':
-        if cfg.modelVersion == 'v1':
-            model = GeneralJEPAv1(
-                nfeat_node=28,
-                nfeat_edge=4,
-                nhid=cfg.model.hidden_size,
-                nlayer_gnn=cfg.model.nlayer_gnn,
-                nlayer_mlpmixer=cfg.model.nlayer_mlpmixer,
-                gMHA_type=cfg.model.gMHA_type,
-                rw_dim=cfg.pos_enc.rw_dim,
-                patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-                pooling=cfg.model.pool,
-                n_patches=cfg.subgraphing.n_patches,
-                mlpmixer_dropout=cfg.pretrain.mlpmixer_dropout,
-                num_target_patches=cfg.jepa.num_targets,
-                should_share_weights=cfg.pretrain.shouldShareWeights,
-                regularization=cfg.pretrain.regularization,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0
-            ).to(device)
 
-        elif cfg.modelVersion == 'v2':
-            model = GeneralJEPAv2(
-                nfeat_node=28,
-                nfeat_edge=4,
-                nhid=cfg.model.hidden_size,
-                nlayer_gnn=cfg.model.nlayer_gnn,
-                rw_dim=cfg.pos_enc.rw_dim,
-                patch_rw_dim=cfg.pos_enc.patch_rw_dim,
-                pooling=cfg.model.pool,
-                num_target_patches=cfg.jepa.num_targets,
-                should_share_weights=cfg.pretrain.shouldShareWeights,
-                regularization=cfg.pretrain.regularization,
-                shouldUse2dHyperbola=cfg.jepa.dist == 0
-            ).to(device)
-        else:
-            raise ValueError('Invalid model version')
 
 
     # print('model', model)

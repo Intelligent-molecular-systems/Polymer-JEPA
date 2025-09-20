@@ -1,0 +1,44 @@
+# Example configuration file for Polymer-JEPA
+# Usage: python main.py --config config_example.yaml
+
+# General settings
+experimentName: "polymer_jepa_example"
+modelVersion: "v2"  # v1 or v2
+finetuneDataset: "aldeghi"  # aldeghi or diblock
+shouldPretrain: True
+shouldFinetune: True
+runs: 5
+
+# Pretraining configuration
+pretrain:
+  epochs: 50
+  batch_size: 128
+  lr: 0.0005
+  regularization: True
+  layer_norm: 1
+
+# Finetuning configuration  
+finetune:
+  epochs: 100
+  batch_size: 64
+  lr: 0.001
+  property: "ea"  # ea or ip
+  aldeghiFTPercentage: 0.02
+
+# Model architecture
+model:
+  hidden_size: 300  # 300 for v2, 256 for v1
+  nlayer_gnn: 2
+  pool: "mean"
+
+# JEPA configuration
+jepa:
+  num_targets: 1
+  dist: 1  # 0=2D Hyperbolic, 1=Euclidean
+
+# Subgraphing
+subgraphing:
+  type: 2  # 0=motif, 1=metis, 2=random_walk
+  n_patches: 32
+  context_size: 0.6
+  target_size: 0.10

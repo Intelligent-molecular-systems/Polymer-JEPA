@@ -1,8 +1,7 @@
 from copy import deepcopy
-from matplotlib import pyplot as plt
 from rdkit import Chem
-from rdkit.Chem import Draw, Descriptors
-from src.subgraphing_utils.motif_subgraphing import get_motifs, plot_motifs
+from rdkit.Chem import Descriptors
+from src.subgraphing_utils.motif_subgraphing import get_motifs
 import src.featurization_utils.featurization_helper as ft
 import torch
 from torch_geometric.data import Data
@@ -289,7 +288,6 @@ def poly_smiles_to_graph(poly_strings, isAldeghiDataset=True, **label_dicts):
         "motifs": (cliques, clique_edges),
         "monomer_mask": monomer_mask,
         'M_ensemble': M_ensemble,
-        #"i_feat": i_feat
     }
 
     if isAldeghiDataset:
@@ -303,9 +301,6 @@ def poly_smiles_to_graph(poly_strings, isAldeghiDataset=True, **label_dicts):
 
     # Add labels dynamically from label_dicts
     for label_name, label_values in label_dicts.items():
-        #if type is float64 convert to float32 # for training on mps on mac
-        # if label_values.dtype == 'float64': 
-        #     label_values = label_values.astype('float32')
             
         graph_data_kwargs[label_name] = label_values
 

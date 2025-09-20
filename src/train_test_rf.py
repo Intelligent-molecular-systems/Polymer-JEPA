@@ -7,22 +7,13 @@ import random
 import math
 import numpy as np
 import pandas as pd
-from rdkit import Chem, DataStructs
-from rdkit.Chem import AllChem
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from src.config import cfg, update_cfg
 
-
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from rdkit import Chem
-from rdkit.Chem import AllChem, DataStructs
-from sklearn.decomposition import PCA
-from sklearn.cluster import AgglomerativeClustering
-from scipy.spatial.distance import pdist, squareform
 import pickle
 
 

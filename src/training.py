@@ -1,6 +1,4 @@
-import matplotlib.pyplot as plt
 import numpy as np
-import os
 from src.JEPA_models.model_utils.hyperbolic_dist import hyperbolic_dist
 import torch
 import torch.nn as nn

@@ -3,16 +3,12 @@
 # The pickle data files are copied from https://github.com/coleygroup/polymer-chemprop-data/tree/main/datasets/diblock-phases/rf_inputs
 import collections
 import random
-import math
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold, StratifiedShuffleSplit, train_test_split
 from src.config import cfg, update_cfg
-import pickle
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score, average_precision_score
-from sklearn.preprocessing import label_binarize
 
 if __name__ == '__main__':
     cfg = update_cfg(cfg)

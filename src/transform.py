@@ -2,8 +2,7 @@ import numpy as np
 import re
 from src.subgraphing_utils.context_subgraph_extractor import rwContext, motifContext, metis2subgraphs
 from src.subgraphing_utils.target_subgraph_extractor import rwTargets, motifTargets
-from src.subgraphing_utils.small_molecules_extractor import zincSubgraphs, metisZinc
-from src.visualize import plot_from_transform_attributes
+
 import torch
 import torch_geometric
 from torch_geometric.data import Data
@@ -166,13 +165,7 @@ class GraphJEPAPartitionTransform(object):
             else:
                 raise ValueError('Invalid subgraphing type')     
             
-        if self.dataset == 'zinc':   
-            if self.subgraphing_type == 0:
-                node_masks, edge_masks, context_subgraphs_used = zincSubgraphs(data, sizeContext=self.context_size, n_patches=self.n_patches, n_targets=self.num_targets)
-            elif self.subgraphing_type == 1:
-                node_masks, edge_masks, context_subgraphs_used = metisZinc(data, sizeContext=self.context_size, n_patches=self.n_patches, n_targets=self.num_targets)
-            else:
-                raise ValueError('Invalid subgraphing type')   
+   
             
         subgraphs_nodes, subgraphs_edges = to_sparse(node_masks, edge_masks) 
         

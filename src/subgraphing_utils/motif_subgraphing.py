@@ -1,7 +1,6 @@
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import numpy as np
-from rdkit.Chem import BRICS
 import rdkit.Chem as Chem
 from rdkit.Chem.Draw import MolToImage
 from scipy.sparse import csr_matrix

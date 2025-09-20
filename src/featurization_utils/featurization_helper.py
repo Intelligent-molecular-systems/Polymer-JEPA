@@ -1,5 +1,4 @@
 from typing import List, Union
-from copy import deepcopy
 from collections import Counter
 from rdkit import Chem
 import numpy as np

@@ -1,8 +1,6 @@
 from contextlib import redirect_stdout
 import os
 import numpy as np
-import random
-from src.config import cfg
 from src.visualize import visualize_aldeghi_results, visualize_diblock_results
 import torch
 import torch.nn as nn
@@ -57,9 +55,7 @@ def finetune(ft_trn_data, ft_val_data, ft_test_data, model, model_name, cfg, dev
     elif cfg.finetuneDataset == 'diblock':
         out_dim = 5 # 5 classes
         criterion = nn.BCEWithLogitsLoss() # binary multiclass classification
-    elif cfg.finetuneDataset == 'zinc':
-        out_dim = 1
-        criterion = nn.L1Loss()
+
     else:
         raise ValueError('Invalid dataset name')
     
@@ -129,8 +125,7 @@ def finetune(ft_trn_data, ft_val_data, ft_test_data, model, model_name, cfg, dev
                 true_labels = torch.stack([y_lamellar, y_cylinder, y_sphere, y_gyroid, y_disordered], dim=1)
 
                 train_loss = criterion(y_pred_trn, true_labels)
-            elif cfg.finetuneDataset == 'zinc':
-                train_loss = criterion(y_pred_trn, data.y.float())
+
             else:
                 raise ValueError('Invalid dataset name')
             
@@ -173,10 +168,7 @@ def finetune(ft_trn_data, ft_val_data, ft_test_data, model, model_name, cfg, dev
                         all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
                         all_true_val.extend(true_labels.detach().cpu().numpy())
 
-                    elif cfg.finetuneDataset == 'zinc':
-                        val_loss += criterion(y_pred_val, data.y.float())
-                        all_y_pred_val.extend(y_pred_val.detach().cpu().numpy())
-                        all_true_val.extend(data.y.detach().cpu().numpy())
+
                     else:
                         raise ValueError('Invalid dataset name')
                     
@@ -222,8 +214,7 @@ def finetune(ft_trn_data, ft_val_data, ft_test_data, model, model_name, cfg, dev
                 )
                 metrics['prc_mean'] = prc_mean
                 metrics['roc_mean'] = roc_mean
-            elif cfg.finetuneDataset == 'zinc':
-                print(f'Val Loss: {val_loss}')
+
             else:
                 raise ValueError('Invalid dataset name')
             # Early stopping optionally
@@ -266,10 +257,7 @@ def finetune(ft_trn_data, ft_val_data, ft_test_data, model, model_name, cfg, dev
                 all_y_pred_test.extend(y_pred_test.detach().cpu().numpy())
                 all_true_test.extend(true_labels.detach().cpu().numpy())
 
-            elif cfg.finetuneDataset == 'zinc':
-                test_loss += criterion(y_pred_test, data.y.float())
-                all_y_pred_test.extend(y_pred_test.detach().cpu().numpy())
-                all_true_test.extend(data.y.detach().cpu().numpy())
+
             else:
                 raise ValueError('Invalid dataset name')
             
@@ -310,8 +298,7 @@ def finetune(ft_trn_data, ft_val_data, ft_test_data, model, model_name, cfg, dev
         )
         metrics_test['prc_mean'] = prc_mean
         metrics_test['roc_mean'] = roc_mean
-    elif cfg.finetuneDataset == 'zinc':
-        print(f'test Loss: {test_loss}')
+
     else:
         raise ValueError('Invalid dataset name')
     
